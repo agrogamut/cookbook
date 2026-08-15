@@ -135,9 +135,11 @@ func applyAvailabilityRank(ctx context.Context, pool *pgxpool.Pool, p models.Chi
 }
 
 // regionCountry maps a recipe_master.region_culture value to the country word used in
-// ingredient_master.region_availability free text. Built from region_focus.country,
-// queried once per call rather than hardcoded, so it stays correct if region_focus ever
-// changes.
+// ingredient_master.region_availability free text. Hardcoded, not queried -- region_focus
+// currently scopes to exactly India and Bangladesh (CLAUDE.md, "Region focus"), so a
+// two-branch switch is a complete, correct mapping today. If region_focus ever gains a
+// third country, this function must be revisited; it will not pick the change up on its
+// own.
 func regionCountry(regionCulture string) string {
 	switch {
 	case regionCulture == "":

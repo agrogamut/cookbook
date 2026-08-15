@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/madamgy/recipie/internal/models"
@@ -45,6 +47,24 @@ func TestCapToTargetUsesProviderRecipeCount(t *testing.T) {
 	if step.CandidatesOut != len(out) {
 		t.Fatalf("step accounting mismatch: %d vs %d", step.CandidatesOut, len(out))
 	}
+
+	// Prove the value was genuinely read from the database, not silently defaulted:
+	// confirm it matches the live column exactly, and that the input pool was large
+	// enough that a broken read (falling through to some other value) would show up.
+	var providedText string
+	if err := pool.QueryRow(ctx, `SELECT default_target_recipes FROM meal_category_target WHERE meal_category = $1`, "Lunch").Scan(&providedText); err != nil {
+		t.Fatalf("reading meal_category_target directly: %v", err)
+	}
+	provided, err := strconv.Atoi(providedText)
+	if err != nil {
+		t.Fatalf("meal_category_target.default_target_recipes not numeric: %q", providedText)
+	}
+	if len(ranked) <= provided {
+		t.Skip("candidate pool not larger than the provider target; cannot distinguish a genuine live read from a coincidental match")
+	}
+	if len(out) != provided {
+		t.Fatalf("capToTarget must return exactly meal_category_target.default_target_recipes (%d) when the pool is larger, got %d", provided, len(out))
+	}
 }
 
 func TestDedupeNearDuplicatesDemotesSharedCoreIngredients(t *testing.T) {
@@ -64,5 +84,22 @@ func TestDedupeNearDuplicatesDemotesSharedCoreIngredients(t *testing.T) {
 	}
 	if step.CandidatesIn != step.CandidatesOut {
 		t.Fatalf("dedupe step must report equal in/out: %+v", step)
+	}
+
+	// Prove real work happened, not a no-op pass-through: the note must report at
+	// least one demotion, and the resulting order must differ from the input order
+	// somewhere (a genuine demotion always moves at least one recipe).
+	if strings.Contains(step.Note, "0 recipe(s) demoted") {
+		t.Fatalf("expected at least one demotion on this dataset, got note: %q", step.Note)
+	}
+	reordered := false
+	for i := range out {
+		if out[i].RecipeID != ranked[i].RecipeID {
+			reordered = true
+			break
+		}
+	}
+	if !reordered {
+		t.Fatal("dedupe produced identical order to the input; expected at least one recipe to move after a demotion")
 	}
 }
