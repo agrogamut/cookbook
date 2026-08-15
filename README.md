@@ -7,8 +7,7 @@ returns the recipes that are safe and appropriate for that child.
 Regional scope is **India and Bangladesh**, weighted toward West Bengal and Bengali
 cuisine.
 
-Academic project. Not sold, not deployed to real parents, not used to give feeding advice
-to an actual child.
+Internal tool. Staff use it to serve families; families never use it directly.
 
 ## Status
 
@@ -118,6 +117,6 @@ Evidence identifiers and URLs as cited by the provider are imported verbatim int
 
 ## Licence
 
-Non-commercial research and education. The external corpora above are used under the
-non-commercial carve-outs their licences grant; attribution is given here because that is
-what those licences ask for.
+Sources are attributed above because their licences ask for it. Note that the recipe
+corpus carries no stated upstream licence, which is unresolved - see "Scope" in
+`CLAUDE.md`. IFCT 2017 is openly published by ICMR-NIN.
