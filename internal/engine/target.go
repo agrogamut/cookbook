@@ -9,9 +9,12 @@ import (
 )
 
 // clinicalMarkerToTarget maps the operator-facing marker keys the frontend's dropdown
-// will offer to the real nutrition_target_master.target_code values, read from the
-// live trigger_input/trigger_logic columns (Task grounding section above): every one
-// of these is "clinician-entered" per the provider's own trigger_input text, so the
+// will offer to the real nutrition_target_master.target_code values. Checked live
+// against trigger_input/trigger_logic per target_code: the underlying trigger is a mix
+// of clinician entry (NT02, NT03, NT06, NT08, NT12), parent questionnaire (NT11), family
+// diet declaration (NT09, NT10), and a WHO growth z-score (NT04, NT05) -- not uniformly
+// "clinician-entered." ChildProfile has no z-score field yet, so letting the operator
+// pick the marker directly is a deliberate simplification, not a data invention: the
 // operator -- not the engine -- decides which marker applies. NT03/NT04/NT05 (thinness,
 // overweight-under-5, overweight-5-19) all key on the same underlying concept
 // (weight-for-age concern) but are age-gated by nutrition_target_master.age_from_months/
