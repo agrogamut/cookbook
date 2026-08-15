@@ -1,0 +1,7 @@
+.env
+.env.local
+/bin/
+
+# External datasets are downloaded, not authored here. scripts/fetch_data.fish fetches
+# them and verifies them against data/external/SHA256SUMS, which IS tracked.
+data/external/*.csv

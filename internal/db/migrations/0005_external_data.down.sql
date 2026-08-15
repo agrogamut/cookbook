@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS enrichment_run;
+DROP VIEW  IF EXISTS recipe_method_card;
+DROP VIEW  IF EXISTS nutrition_audit_report;
+DROP TABLE IF EXISTS ingredient_nutrition_audit;
+DROP TABLE IF EXISTS external_food_composition;
+DROP TABLE IF EXISTS recipe_method_external;
+DROP TABLE IF EXISTS external_recipe;
+DROP TABLE IF EXISTS external_cuisine_region_map;
+DROP TABLE IF EXISTS external_source;
