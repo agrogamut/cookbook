@@ -55,3 +55,30 @@ func TestAllergyFilterExcludesDeclaredAllergen(t *testing.T) {
 		t.Fatalf("step.CandidatesIn = %d, want %d", step.CandidatesIn, len(all))
 	}
 }
+
+func TestAllergyFilterErrorsOnUnmatchedAllergen(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	all, _, err := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	if err != nil {
+		t.Fatalf("ageFilter: %v", err)
+	}
+	_, _, err = allergyFilter(ctx, pool, models.ChildProfile{Allergens: []string{"Peanut", "not-a-real-allergen"}}, all)
+	if err == nil {
+		t.Fatal("allergyFilter must error on unmatched allergen, got nil")
+	}
+	if errStr := err.Error(); errStr != "engine: allergy filter: unrecognized allergen(s) [not-a-real-allergen] — must match allergen_mapping.allergen_group exactly" {
+		if !contains(errStr, "not-a-real-allergen") {
+			t.Fatalf("error message must mention the unmatched allergen: %q", errStr)
+		}
+	}
+}
+
+func contains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

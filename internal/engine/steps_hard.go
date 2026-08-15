@@ -58,6 +58,35 @@ func allergyFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfil
 		}, nil
 	}
 
+	validRows, err := pool.Query(ctx, `SELECT DISTINCT allergen_group FROM allergen_mapping WHERE allergen_group = ANY($1)`, p.Allergens)
+	if err != nil {
+		return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter validate: %w", err)
+	}
+	valid := make(map[string]bool)
+	for validRows.Next() {
+		var g string
+		if err := validRows.Scan(&g); err != nil {
+			validRows.Close()
+			return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter validate scan: %w", err)
+		}
+		valid[g] = true
+	}
+	if err := validRows.Err(); err != nil {
+		validRows.Close()
+		return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter validate rows: %w", err)
+	}
+	validRows.Close()
+
+	var unmatched []string
+	for _, a := range p.Allergens {
+		if !valid[a] {
+			unmatched = append(unmatched, a)
+		}
+	}
+	if len(unmatched) > 0 {
+		return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter: unrecognized allergen(s) %v — must match allergen_mapping.allergen_group exactly", unmatched)
+	}
+
 	rows, err := pool.Query(ctx, `
 		SELECT r.recipe_id
 		FROM recipe_master r
