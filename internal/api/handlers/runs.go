@@ -1,6 +1,9 @@
 package handlers
 
-import "net/http"
+import (
+	"net/http"
+	"time"
+)
 
 // Runs returns import_run joined to its per-table stats, so the /runs screen can show
 // content hashes and rows-skipped without a second round trip.
@@ -26,8 +29,8 @@ func (h *Handlers) Runs(w http.ResponseWriter, r *http.Request) {
 	}
 	type run struct {
 		RunID      int64       `json:"run_id"`
-		StartedAt  string      `json:"started_at"`
-		FinishedAt *string     `json:"finished_at"`
+		StartedAt  time.Time   `json:"started_at"`
+		FinishedAt *time.Time  `json:"finished_at"`
 		SourceDir  string      `json:"source_dir"`
 		OK         bool        `json:"ok"`
 		Tables     []tableStat `json:"tables"`
@@ -37,8 +40,9 @@ func (h *Handlers) Runs(w http.ResponseWriter, r *http.Request) {
 	var order []int64
 	for rows.Next() {
 		var runID int64
-		var startedAt, sourceDir string
-		var finishedAt *string
+		var startedAt time.Time
+		var sourceDir string
+		var finishedAt *time.Time
 		var ok bool
 		var ts tableStat
 		if err := rows.Scan(&runID, &startedAt, &finishedAt, &sourceDir, &ok,
