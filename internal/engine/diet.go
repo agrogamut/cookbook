@@ -15,6 +15,25 @@ import (
 // ingredient level. Read live from ingredient_master's 61 distinct food_group values.
 var animalFoodGroups = []string{"Animal protein", "Dairy", "Fish", "Dried fish", "Fish product", "Shellfish", "Organ meat"}
 
+// dietPermits maps a family's declared food practice to the recipe_master.diet_type
+// values that practice may eat.
+//
+// Diet is nested, not categorical: vegetarian ⊂ eggetarian ⊂ non-vegetarian. A recipe's
+// diet_type states what the dish requires of whoever eats it, not which kind of eater it
+// belongs to -- so a non-vegetarian child may eat a vegetarian dish, while the reverse is
+// never true. Matching diet_type for equality reads the column as a category and starves
+// the result list: a non-vegetarian profile saw 111 of 940 recipes and an eggetarian one
+// saw a single recipe, because the corpus holds exactly one dish using an egg ingredient.
+//
+// The old behaviour failed safe -- it never served a family food their practice forbids,
+// it only withheld food they could have eaten -- which is why the persona suite, written
+// to catch empty result sets rather than short ones, did not flag it.
+var dietPermits = map[string][]string{
+	"Vegetarian":     {"Vegetarian"},
+	"Eggetarian":     {"Vegetarian", "Eggetarian"},
+	"Non-vegetarian": {"Vegetarian", "Eggetarian", "Non-vegetarian"},
+}
+
 // dietFilter is engine step 4, a hard filter (not demoted -- CLAUDE.md's "Deviation from
 // the spec" only demotes steps 3 and 6).
 func dietFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile, candidateIDs []string) ([]string, models.StepResult, error) {
@@ -26,8 +45,13 @@ func dietFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile, 
 		}, nil
 	}
 
-	query := `SELECT recipe_id FROM recipe_master WHERE recipe_id = ANY($1) AND diet_type = $2`
-	args := []any{candidateIDs, p.DietType}
+	permitted, ok := dietPermits[p.DietType]
+	if !ok {
+		return nil, models.StepResult{}, fmt.Errorf("engine: diet filter: unrecognized diet_type %q: %w", p.DietType, ErrInvalidProfile)
+	}
+
+	query := `SELECT recipe_id FROM recipe_master WHERE recipe_id = ANY($1) AND diet_type = ANY($2)`
+	args := []any{candidateIDs, permitted}
 	if p.Vegan {
 		// food_group alone misses ghee (ING0060): it is bucketed under "Fat", not
 		// "Dairy", so it survives the food-group exclusion -- verified live, 103
@@ -38,7 +62,7 @@ func dietFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile, 
 		// without touching the vegetarian path, which still allows dairy.
 		query = `
 			SELECT r.recipe_id FROM recipe_master r
-			WHERE r.recipe_id = ANY($1) AND r.diet_type = $2
+			WHERE r.recipe_id = ANY($1) AND r.diet_type = ANY($2)
 			  AND NOT EXISTS (
 			      SELECT 1 FROM recipe_ingredient_mapping m
 			      WHERE m.recipe_id = r.recipe_id
