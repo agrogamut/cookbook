@@ -1,0 +1,1254 @@
+{
+  "version": "1.0",
+  "page_count_policy": "Dynamic; never force unsafe or irrelevant content to hit a fixed page count.",
+  "book1": {
+    "expected_typical_pages": "~70-130+ depending age, selected modules and tracker allocation",
+    "modules": [
+      {
+        "id": "B1-00",
+        "part": "Front Matter",
+        "section": "Cover & Identity",
+        "purpose": "Cover",
+        "component": "cover",
+        "page_budget": "1",
+        "condition": "Always",
+        "content_contract": "Child display name, book title, edition/release date; minimal premium design."
+      },
+      {
+        "id": "B1-01",
+        "part": "Front Matter",
+        "section": "Welcome & How to Use",
+        "purpose": "Welcome",
+        "component": "text+cards",
+        "page_budget": "1-2",
+        "condition": "Always",
+        "content_contract": "What Book 1 is, how Book 2 links to it, consultation/follow-up use, tracker symbols."
+      },
+      {
+        "id": "B1-02",
+        "part": "Front Matter",
+        "section": "Child at a Glance",
+        "purpose": "Profile dashboard",
+        "component": "profile_card",
+        "page_budget": "1-2",
+        "condition": "Always",
+        "content_contract": "Age/stage, culture/location, food practice, allergies, goals, current concerns, follow-up."
+      },
+      {
+        "id": "B1-03",
+        "part": "Front Matter",
+        "section": "Consultation Snapshot",
+        "purpose": "Clinical summary",
+        "component": "summary_cards",
+        "page_budget": "1-2",
+        "condition": "Always",
+        "content_contract": "Consultation mode/date, clinician-approved priorities, restrictions, referral/follow-up status."
+      },
+      {
+        "id": "B1-04",
+        "part": "Growth & Nutrition",
+        "section": "Anthropometry History",
+        "purpose": "Growth record",
+        "component": "monitoring_table",
+        "page_budget": "2-5",
+        "condition": "If data",
+        "content_contract": "Date-wise weight, length/height, head circumference where age-relevant, BMI where relevant."
+      },
+      {
+        "id": "B1-05",
+        "part": "Growth & Nutrition",
+        "section": "Growth Reference Comparison",
+        "purpose": "Reference vs actual",
+        "component": "comparison_table",
+        "page_budget": "2-5",
+        "condition": "If reference applicable",
+        "content_contract": "Approved reference, actual parameter, interpretation, trend, parent note, next review."
+      },
+      {
+        "id": "B1-06",
+        "part": "Growth & Nutrition",
+        "section": "Growth Trend",
+        "purpose": "Longitudinal monitoring",
+        "component": "chart+table",
+        "page_budget": "2-4",
+        "condition": "If serial data",
+        "content_contract": "Serial trend; source/version identified; chart optional, table mandatory."
+      },
+      {
+        "id": "B1-07",
+        "part": "Growth & Nutrition",
+        "section": "Nutrition Priorities",
+        "purpose": "Personal targets",
+        "component": "goal_cards",
+        "page_budget": "1-3",
+        "condition": "Always",
+        "content_contract": "Approved targets only: energy/protein/micronutrient/meal-pattern goals as applicable."
+      },
+      {
+        "id": "B1-08",
+        "part": "Growth & Nutrition",
+        "section": "Daily Meal Rhythm",
+        "purpose": "Meal timing",
+        "component": "meal_plan_table",
+        "page_budget": "2-4",
+        "condition": "Always",
+        "content_contract": "Meal category, food names/types, planned amount/frequency, actual intake space."
+      },
+      {
+        "id": "B1-09",
+        "part": "Growth & Nutrition",
+        "section": "Portion & Household Measures",
+        "purpose": "Practical amount guide",
+        "component": "guidance_cards",
+        "page_budget": "2-4",
+        "condition": "Stage relevant",
+        "content_contract": "Age/stage appropriate household measures; no recipes."
+      },
+      {
+        "id": "B1-10",
+        "part": "Growth & Nutrition",
+        "section": "Food Group Diversity",
+        "purpose": "Diversity guide",
+        "component": "dashboard+tracker",
+        "page_budget": "2-4",
+        "condition": "Stage relevant",
+        "content_contract": "Grains, pulses/protein, vegetables, fruits, dairy/alternatives, fats; actual vs goal."
+      },
+      {
+        "id": "B1-11",
+        "part": "Growth & Nutrition",
+        "section": "Micronutrient Focus",
+        "purpose": "Nutrient guidance",
+        "component": "cards+tables",
+        "page_budget": "2-6",
+        "condition": "Target driven",
+        "content_contract": "Food names/amount/frequency for approved iron, calcium, vitamin D etc. targets; no recipe method."
+      },
+      {
+        "id": "B1-12",
+        "part": "Feeding",
+        "section": "Feeding Stage & Skills",
+        "purpose": "Current feeding ability",
+        "component": "comparison_table",
+        "page_budget": "2-4",
+        "condition": "Always after complementary feeding",
+        "content_contract": "Reference feeding skill vs actual ability; texture, chewing, cup/spoon/self-feeding."
+      },
+      {
+        "id": "B1-13",
+        "part": "Feeding",
+        "section": "Responsive Feeding Approach",
+        "purpose": "Parent-child feeding style",
+        "component": "guidance_cards",
+        "page_budget": "2-4",
+        "condition": "Always",
+        "content_contract": "Division of responsibility style, hunger/satiety cues, pressure avoidance, meal environment."
+      },
+      {
+        "id": "B1-14",
+        "part": "Feeding",
+        "section": "Texture Progression",
+        "purpose": "Texture guide",
+        "component": "timeline+cards",
+        "page_budget": "2-5",
+        "condition": "Age/stage relevant",
+        "content_contract": "Approved stage progression, actual tolerated texture, action and safety."
+      },
+      {
+        "id": "B1-15",
+        "part": "Feeding",
+        "section": "Picky Eating / Food Acceptance",
+        "purpose": "Acceptance strategy",
+        "component": "guidance+tracker",
+        "page_budget": "3-6",
+        "condition": "If relevant",
+        "content_contract": "Exposure, refusal pattern, accepted foods, disliked foods, parent strategy, follow-up."
+      },
+      {
+        "id": "B1-16",
+        "part": "Feeding",
+        "section": "Self-feeding & Mealtime Independence",
+        "purpose": "Skill building",
+        "component": "comparison_table",
+        "page_budget": "2-4",
+        "condition": "Age relevant",
+        "content_contract": "Cup, spoon, finger foods, sitting, family meal participation."
+      },
+      {
+        "id": "B1-17",
+        "part": "Feeding",
+        "section": "Hydration",
+        "purpose": "Fluid guide",
+        "component": "table+tracker",
+        "page_budget": "1-3",
+        "condition": "Age/clinical relevant",
+        "content_contract": "Approved fluid pattern, practical offering schedule, actual tracking; clinical restrictions override."
+      },
+      {
+        "id": "B1-18",
+        "part": "Feeding",
+        "section": "Food Safety & Hygiene",
+        "purpose": "Safety guide",
+        "component": "checklist",
+        "page_budget": "2-5",
+        "condition": "Always",
+        "content_contract": "Preparation, hand hygiene, storage, reheating, water, raw/undercooked risk, cross-contact."
+      },
+      {
+        "id": "B1-19",
+        "part": "Feeding",
+        "section": "Allergy & Intolerance Safety",
+        "purpose": "Personal safety",
+        "component": "red_flag_box+table",
+        "page_budget": "2-5",
+        "condition": "If allergy/suspected",
+        "content_contract": "Confirmed/suspected allergens, derivatives, avoidance, cross-contact, review action."
+      },
+      {
+        "id": "B1-20",
+        "part": "Vaccination",
+        "section": "Vaccination Overview",
+        "purpose": "How to use tracker",
+        "component": "text+cards",
+        "page_budget": "1-2",
+        "condition": "Always",
+        "content_contract": "Schedule is versioned from approved IAP master; actual administration is parent/clinician record."
+      },
+      {
+        "id": "B1-21",
+        "part": "Vaccination",
+        "section": "Age-wise Vaccination Schedule",
+        "purpose": "IAP schedule",
+        "component": "vaccination_tracker",
+        "page_budget": "4-10",
+        "condition": "Always",
+        "content_contract": "Age/due, vaccine, actual date/time, brand/batch, site if desired, reaction, next due, parent notes."
+      },
+      {
+        "id": "B1-22",
+        "part": "Vaccination",
+        "section": "Before & After Vaccination Feeding",
+        "purpose": "Supportive feeding",
+        "component": "guidance_cards",
+        "page_budget": "2-4",
+        "condition": "Always",
+        "content_contract": "Usual feeding, hydration/comfort guidance, appetite changes, clinician-approved precautions."
+      },
+      {
+        "id": "B1-23",
+        "part": "Vaccination",
+        "section": "Post-vaccination Observation",
+        "purpose": "Reaction log",
+        "component": "monitoring_table+redflag",
+        "page_budget": "2-4",
+        "condition": "Always",
+        "content_contract": "Time, temperature/symptoms, feeding/fluid intake, action taken, when medical review is required."
+      },
+      {
+        "id": "B1-24",
+        "part": "Development",
+        "section": "Development Overview",
+        "purpose": "How monitoring works",
+        "component": "text+cards",
+        "page_budget": "1-2",
+        "condition": "Always",
+        "content_contract": "Developmental domains, variability, reference vs actual, alarm/review logic."
+      },
+      {
+        "id": "B1-25",
+        "part": "Development",
+        "section": "Gross Motor",
+        "purpose": "Age-referenced monitoring",
+        "component": "comparison_table",
+        "page_budget": "2-6",
+        "condition": "Age relevant",
+        "content_contract": "Reference milestone, actual, observed date, parent note, review/alarm."
+      },
+      {
+        "id": "B1-26",
+        "part": "Development",
+        "section": "Fine Motor / Visual Motor",
+        "purpose": "Age-referenced monitoring",
+        "component": "comparison_table",
+        "page_budget": "2-6",
+        "condition": "Age relevant",
+        "content_contract": "Reference milestone vs actual."
+      },
+      {
+        "id": "B1-27",
+        "part": "Development",
+        "section": "Language & Communication",
+        "purpose": "Age-referenced monitoring",
+        "component": "comparison_table",
+        "page_budget": "2-6",
+        "condition": "Age relevant",
+        "content_contract": "Receptive/expressive communication as supported by master."
+      },
+      {
+        "id": "B1-28",
+        "part": "Development",
+        "section": "Social / Emotional",
+        "purpose": "Age-referenced monitoring",
+        "component": "comparison_table",
+        "page_budget": "2-6",
+        "condition": "Age relevant",
+        "content_contract": "Social interaction/adaptive behavior items from approved master."
+      },
+      {
+        "id": "B1-29",
+        "part": "Development",
+        "section": "Cognition / Learning",
+        "purpose": "Age-referenced monitoring",
+        "component": "comparison_table",
+        "page_budget": "2-6",
+        "condition": "Age relevant",
+        "content_contract": "Learning/problem-solving items from approved master."
+      },
+      {
+        "id": "B1-30",
+        "part": "Development",
+        "section": "Development Summary",
+        "purpose": "Domain dashboard",
+        "component": "dashboard",
+        "page_budget": "1-3",
+        "condition": "Always",
+        "content_contract": "At-a-glance domain status, strengths, observations requiring follow-up."
+      },
+      {
+        "id": "B1-31",
+        "part": "Daily Life",
+        "section": "Toilet Training",
+        "purpose": "Readiness & progress",
+        "component": "timeline+tracker",
+        "page_budget": "3-6",
+        "condition": "Age/readiness relevant",
+        "content_contract": "Readiness, daytime/night, stool/urine pattern, accidents, constipation link, parent plan."
+      },
+      {
+        "id": "B1-32",
+        "part": "Daily Life",
+        "section": "Sleep",
+        "purpose": "Sleep routine",
+        "component": "comparison_table+tracker",
+        "page_budget": "2-5",
+        "condition": "Always",
+        "content_contract": "Age-referenced sleep expectations where approved, actual routine, naps, concerns, notes."
+      },
+      {
+        "id": "B1-33",
+        "part": "Daily Life",
+        "section": "Dental & Oral Care",
+        "purpose": "Oral health routine",
+        "component": "checklist+tracker",
+        "page_budget": "2-4",
+        "condition": "Age relevant",
+        "content_contract": "Brushing, dental visits, feeding/oral habit considerations, parent record."
+      },
+      {
+        "id": "B1-34",
+        "part": "Daily Life",
+        "section": "Physical Activity",
+        "purpose": "Movement guide",
+        "component": "table+tracker",
+        "page_budget": "2-4",
+        "condition": "Age relevant",
+        "content_contract": "Age-appropriate activity reference, actual pattern, family goal."
+      },
+      {
+        "id": "B1-35",
+        "part": "Daily Life",
+        "section": "Screen & Digital Habits",
+        "purpose": "Screen routine",
+        "component": "comparison_table",
+        "page_budget": "2-4",
+        "condition": "Age relevant",
+        "content_contract": "Approved reference, actual use, context, sleep/meal interference, family plan."
+      },
+      {
+        "id": "B1-36",
+        "part": "Daily Life",
+        "section": "Self-care & Independence",
+        "purpose": "Daily living skills",
+        "component": "comparison_table",
+        "page_budget": "2-4",
+        "condition": "Age relevant",
+        "content_contract": "Dressing, handwashing, eating, simple responsibilities, independence goals."
+      },
+      {
+        "id": "B1-37",
+        "part": "Daily Life",
+        "section": "School / Learning Readiness",
+        "purpose": "School-age support",
+        "component": "dashboard+notes",
+        "page_budget": "2-5",
+        "condition": "If relevant",
+        "content_contract": "Routine, attention/participation observations, tiffin, sleep, activity, parent concerns."
+      },
+      {
+        "id": "B1-38",
+        "part": "Daily Life",
+        "section": "Behaviour & Mealtime Environment",
+        "purpose": "Family routine",
+        "component": "guidance+tracker",
+        "page_budget": "2-5",
+        "condition": "If relevant",
+        "content_contract": "Mealtime behavior, family eating environment, practical non-coercive strategies."
+      },
+      {
+        "id": "B1-39",
+        "part": "Illness Feeding",
+        "section": "How to Use Illness Section",
+        "purpose": "Safety boundary",
+        "component": "text+redflag",
+        "page_budget": "1-2",
+        "condition": "Always",
+        "content_contract": "Supportive feeding only; clinician-approved condition rules; escalation takes priority."
+      },
+      {
+        "id": "B1-40",
+        "part": "Illness Feeding",
+        "section": "Fever / Reduced Appetite",
+        "purpose": "Supportive plan",
+        "component": "condition_table",
+        "page_budget": "2-4",
+        "condition": "If selected/common guide",
+        "content_contract": "Food type/name, amount/frequency approach, fluid focus, monitoring, alarm signs."
+      },
+      {
+        "id": "B1-41",
+        "part": "Illness Feeding",
+        "section": "Vomiting",
+        "purpose": "Supportive plan",
+        "component": "condition_table",
+        "page_budget": "2-4",
+        "condition": "If selected/common guide",
+        "content_contract": "Only approved guidance; hydration/feeding tolerance monitoring and escalation."
+      },
+      {
+        "id": "B1-42",
+        "part": "Illness Feeding",
+        "section": "Loose Stool / Diarrhoeal Illness",
+        "purpose": "Supportive plan",
+        "component": "condition_table",
+        "page_budget": "2-4",
+        "condition": "If selected/common guide",
+        "content_contract": "Approved feeding/fluid guidance, monitoring, red flags."
+      },
+      {
+        "id": "B1-43",
+        "part": "Illness Feeding",
+        "section": "Cough / Sore Throat / URI",
+        "purpose": "Supportive plan",
+        "component": "condition_table",
+        "page_budget": "2-4",
+        "condition": "If selected/common guide",
+        "content_contract": "Texture/comfort food names and amounts where appropriate; breathing/intake red flags."
+      },
+      {
+        "id": "B1-44",
+        "part": "Illness Feeding",
+        "section": "Constipation",
+        "purpose": "Feeding support",
+        "component": "condition_table+tracker",
+        "page_budget": "2-5",
+        "condition": "If relevant",
+        "content_contract": "Dietary pattern, fluids if appropriate, bowel/toilet tracking; clinical escalation rules."
+      },
+      {
+        "id": "B1-45",
+        "part": "Illness Feeding",
+        "section": "Recovery / Catch-up Feeding",
+        "purpose": "Post-illness plan",
+        "component": "meal_plan_table",
+        "page_budget": "2-5",
+        "condition": "If relevant",
+        "content_contract": "Approved increased frequency/density strategy, tolerance and review."
+      },
+      {
+        "id": "B1-46",
+        "part": "Clinical Personalization",
+        "section": "Condition-specific Nutrition Module",
+        "purpose": "Clinician-controlled",
+        "component": "conditional_module",
+        "page_budget": "0-10+",
+        "condition": "Only approved",
+        "content_contract": "Generated only from approved clinical rule/target master; no autonomous therapeutic diet."
+      },
+      {
+        "id": "B1-47",
+        "part": "Monitoring",
+        "section": "Food Acceptance Tracker",
+        "purpose": "Longitudinal",
+        "component": "monitoring_table",
+        "page_budget": "4-12",
+        "condition": "Always useful",
+        "content_contract": "Food/date/amount offered/amount accepted/reaction/parent note."
+      },
+      {
+        "id": "B1-48",
+        "part": "Monitoring",
+        "section": "Meal & Appetite Tracker",
+        "purpose": "Daily/weekly",
+        "component": "monitoring_table",
+        "page_budget": "4-12",
+        "condition": "If selected",
+        "content_contract": "Meal, appetite, actual amount, mood/context, comments."
+      },
+      {
+        "id": "B1-49",
+        "part": "Monitoring",
+        "section": "Bowel / Toilet Tracker",
+        "purpose": "Daily/weekly",
+        "component": "monitoring_table",
+        "page_budget": "2-8",
+        "condition": "If relevant",
+        "content_contract": "Frequency, stool/urine notes, accidents, discomfort, action."
+      },
+      {
+        "id": "B1-50",
+        "part": "Monitoring",
+        "section": "Sleep & Activity Tracker",
+        "purpose": "Weekly",
+        "component": "monitoring_table",
+        "page_budget": "2-6",
+        "condition": "If relevant",
+        "content_contract": "Sleep, naps, activity, screen, parent note."
+      },
+      {
+        "id": "B1-51",
+        "part": "Monitoring",
+        "section": "Growth Follow-up Record",
+        "purpose": "Serial review",
+        "component": "monitoring_table",
+        "page_budget": "2-6",
+        "condition": "Always",
+        "content_contract": "Date, anthropometry, trend, target review, clinician note."
+      },
+      {
+        "id": "B1-52",
+        "part": "Monitoring",
+        "section": "Parent Questions & Observations",
+        "purpose": "Writable notes",
+        "component": "notes_pages",
+        "page_budget": "2-6",
+        "condition": "Always",
+        "content_contract": "Questions, concerns, foods to discuss, behavior/development notes."
+      },
+      {
+        "id": "B1-53",
+        "part": "Follow-up",
+        "section": "Follow-up Consultation Comparison",
+        "purpose": "Before vs now",
+        "component": "comparison_table",
+        "page_budget": "2-5",
+        "condition": "After follow-up",
+        "content_contract": "Previous target, current status, actual change, next plan."
+      },
+      {
+        "id": "B1-54",
+        "part": "Follow-up",
+        "section": "Next 4-8 Week Action Plan",
+        "purpose": "Short action plan",
+        "component": "goal_cards+checklist",
+        "page_budget": "1-3",
+        "condition": "Always",
+        "content_contract": "Few concrete clinician-approved actions; avoid overwhelming parent."
+      },
+      {
+        "id": "B1-55",
+        "part": "Appendix",
+        "section": "Personal Food List",
+        "purpose": "Names & amounts only",
+        "component": "table",
+        "page_budget": "2-8",
+        "condition": "Always",
+        "content_contract": "Foods selected for this child by meal/use; points to Book 2 for preparation."
+      },
+      {
+        "id": "B1-56",
+        "part": "Appendix",
+        "section": "Glossary / Local Terms",
+        "purpose": "Multilingual support",
+        "component": "reference_table",
+        "page_budget": "1-5",
+        "condition": "Language dependent",
+        "content_contract": "Canonical term, local term, simple parent meaning."
+      },
+      {
+        "id": "B1-57",
+        "part": "Appendix",
+        "section": "Evidence, Schedule & Version Page",
+        "purpose": "Traceability",
+        "component": "reference_page",
+        "page_budget": "1-3",
+        "condition": "Always",
+        "content_contract": "Master versions, IAP schedule version, growth reference, evidence IDs, reviewer roles."
+      },
+      {
+        "id": "B1-58",
+        "part": "Appendix",
+        "section": "Safety Disclaimer & Contact Path",
+        "purpose": "Scope & escalation",
+        "component": "reference_page",
+        "page_budget": "1-2",
+        "condition": "Always",
+        "content_contract": "Personal guide scope, emergency/urgent care instruction, follow-up route."
+      }
+    ]
+  },
+  "book2": {
+    "expected_typical_pages": "~160-350+ depending eligible meal categories, future-age collections, recipe count and indexes",
+    "modules": [
+      {
+        "id": "B2-00",
+        "part": "Front Matter",
+        "section": "Cover & Identity",
+        "purpose": "Cover",
+        "component": "cover",
+        "page_budget": "1",
+        "condition": "Always",
+        "content_contract": "Premium food-led cover; child display name, age/stage, edition."
+      },
+      {
+        "id": "B2-01",
+        "part": "Front Matter",
+        "section": "Welcome & How to Use",
+        "purpose": "Guide",
+        "component": "text+cards",
+        "page_budget": "1-2",
+        "condition": "Always",
+        "content_contract": "Book 2 contains preparation methods; Book 1 remains the feeding/growth guide."
+      },
+      {
+        "id": "B2-02",
+        "part": "Front Matter",
+        "section": "My Recipe Profile",
+        "purpose": "Personalization dashboard",
+        "component": "profile_card",
+        "page_budget": "1-2",
+        "condition": "Always",
+        "content_contract": "Age/stage, culture/location, food practice, allergies, goals, budget/practical preferences."
+      },
+      {
+        "id": "B2-03",
+        "part": "Front Matter",
+        "section": "Why These Recipes Were Selected",
+        "purpose": "Explainability",
+        "component": "reason_cards",
+        "page_budget": "1-3",
+        "condition": "Always",
+        "content_contract": "Selection reasons: safety, stage, culture, target, preference, availability, cost, diversity."
+      },
+      {
+        "id": "B2-04",
+        "part": "Front Matter",
+        "section": "Kitchen Measures & Recipe Symbols",
+        "purpose": "Legend",
+        "component": "reference_cards",
+        "page_budget": "2-4",
+        "condition": "Always",
+        "content_contract": "Household measures, texture symbols, time, difficulty, cost, allergen/safety icons."
+      },
+      {
+        "id": "B2-05",
+        "part": "Front Matter",
+        "section": "Food Safety & Storage Rules",
+        "purpose": "Kitchen safety",
+        "component": "checklist",
+        "page_budget": "2-4",
+        "condition": "Always",
+        "content_contract": "Storage/reheating/cross-contact; recipe-specific safety still shown on cards."
+      },
+      {
+        "id": "B2-06",
+        "part": "Age Journey",
+        "section": "Current Age Recipe Set",
+        "purpose": "Current stage",
+        "component": "collection_index",
+        "page_budget": "2-5",
+        "condition": "Always",
+        "content_contract": "Primary recipe set for current age/feeding stage."
+      },
+      {
+        "id": "B2-07",
+        "part": "Age Journey",
+        "section": "Next Feeding Stage Preview",
+        "purpose": "Future transition",
+        "component": "collection_index+guidance",
+        "page_budget": "2-5",
+        "condition": "If pediatric stage remains",
+        "content_contract": "Future recipes unlocked by age/feeding skill; not presented as current serving advice."
+      },
+      {
+        "id": "B2-08",
+        "part": "Age Journey",
+        "section": "Later Pediatric Age Collections",
+        "purpose": "Future age bands",
+        "component": "age_band_index",
+        "page_budget": "4-20+",
+        "condition": "If requested",
+        "content_contract": "Age-category recipe collections through end of pediatric age; stage/age labels explicit."
+      },
+      {
+        "id": "B2-09",
+        "part": "Meal Collections",
+        "section": "Breakfast",
+        "purpose": "25 or eligible count",
+        "component": "recipe_collection",
+        "page_budget": "25-55+",
+        "condition": "If meal relevant",
+        "content_contract": "Up to target count; never fill unsafe/irrelevant recipes merely to reach 25."
+      },
+      {
+        "id": "B2-10",
+        "part": "Meal Collections",
+        "section": "Mid-morning",
+        "purpose": "25 or eligible count",
+        "component": "recipe_collection",
+        "page_budget": "25-55+",
+        "condition": "If relevant",
+        "content_contract": "Age/stage and routine dependent."
+      },
+      {
+        "id": "B2-11",
+        "part": "Meal Collections",
+        "section": "Lunch",
+        "purpose": "25 or eligible count",
+        "component": "recipe_collection",
+        "page_budget": "25-55+",
+        "condition": "If relevant",
+        "content_contract": "Culture-aware main meal recipes."
+      },
+      {
+        "id": "B2-12",
+        "part": "Meal Collections",
+        "section": "School Tiffin / Tiffin",
+        "purpose": "25 or eligible count",
+        "component": "recipe_collection",
+        "page_budget": "25-55+",
+        "condition": "Age relevant",
+        "content_contract": "Portable, safe, practical options."
+      },
+      {
+        "id": "B2-13",
+        "part": "Meal Collections",
+        "section": "Evening Snack",
+        "purpose": "25 or eligible count",
+        "component": "recipe_collection",
+        "page_budget": "25-55+",
+        "condition": "If relevant",
+        "content_contract": "Snack recipes."
+      },
+      {
+        "id": "B2-14",
+        "part": "Meal Collections",
+        "section": "Dinner",
+        "purpose": "25 or eligible count",
+        "component": "recipe_collection",
+        "page_budget": "25-55+",
+        "condition": "If relevant",
+        "content_contract": "Family meal and child serving adaptations."
+      },
+      {
+        "id": "B2-15",
+        "part": "Meal Collections",
+        "section": "Supper / Bedtime Feed",
+        "purpose": "Eligible recipes only",
+        "component": "recipe_collection",
+        "page_budget": "0-30+",
+        "condition": "Only if appropriate",
+        "content_contract": "Do not create if not part of approved meal pattern."
+      },
+      {
+        "id": "B2-16",
+        "part": "Meal Collections",
+        "section": "Beverage / Hydration Recipes",
+        "purpose": "Eligible only",
+        "component": "recipe_collection",
+        "page_budget": "0-20+",
+        "condition": "Age/clinical relevant",
+        "content_contract": "No inappropriate sweet beverage promotion; safety rules apply."
+      },
+      {
+        "id": "B2-17",
+        "part": "Culture",
+        "section": "Home Culture Favourites",
+        "purpose": "Culture-specific",
+        "component": "recipe_collection",
+        "page_budget": "10-30+",
+        "condition": "Always where data",
+        "content_contract": "Local familiar dishes and household names."
+      },
+      {
+        "id": "B2-18",
+        "part": "Culture",
+        "section": "Regional Indian Diversity",
+        "purpose": "Discovery",
+        "component": "recipe_collection",
+        "page_budget": "10-40+",
+        "condition": "If desired",
+        "content_contract": "Controlled cross-regional options from Indian master."
+      },
+      {
+        "id": "B2-19",
+        "part": "Culture",
+        "section": "Neighbouring-country Food Options",
+        "purpose": "Discovery",
+        "component": "recipe_collection",
+        "page_budget": "0-30+",
+        "condition": "If culturally/location relevant",
+        "content_contract": "Bangladesh/Nepal/Bhutan/Sri Lanka/Pakistan etc. only where master supports and family preference allows."
+      },
+      {
+        "id": "B2-20",
+        "part": "Food Practice",
+        "section": "Vegetarian Collection",
+        "purpose": "Practice filter",
+        "component": "recipe_collection",
+        "page_budget": "0-40+",
+        "condition": "If applicable",
+        "content_contract": "Strictly aligned with declared practice."
+      },
+      {
+        "id": "B2-21",
+        "part": "Food Practice",
+        "section": "Egg-based Collection",
+        "purpose": "Practice/allergy filter",
+        "component": "recipe_collection",
+        "page_budget": "0-30+",
+        "condition": "If eligible",
+        "content_contract": "Allergy and food-practice logic mandatory."
+      },
+      {
+        "id": "B2-22",
+        "part": "Food Practice",
+        "section": "Fish / Meat / Poultry Collection",
+        "purpose": "Practice filter",
+        "component": "recipe_collection",
+        "page_budget": "0-40+",
+        "condition": "If eligible",
+        "content_contract": "Culture, age, preparation safety."
+      },
+      {
+        "id": "B2-23",
+        "part": "Food Practice",
+        "section": "Dairy / Dairy-alternative Collection",
+        "purpose": "Eligibility filter",
+        "component": "recipe_collection",
+        "page_budget": "0-30+",
+        "condition": "If eligible",
+        "content_contract": "Allergy/intolerance rules mandatory."
+      },
+      {
+        "id": "B2-24",
+        "part": "Nutrition Goals",
+        "section": "Energy / Growth-supportive Recipes",
+        "purpose": "Target collection",
+        "component": "recipe_collection",
+        "page_budget": "0-30+",
+        "condition": "If approved target",
+        "content_contract": "No cure claims; target-based ranking."
+      },
+      {
+        "id": "B2-25",
+        "part": "Nutrition Goals",
+        "section": "Protein-supportive Recipes",
+        "purpose": "Target collection",
+        "component": "recipe_collection",
+        "page_budget": "0-30+",
+        "condition": "If approved target",
+        "content_contract": "Target-based."
+      },
+      {
+        "id": "B2-26",
+        "part": "Nutrition Goals",
+        "section": "Iron-focused Recipes",
+        "purpose": "Target collection",
+        "component": "recipe_collection",
+        "page_budget": "0-30+",
+        "condition": "If approved target",
+        "content_contract": "Ingredient/nutrient master based."
+      },
+      {
+        "id": "B2-27",
+        "part": "Nutrition Goals",
+        "section": "Calcium-focused Recipes",
+        "purpose": "Target collection",
+        "component": "recipe_collection",
+        "page_budget": "0-30+",
+        "condition": "If approved target",
+        "content_contract": "Target-based."
+      },
+      {
+        "id": "B2-28",
+        "part": "Nutrition Goals",
+        "section": "Fibre / Bowel-supportive Recipes",
+        "purpose": "Target collection",
+        "component": "recipe_collection",
+        "page_budget": "0-30+",
+        "condition": "If approved/relevant",
+        "content_contract": "Clinical restrictions override."
+      },
+      {
+        "id": "B2-29",
+        "part": "Nutrition Goals",
+        "section": "Other Approved Nutrient Targets",
+        "purpose": "Dynamic collection",
+        "component": "recipe_collection",
+        "page_budget": "0-30+",
+        "condition": "Only approved",
+        "content_contract": "Generated from Nutrition Target Master."
+      },
+      {
+        "id": "B2-30",
+        "part": "Feeding Challenges",
+        "section": "Picky-eating Friendly",
+        "purpose": "Challenge collection",
+        "component": "recipe_collection",
+        "page_budget": "0-30+",
+        "condition": "If relevant",
+        "content_contract": "Familiarity, exposure and sensory considerations."
+      },
+      {
+        "id": "B2-31",
+        "part": "Feeding Challenges",
+        "section": "Texture Progression Recipes",
+        "purpose": "Skill collection",
+        "component": "recipe_collection",
+        "page_budget": "0-30+",
+        "condition": "If relevant",
+        "content_contract": "Recipe transformations mapped to feeding stage."
+      },
+      {
+        "id": "B2-32",
+        "part": "Feeding Challenges",
+        "section": "Self-feeding / Finger Food",
+        "purpose": "Skill collection",
+        "component": "recipe_collection",
+        "page_budget": "0-30+",
+        "condition": "If age/stage eligible",
+        "content_contract": "Choking safety filter mandatory."
+      },
+      {
+        "id": "B2-33",
+        "part": "Feeding Challenges",
+        "section": "Quick / Busy-day Recipes",
+        "purpose": "Practical collection",
+        "component": "recipe_collection",
+        "page_budget": "0-30+",
+        "condition": "If desired",
+        "content_contract": "Prep/cook time filter."
+      },
+      {
+        "id": "B2-34",
+        "part": "Feeding Challenges",
+        "section": "Budget-friendly Recipes",
+        "purpose": "Cost collection",
+        "component": "recipe_collection",
+        "page_budget": "0-30+",
+        "condition": "If desired",
+        "content_contract": "Ingredient cost-band/location master."
+      },
+      {
+        "id": "B2-35",
+        "part": "Feeding Challenges",
+        "section": "Family-pot Recipes",
+        "purpose": "Practical collection",
+        "component": "recipe_collection",
+        "page_budget": "0-30+",
+        "condition": "If relevant",
+        "content_contract": "Shows safe child portion/adaptation from family meal."
+      },
+      {
+        "id": "B2-36",
+        "part": "Feeding Challenges",
+        "section": "School-friendly Recipes",
+        "purpose": "Practical collection",
+        "component": "recipe_collection",
+        "page_budget": "0-30+",
+        "condition": "School age",
+        "content_contract": "Portability/storage constraints."
+      },
+      {
+        "id": "B2-37",
+        "part": "Season & Availability",
+        "section": "Seasonal Recipe Collection",
+        "purpose": "Seasonal",
+        "component": "recipe_collection",
+        "page_budget": "0-40+",
+        "condition": "Location/season dependent",
+        "content_contract": "Uses local seasonal ingredient tags."
+      },
+      {
+        "id": "B2-38",
+        "part": "Season & Availability",
+        "section": "Local Market Alternatives",
+        "purpose": "Substitution guide",
+        "component": "swap_table",
+        "page_budget": "2-8",
+        "condition": "If relevant",
+        "content_contract": "Approved swaps based on availability/cost; safety revalidated."
+      },
+      {
+        "id": "B2-39",
+        "part": "Illness / Recovery",
+        "section": "Low-appetite / Recovery Recipes",
+        "purpose": "Conditional collection",
+        "component": "recipe_collection",
+        "page_budget": "0-20+",
+        "condition": "Clinician approved",
+        "content_contract": "Supportive recipes only; Book 1 contains illness feeding instructions."
+      },
+      {
+        "id": "B2-40",
+        "part": "Illness / Recovery",
+        "section": "Soft / Comfort Recipes",
+        "purpose": "Conditional collection",
+        "component": "recipe_collection",
+        "page_budget": "0-20+",
+        "condition": "If relevant",
+        "content_contract": "Texture and clinical rules apply."
+      },
+      {
+        "id": "B2-41",
+        "part": "Illness / Recovery",
+        "section": "Condition-specific Recipe Collection",
+        "purpose": "Clinician-controlled",
+        "component": "conditional_collection",
+        "page_budget": "0-30+",
+        "condition": "Only approved",
+        "content_contract": "Requires approved clinical target; never autonomously created as therapy."
+      },
+      {
+        "id": "B2-42",
+        "part": "Recipe Card",
+        "section": "Full Recipe Card Standard",
+        "purpose": "Core template",
+        "component": "recipe_card_full",
+        "page_budget": "Dynamic",
+        "condition": "Every recipe",
+        "content_contract": "Title/local name, selection reasons, time, difficulty, cost, ingredients, quantities, complete method, texture, serving, safety, storage, swaps, feedback."
+      },
+      {
+        "id": "B2-43",
+        "part": "Recipe Card",
+        "section": "Compact Recipe Card",
+        "purpose": "Short recipes",
+        "component": "recipe_card_compact",
+        "page_budget": "Dynamic",
+        "condition": "Short recipes only",
+        "content_contract": "Two per page only if readability maintained."
+      },
+      {
+        "id": "B2-44",
+        "part": "Recipe Card",
+        "section": "Family Adaptation Card",
+        "purpose": "Family-pot variant",
+        "component": "recipe_card_variant",
+        "page_budget": "Dynamic",
+        "condition": "If mapped",
+        "content_contract": "Adult/family base with child-safe adaptation; no unsafe ingredient carried into child portion."
+      },
+      {
+        "id": "B2-45",
+        "part": "Recipe Card",
+        "section": "Substitution / Swap Card",
+        "purpose": "Validated alternatives",
+        "component": "swap_card",
+        "page_budget": "Dynamic",
+        "condition": "If available",
+        "content_contract": "Original ingredient, approved alternative, amount adjustment, reason, safety."
+      },
+      {
+        "id": "B2-46",
+        "part": "Planning",
+        "section": "7-day Rotation",
+        "purpose": "Planning aid",
+        "component": "weekly_rotation",
+        "page_budget": "2-5",
+        "condition": "Optional",
+        "content_contract": "Uses selected Recipe IDs only; must not conflict with Book 1."
+      },
+      {
+        "id": "B2-47",
+        "part": "Planning",
+        "section": "14-day / Monthly Rotation",
+        "purpose": "Extended planner",
+        "component": "rotation_grid",
+        "page_budget": "4-12",
+        "condition": "Optional package",
+        "content_contract": "Dynamic, diversity-aware."
+      },
+      {
+        "id": "B2-48",
+        "part": "Planning",
+        "section": "Shopping List by Week",
+        "purpose": "Practical tool",
+        "component": "shopping_list",
+        "page_budget": "2-8",
+        "condition": "Optional",
+        "content_contract": "Aggregated ingredients from selected recipes; quantities can be household estimates."
+      },
+      {
+        "id": "B2-49",
+        "part": "Planning",
+        "section": "Batch Prep / Prep-ahead Guide",
+        "purpose": "Practical tool",
+        "component": "prep_guide",
+        "page_budget": "2-6",
+        "condition": "If relevant",
+        "content_contract": "Only safe storage/prep-ahead recommendations from master."
+      },
+      {
+        "id": "B2-50",
+        "part": "Tracking",
+        "section": "Recipe Trial Tracker",
+        "purpose": "Parent record",
+        "component": "monitoring_table",
+        "page_budget": "4-12",
+        "condition": "Always useful",
+        "content_contract": "Recipe/date/amount/acceptance/reaction/practical note."
+      },
+      {
+        "id": "B2-51",
+        "part": "Tracking",
+        "section": "Favourite Recipes",
+        "purpose": "Shortlist",
+        "component": "favorites_page",
+        "page_budget": "1-4",
+        "condition": "Always",
+        "content_contract": "Loved/easy/school-friendly/family favourite."
+      },
+      {
+        "id": "B2-52",
+        "part": "Tracking",
+        "section": "Rejected / Retry Later",
+        "purpose": "Exposure tracker",
+        "component": "monitoring_table",
+        "page_budget": "2-6",
+        "condition": "If relevant",
+        "content_contract": "Refused foods/recipes, exposure count, notes; no pressure language."
+      },
+      {
+        "id": "B2-53",
+        "part": "Tracking",
+        "section": "Allergy / Reaction Record",
+        "purpose": "Safety tracker",
+        "component": "monitoring_table+redflag",
+        "page_budget": "2-6",
+        "condition": "If relevant",
+        "content_contract": "Food/recipe, time, observed reaction, action; medical review rules in Book 1."
+      },
+      {
+        "id": "B2-54",
+        "part": "Follow-up",
+        "section": "Recipe Feedback for Consultation",
+        "purpose": "Follow-up summary",
+        "component": "summary_table",
+        "page_budget": "2-5",
+        "condition": "At follow-up",
+        "content_contract": "Most accepted, least accepted, practical barriers, suspected reactions, requested changes."
+      },
+      {
+        "id": "B2-55",
+        "part": "Follow-up",
+        "section": "Next-version Recipe Preferences",
+        "purpose": "Update inputs",
+        "component": "checklist+notes",
+        "page_budget": "1-3",
+        "condition": "At follow-up",
+        "content_contract": "Family can request more/less of categories, ingredients, prep time, culture."
+      },
+      {
+        "id": "B2-56",
+        "part": "Appendix",
+        "section": "Recipe Index by Meal",
+        "purpose": "Index",
+        "component": "index",
+        "page_budget": "2-10",
+        "condition": "Always",
+        "content_contract": "Recipe title, ID, page, meal category."
+      },
+      {
+        "id": "B2-57",
+        "part": "Appendix",
+        "section": "Recipe Index by Age / Stage",
+        "purpose": "Index",
+        "component": "index",
+        "page_budget": "2-10",
+        "condition": "Always",
+        "content_contract": "Supports future pediatric-age navigation."
+      },
+      {
+        "id": "B2-58",
+        "part": "Appendix",
+        "section": "Recipe Index by Nutrition Goal",
+        "purpose": "Index",
+        "component": "index",
+        "page_budget": "2-10",
+        "condition": "If target collections",
+        "content_contract": "Target-to-recipe navigation."
+      },
+      {
+        "id": "B2-59",
+        "part": "Appendix",
+        "section": "Recipe Index by Culture / Region",
+        "purpose": "Index",
+        "component": "index",
+        "page_budget": "2-10",
+        "condition": "If multiple cultures",
+        "content_contract": "Culture/location navigation."
+      },
+      {
+        "id": "B2-60",
+        "part": "Appendix",
+        "section": "Ingredient Index",
+        "purpose": "Index",
+        "component": "index",
+        "page_budget": "3-15",
+        "condition": "Always",
+        "content_contract": "Ingredient-to-recipe references; useful for avoidance and discovery."
+      },
+      {
+        "id": "B2-61",
+        "part": "Appendix",
+        "section": "Allergen / Safety Index",
+        "purpose": "Safety appendix",
+        "component": "reference_table",
+        "page_budget": "1-5",
+        "condition": "If relevant",
+        "content_contract": "Mapped allergens and where applicable; never replaces recipe-card warnings."
+      },
+      {
+        "id": "B2-62",
+        "part": "Appendix",
+        "section": "Glossary & Local Food Names",
+        "purpose": "Multilingual",
+        "component": "reference_table",
+        "page_budget": "2-8",
+        "condition": "Language/culture dependent",
+        "content_contract": "Canonical/local/translated names."
+      },
+      {
+        "id": "B2-63",
+        "part": "Appendix",
+        "section": "Evidence, Recipe & Version Manifest",
+        "purpose": "Traceability",
+        "component": "reference_page",
+        "page_budget": "2-5",
+        "condition": "Always",
+        "content_contract": "Recipe versions, ingredient master, target master, language version, reviewers."
+      },
+      {
+        "id": "B2-64",
+        "part": "Appendix",
+        "section": "Scope / Safety / Follow-up",
+        "purpose": "Closing",
+        "component": "reference_page",
+        "page_budget": "1-2",
+        "condition": "Always",
+        "content_contract": "Recipe book scope, use with Book 1, follow-up path."
+      }
+    ]
+  }
+}

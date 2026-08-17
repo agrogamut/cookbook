@@ -1,0 +1,567 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://madamgy.example/schema/book2-v1.json",
+  "title": "MadamGY Book 2 Personalized Child Recipe Companion",
+  "type": "object",
+  "required": [
+    "book_metadata",
+    "child_recipe_profile",
+    "meal_sections",
+    "trackers",
+    "release"
+  ],
+  "properties": {
+    "book_metadata": {
+      "type": "object",
+      "required": [
+        "book_type",
+        "schema_version",
+        "draft_version",
+        "profile_snapshot_id",
+        "language_id",
+        "generated_at"
+      ],
+      "properties": {
+        "book_type": {
+          "const": "BOOK_2"
+        },
+        "schema_version": {
+          "const": "1.0"
+        },
+        "draft_version": {
+          "type": "string"
+        },
+        "profile_snapshot_id": {
+          "type": "string"
+        },
+        "language_id": {
+          "type": "string"
+        },
+        "generation_job_id": {
+          "type": "string"
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "template_version": {
+          "type": "string"
+        },
+        "recipe_master_version": {
+          "type": "string"
+        },
+        "ingredient_master_version": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "child_recipe_profile": {
+      "type": "object",
+      "required": [
+        "display_name",
+        "age_display",
+        "feeding_stage_id",
+        "selection_summary"
+      ],
+      "properties": {
+        "display_name": {
+          "type": "string"
+        },
+        "age_display": {
+          "type": "string"
+        },
+        "feeding_stage_id": {
+          "type": "string"
+        },
+        "selection_summary": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "declared_food_practice_display": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "culture_location_display": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "allergy_summary": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "cooking_preferences": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "meal_sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "meal_category_id",
+          "title",
+          "recipes"
+        ],
+        "properties": {
+          "meal_category_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "target_recipe_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "recipes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/recipe_card"
+            }
+          },
+          "selection_note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "special_collections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "collection_id",
+          "title",
+          "recipe_ids"
+        ],
+        "properties": {
+          "collection_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "recipe_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "active_target_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "rotation_plan": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "days": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "trackers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "tracker_id",
+          "title",
+          "fields"
+        ],
+        "properties": {
+          "tracker_id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "release": {
+      "$ref": "#/$defs/release"
+    }
+  },
+  "$defs": {
+    "recipe_card": {
+      "type": "object",
+      "required": [
+        "recipe_id",
+        "recipe_version",
+        "title",
+        "meal_category_id",
+        "age_stage_ids",
+        "selection_reasons",
+        "ingredients",
+        "method_steps",
+        "serving",
+        "safety",
+        "review_status"
+      ],
+      "properties": {
+        "recipe_id": {
+          "type": "string"
+        },
+        "recipe_version": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "alternate_local_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "meal_category_id": {
+          "type": "string"
+        },
+        "age_stage_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "selection_reasons": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "type": "string"
+          }
+        },
+        "nutrition_tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "prep_time_minutes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "cook_time_minutes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "difficulty": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "easy",
+            "moderate",
+            "advanced",
+            null
+          ]
+        },
+        "cost_band": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "low",
+            "medium",
+            "high",
+            null
+          ]
+        },
+        "ingredients": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "ingredient_id",
+              "display_name",
+              "quantity",
+              "unit"
+            ],
+            "properties": {
+              "ingredient_id": {
+                "type": "string"
+              },
+              "display_name": {
+                "type": "string"
+              },
+              "quantity": {
+                "type": [
+                  "number",
+                  "string"
+                ]
+              },
+              "unit": {
+                "type": "string"
+              },
+              "household_measure": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "optional": {
+                "type": "boolean",
+                "default": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "method_steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "step_no",
+              "instruction"
+            ],
+            "properties": {
+              "step_no": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "instruction": {
+                "type": "string"
+              },
+              "safety_critical": {
+                "type": "boolean",
+                "default": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "texture_serving": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "serving": {
+          "type": "object",
+          "required": [
+            "yield_display",
+            "planned_child_serving"
+          ],
+          "properties": {
+            "yield_display": {
+              "type": "string"
+            },
+            "planned_child_serving": {
+              "type": "string"
+            },
+            "portion_note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "safety": {
+          "type": "object",
+          "required": [
+            "allergen_ids",
+            "warnings"
+          ],
+          "properties": {
+            "allergen_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "warnings": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "storage_note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "cross_contact_note": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "substitutions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "substitution_id",
+              "display_text"
+            ],
+            "properties": {
+              "substitution_id": {
+                "type": "string"
+              },
+              "display_text": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "approx_nutrition": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "basis": {
+              "type": "string"
+            },
+            "values": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "number",
+                  "string"
+                ]
+              }
+            }
+          },
+          "additionalProperties": false
+        },
+        "parent_feedback": {
+          "type": "object",
+          "properties": {
+            "rating_options": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "note_prompt": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "review_status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "approved",
+            "rejected"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "release": {
+      "type": "object",
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "review",
+            "approved",
+            "released"
+          ]
+        },
+        "release_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "clinical_review_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "nutrition_review_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "language_review_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "editorial_review_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

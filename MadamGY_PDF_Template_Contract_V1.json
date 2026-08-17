@@ -1,0 +1,155 @@
+{
+  "contract_version": "1.0",
+  "design_principles": {
+    "premium_but_warm": true,
+    "human_editorial_look": true,
+    "mobile_readable_pdf": true,
+    "print_ready_supported": true,
+    "clinical_warning_visibility": "high",
+    "dense_data_sections": "table-first, card-assisted",
+    "recipes": "one to two recipe cards per page depending content length"
+  },
+  "global_tokens": {
+    "page_size_screen": "A4 portrait",
+    "page_size_print": "configurable trim size",
+    "safe_margin_mm": 12,
+    "header_height_mm": 12,
+    "footer_height_mm": 10,
+    "section_title_style": "large editorial heading + short supportive subtitle",
+    "body_max_line_length_chars": 85,
+    "table_header_repeat": true,
+    "page_numbering": "Roman optional front matter; Arabic body",
+    "release_footer_fields": [
+      "book_version",
+      "release_id",
+      "generation_date"
+    ]
+  },
+  "book1_templates": [
+    {
+      "template_id": "B1-COVER-01",
+      "component": "cover",
+      "visual": "child-focused premium editorial cover; minimal text; brand + child name + subtitle"
+    },
+    {
+      "template_id": "B1-PROFILE-01",
+      "component": "profile_card",
+      "visual": "two-column card layout with child summary and current priorities"
+    },
+    {
+      "template_id": "B1-GOALS-01",
+      "component": "goal_cards",
+      "visual": "3–5 icon cards with concise goals"
+    },
+    {
+      "template_id": "B1-COMPARE-01",
+      "component": "comparison_table",
+      "visual": "Reference/Expected | Child's Actual | Parent Note | Review"
+    },
+    {
+      "template_id": "B1-VAX-01",
+      "component": "vaccination_tracker",
+      "visual": "age band + vaccine row + given date/time/brand/batch/reaction/next due"
+    },
+    {
+      "template_id": "B1-DEV-01",
+      "component": "development_tracker",
+      "visual": "domain cards + reference milestone + actual + observed date + concern flag"
+    },
+    {
+      "template_id": "B1-DAILY-01",
+      "component": "daily_life_dashboard",
+      "visual": "toilet, sleep, dental, activity, screen, self-care, school tiles"
+    },
+    {
+      "template_id": "B1-RED-01",
+      "component": "red_flag_box",
+      "visual": "high-contrast warning panel; brief sign + clear action"
+    },
+    {
+      "template_id": "B1-TRACK-01",
+      "component": "monitoring_table",
+      "visual": "generous writing space; weekly/monthly trackers"
+    },
+    {
+      "template_id": "B1-END-01",
+      "component": "reference_page",
+      "visual": "clean evidence/version/reviewer page"
+    }
+  ],
+  "book2_templates": [
+    {
+      "template_id": "B2-COVER-01",
+      "component": "cover",
+      "visual": "food-rich premium cover with warm family aesthetic"
+    },
+    {
+      "template_id": "B2-PROFILE-01",
+      "component": "child_recipe_profile",
+      "visual": "why these recipes were selected"
+    },
+    {
+      "template_id": "B2-SECTION-01",
+      "component": "meal_section_opener",
+      "visual": "large meal title + short personalization note"
+    },
+    {
+      "template_id": "B2-RECIPE-01",
+      "component": "recipe_card",
+      "visual": "title + reason chips + ingredient panel + numbered method + serving/safety footer"
+    },
+    {
+      "template_id": "B2-RECIPE-02",
+      "component": "recipe_card_compact",
+      "visual": "compact 2-card spread for short recipes"
+    },
+    {
+      "template_id": "B2-SWAP-01",
+      "component": "swap_guide",
+      "visual": "original | approved swap | why it works | safety note"
+    },
+    {
+      "template_id": "B2-ROTATE-01",
+      "component": "weekly_rotation",
+      "visual": "7-day meal grid with Recipe_ID-backed titles"
+    },
+    {
+      "template_id": "B2-TRACK-01",
+      "component": "recipe_tracker",
+      "visual": "tried/date/amount/acceptance/reaction/notes"
+    },
+    {
+      "template_id": "B2-FAV-01",
+      "component": "favorites",
+      "visual": "favorite/easy/school-friendly shortlist"
+    }
+  ],
+  "visual_language": {
+    "book1_palette": [
+      "deep navy",
+      "teal",
+      "warm cream",
+      "muted gold"
+    ],
+    "book2_palette": [
+      "deep plum",
+      "warm rose",
+      "cream",
+      "muted gold"
+    ],
+    "warning_palette": [
+      "deep red",
+      "light warm red"
+    ],
+    "icons": "consistent simple line icons only",
+    "illustrations": "curated human-designed or approved assets; not random AI images",
+    "photography": "optional; region/food appropriate; no deceptive personalization"
+  },
+  "accessibility": {
+    "minimum_body_pt": 9.5,
+    "minimum_table_pt": 8.5,
+    "contrast": "WCAG-aware",
+    "avoid_color_only_meaning": true,
+    "unicode_multilingual": true
+  }
+}

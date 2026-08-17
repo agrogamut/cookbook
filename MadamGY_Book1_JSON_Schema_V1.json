@@ -1,0 +1,288 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://madamgy.example/schema/book1-v1.json",
+  "title": "MadamGY Book 1 Personalized Child Growth, Nutrition & Development Companion",
+  "type": "object",
+  "required": [
+    "book_metadata",
+    "child_profile",
+    "consultation_summary",
+    "sections",
+    "release"
+  ],
+  "properties": {
+    "book_metadata": {
+      "type": "object",
+      "required": [
+        "book_type",
+        "schema_version",
+        "draft_version",
+        "profile_snapshot_id",
+        "language_id",
+        "generated_at"
+      ],
+      "properties": {
+        "book_type": {
+          "const": "BOOK_1"
+        },
+        "schema_version": {
+          "const": "1.0"
+        },
+        "draft_version": {
+          "type": "string"
+        },
+        "profile_snapshot_id": {
+          "type": "string"
+        },
+        "language_id": {
+          "type": "string"
+        },
+        "generation_job_id": {
+          "type": "string"
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "template_version": {
+          "type": "string"
+        },
+        "master_version_manifest_ref": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "child_profile": {
+      "type": "object",
+      "required": [
+        "display_name",
+        "age_display",
+        "feeding_stage_id"
+      ],
+      "properties": {
+        "display_name": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "age_display": {
+          "type": "string"
+        },
+        "feeding_stage_id": {
+          "type": "string"
+        },
+        "location_display": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "declared_food_practice_display": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "allergy_summary": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "parent_goal_summary": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "consultation_summary": {
+      "type": "object",
+      "required": [
+        "consultation_date",
+        "reviewed_by",
+        "priority_goals"
+      ],
+      "properties": {
+        "consultation_date": {
+          "type": "string",
+          "format": "date"
+        },
+        "reviewed_by": {
+          "type": "string"
+        },
+        "priority_goals": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 6,
+          "items": {
+            "type": "string"
+          }
+        },
+        "follow_up_due": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "format": "date"
+        }
+      },
+      "additionalProperties": false
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/section"
+      }
+    },
+    "release": {
+      "$ref": "#/$defs/release"
+    }
+  },
+  "$defs": {
+    "section": {
+      "type": "object",
+      "required": [
+        "section_id",
+        "title",
+        "component_type",
+        "content"
+      ],
+      "properties": {
+        "section_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "subtitle": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "component_type": {
+          "type": "string",
+          "enum": [
+            "profile_card",
+            "goal_cards",
+            "comparison_table",
+            "monitoring_table",
+            "guidance_cards",
+            "vaccination_tracker",
+            "development_tracker",
+            "daily_life_dashboard",
+            "red_flag_box",
+            "timeline",
+            "checklist",
+            "meal_plan_table",
+            "text_block",
+            "reference_page"
+          ]
+        },
+        "conditional_reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "content": {
+          "type": [
+            "object",
+            "array",
+            "string"
+          ]
+        },
+        "source_block_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "active_rule_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "review_required": {
+          "type": "boolean",
+          "default": false
+        },
+        "review_status": {
+          "type": "string",
+          "enum": [
+            "not_required",
+            "pending",
+            "approved",
+            "rejected"
+          ]
+        },
+        "page_style": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "release": {
+      "type": "object",
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "draft",
+            "review",
+            "approved",
+            "released"
+          ]
+        },
+        "release_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "clinical_review_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "nutrition_review_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "language_review_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "editorial_review_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
