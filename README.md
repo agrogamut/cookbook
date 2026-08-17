@@ -7,8 +7,7 @@ returns the recipes that are safe and appropriate for that child.
 Regional scope is **India and Bangladesh**, weighted toward West Bengal and Bengali
 cuisine.
 
-Academic project. Not sold, not deployed to real parents, not used to give feeding advice
-to an actual child.
+Internal tool. Staff use it to serve families; families never use it directly.
 
 ## Status
 
@@ -33,6 +32,25 @@ TEST_DATABASE_URL=$DATABASE_URL go test ./...
 
 The importer is idempotent: running it twice over unchanged workbooks leaves an identical
 database, verified by a content hash per table.
+
+## Running the API
+
+```fish
+set -x DATABASE_URL (scripts/dev_db.fish url)
+go run ./cmd/server        # listens on :8080 by default, set PORT to override
+```
+
+| Endpoint | Method | What it does |
+|----------|--------|---------------|
+| `/api/search` | POST | Runs the 14-step engine against a child profile, returns ranked recipes plus full step accounting |
+| `/api/recipes/{id}` | GET | Provider method + external suggestion + provider/corrected nutrition |
+| `/api/ingredients` | GET | Provider and IFCT-corrected nutrition side by side |
+| `/api/audit/nutrition` | GET | The confirmed discrepancy findings to hand the provider |
+| `/api/gaps` | GET | The full gap register |
+| `/api/runs` | GET | Import history and content hashes |
+| `/api/reference/regions` | GET | The 9 scoped regions and their tiers |
+| `/api/reference/cuisines` | GET | Cuisine dropdown, guaranteed non-empty per entry |
+| `/api/reference/nutrition-targets` | GET | The NT00-NT12 rubric, weights and guidance text |
 
 Useful views once loaded:
 
@@ -118,6 +136,6 @@ Evidence identifiers and URLs as cited by the provider are imported verbatim int
 
 ## Licence
 
-Non-commercial research and education. The external corpora above are used under the
-non-commercial carve-outs their licences grant; attribution is given here because that is
-what those licences ask for.
+Sources are attributed above because their licences ask for it. Note that the recipe
+corpus carries no stated upstream licence, which is unresolved - see "Scope" in
+`CLAUDE.md`. IFCT 2017 is openly published by ICMR-NIN.

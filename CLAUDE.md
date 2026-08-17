@@ -1,8 +1,14 @@
 # MadamGY Recipe Engine
 
-Constraint-driven pediatric recipe finder. A parent/clinician enters a child profile
-(age, diet, allergies, clinical condition, region, budget) and the engine returns the
-recipes that are safe and appropriate for that child.
+Constraint-driven pediatric recipe finder. An operator enters a child profile (age, diet,
+allergies, clinical condition, region, budget) and the engine returns the recipes that are
+safe and appropriate for that child.
+
+**This is an internal tool.** Staff use it to serve families; families never touch it. No
+parent, and no member of the public, is a user. That is a product decision with real
+consequences for the UI - see "Frontend" below - and it does not soften a single rule in
+"Hard rule: never invent data". An operator reading a wrong number will repeat it to a
+parent, so the data has to be right for exactly the same reasons it always did.
 
 Source data is 13 Excel workbooks in this directory, authored by an external clinical
 data provider, plus two external datasets in `data/external/` used for verification and
@@ -38,7 +44,7 @@ Anything else is invented and does not ship. Specifically forbidden:
 **When data is missing, the correct output is an explicit gap** - `null`, "not available",
 a disabled filter option, or a shorter result list. An honest empty field beats a
 confident wrong one, and in a pediatric feeding context the wrong one is the dangerous
-failure mode. Never paper over a gap; surface it and note it in the report.
+failure mode. Never paper over a gap; surface it and log it in the gap register.
 
 Any derived value carries three things in the schema: the formula reference, the source
 rows it came from, and a confidence or match score where a join was involved. If you
@@ -56,21 +62,29 @@ cannot supply all three, the value is not derived - it is invented, and it does 
 - On architecture decisions: make the call, then report what was decided and why. Do not
   pause for approval first.
 
-## Scope: school project, non-commercial
+## Scope: internal operational tool
 
-This is an academic project. It is not sold, not deployed to real parents, and not used to
-give feeding advice to an actual child. That changes two things:
+Staff use this to serve families. Output reaches a real parent through a person, which
+makes every blocker in "Blockers" live rather than deferred.
 
-- **Licensing.** Non-commercial research and education is the carve-out most food and
-  recipe datasets grant. Corpora that are off-limits commercially (RecipeNLG, Recipe1M+,
-  scraped recipe sets) are usable here. Attribute sources in the README anyway - it is
-  free to do and it is what the licenses ask for.
+Two things follow, and both are open questions rather than settled positions:
+
+- **Licensing.** The external corpora need a use basis that survives commercial or
+  operational use. IFCT 2017 is open and published by ICMR-NIN, so it is fine. The Indian
+  recipe corpus has an **unstated upstream licence** and was pulled from a scraped
+  collection; that is not a licence to operate on. Either establish terms with the
+  upstream source, or drop `recipe_method_external` and ship the provider's text alone.
+  Attribute every source in the README regardless.
 - **Sign-off.** The provider's `Review_Status = Draft` and `Data_Quality = Provisional`
-  flags stop being release blockers and become display metadata. Surface them in the UI as
-  a "provisional data, academic demo" banner rather than gating on them.
+  flags are **not** display metadata here. Nothing in this dataset has been through
+  culinary, nutrition or clinical review. Surfacing a per-row `Draft` badge to an operator
+  is honest and necessary; it is not the same as clearance to act on the row, and the
+  provider's sign-off is still outstanding.
 
-What does NOT change: if this is ever shown to real parents, everything in "Blockers"
-below becomes live again. Keep the flags in the schema; do not delete them.
+The engineering answer to both is the same and is already built: every value carries its
+source, its verification state and its confidence, so an operator can see what is
+provider-provisional, what is IFCT-verified and what is a group placeholder. What the
+schema cannot do is grant permission. Keep the flags; do not delete them.
 
 ## Plan: data first, then build
 
@@ -106,6 +120,82 @@ Phase 1 exit criteria, all of which must pass:
 
 Only after Phase 1 exits. Go API implementing the 14-step engine, then the Next.js
 frontend, then the cuisine and constraint filter UI. Scope details live in "Stack" below.
+
+## Frontend - internal devtool, not a consumer app
+
+Next.js App Router + React + Tailwind + **shadcn/ui**, used heavily. Operators are the
+only users. Build for someone who runs twenty lookups an hour and already knows what a
+`Clinical_Tag` is.
+
+### What that changes
+
+| Consumer app would | This does |
+|---|---|
+| Hide confidence scores and provenance | **Show them on every row.** An operator needs to know a number is a group placeholder before repeating it |
+| Friendly "provisional data" banner | Per-row badges: `Draft`, `unverified`, `coverage 0.62`, `pan-india match` |
+| Cards, hero sections, generous whitespace | Dense tables. Information per screen is the metric |
+| Onboarding, tooltips explaining basics | Keyboard shortcuts and a command palette |
+| Round numbers for readability | Exact values, monospace, units labelled |
+| Empty state with an illustration | Empty state that says which filter removed the rows |
+
+The inversion is the point: **everything Phase 1 built to keep the data honest becomes
+visible UI here.** `value_source`, `match_confidence`, `ingredient_coverage`,
+`review_status`, `scored_axes`, `verified` and the gap register are not debug output -
+they are the columns an operator reads to decide whether to trust a row.
+
+### Rules
+
+1. **No decorative anything.** No gradients, no illustrations, no marketing copy, no
+   animated transitions beyond what shadcn ships. If a pixel does not carry information
+   or afford an action, it does not go in.
+2. **Density first.** Default to `Table` over `Card`. Compact row height. Show 30 rows,
+   not 6. Truncate with a `Tooltip` or `HoverCard` rather than wrapping.
+3. **Provenance is a column, never a footnote.** Any derived or external value renders
+   with its source and confidence adjacent. A bare number with no provenance is a bug.
+4. **Keyboard first.** `Command` palette (cmd+K) for navigation and recipe/ingredient
+   lookup. Arrow keys move table selection. Every dialog closes on escape.
+5. **Explain every exclusion.** When the result list shrinks, say which step did it and
+   how many rows each removed. An operator asking "why is this empty" is the most common
+   support question and the UI should answer it without anyone being asked.
+6. **Monospace for identity and quantity.** IDs (`MG-R-00042`, `ING0037`, `D031`),
+   scores, percentages and nutrient values. Proportional text for prose only.
+7. **Dark and light both work.** Respect the system preference. Do not force either.
+8. **No client-side invention.** The frontend never computes a nutrition figure, fills a
+   blank with a default, or rounds a gap away. It renders what the API returns, including
+   `null`, which renders as "not available" and not as `0`.
+
+### Screens
+
+| Route | Purpose | Primary shadcn parts |
+|---|---|---|
+| `/` engine console | Profile form on the left, ranked results table on the right | `Form`, `Select`, `Combobox`, `Slider`, `Table`, `Resizable` |
+| `/recipe/[id]` | Provider method and external suggestion side by side, ingredients, nutrition provider-vs-corrected | `Tabs`, `Table`, `Badge`, `Alert`, `Separator` |
+| `/ingredients` | 406 ingredients, provider vs IFCT values, verified flag | `DataTable`, `Badge`, `Popover`, faceted filters |
+| `/audit/nutrition` | `nutrition_discrepancy_report` - the provider deliverable | `Table`, `Badge`, sortable columns, CSV export |
+| `/audit/gaps` | Gap register, 16 rows, severity-coloured | `Table`, `Badge`, `Accordion` |
+| `/runs` | Import and enrichment history, content hashes, rows skipped | `Table`, `Collapsible` |
+| `/reference` | Regions, cuisines, NT00-NT12 weights, engine steps | `Tabs`, `Table` |
+
+### The "why this result" panel
+
+The single most valuable screen in an internal tool, and the reason to build one at all
+rather than handing people a SQL client. For any result, a `Sheet` that shows:
+
+- Which of the 14 engine steps ran, and how many candidates each removed
+- The active nutrition target and why it was chosen
+- The seven scored axes with normalised values and weights, so the score is reproducible
+- Which hard filter excluded a recipe the operator expected to see
+
+That last one is the answer to "where did recipe X go", and it is only answerable because
+the engine records its steps rather than returning a bare list.
+
+### Safety, unchanged
+
+Steps 1 (age) and 2 (allergy) stay hard filters. There is **no operator override**, no
+"show excluded anyway" toggle that returns them to the result set. An internal audience
+makes the machinery visible; it does not make the safety boundary adjustable. The UI may
+explain that a recipe was excluded for an allergen and must not offer a way to un-exclude
+it.
 
 ### Status
 
@@ -630,12 +720,13 @@ The first two are courtesy. The third is a finding and should go with the number
   the ingredient master itself names as its source. Brinjal is listed at 143 kcal/100g
   against IFCT's 27, in 89 recipes. Query `nutrition_discrepancy_report` for the list.
 
-Their answers make good material for the report's limitations section either way.
+Both answers change what the tool can responsibly show, so chase them.
 
 ## External datasets
 
-Academic scope, so the non-commercial corpora are available. Attribute every source in the
-README regardless.
+Every external source needs a use basis that survives operational use, and attribution in
+the README regardless. See "Scope" above: the recipe corpus's upstream licence is unstated
+and is an open question, not a settled one.
 
 **Regional scope applies to external data too.** The corpus has to match the food the
 recipes describe. A Western recipe set can supply the *word* "saute" but it cannot tell
@@ -649,7 +740,7 @@ cuisine.** Bulk Western corpora are excluded, not deprioritised.
 | Dataset | Size | Region | License | Use for |
 |---------|------|--------|---------|---------|
 | [IFCT 2017](https://zenodo.org/records/7088653) | 528 foods, 151 nutrients | India | Other (Open), NIN Hyderabad | Audit the 320 IFCT-sourced ingredients. **Primary** nutrition reference - it is the source the provider already cites |
-| [Anupam007/indian-recipe-dataset](https://huggingface.co/datasets/Anupam007/indian-recipe-dataset) | 5,940 recipes, 82 cuisines | India | unstated, OK for coursework | **Real prep text** - fixes the boilerplate blocker. Filter to Bengali and East Indian cuisines first, then the rest of India |
+| [Anupam007/indian-recipe-dataset](https://huggingface.co/datasets/Anupam007/indian-recipe-dataset) | 5,940 recipes, 82 cuisines | India | **unstated upstream** - unresolved | **Real prep text** - fixes the boilerplate blocker. Filter to Bengali and East Indian cuisines first, then the rest of India |
 | [Bangladesh FCT 2013](http://www.fao.org/infoods/infoods/tables-and-databases/faoinfoods-databases/en/) | ~380 foods | Bangladesh | FAO/INFOODS, open | Audit the 29 `BD-FCT-2013` ingredients against their own stated source |
 | [Open Food Facts](https://world.openfoodfacts.org/data) | 3M+ products | global, filter to IN/BD | ODbL 1.0 | Allergen cross-check on the 317 untagged ingredients. Filter to India and Bangladesh country tags |
 | [USDA FoodData Central](https://fdc.nal.usda.gov/api-guide) | 600k+ foods | US | CC0 public domain | **Fallback only**, for the 57 ingredients the provider itself sourced from USDA. Never used to override an IFCT value |
@@ -669,8 +760,8 @@ Not "lower priority" - these do not get used at all.
 
 | Dataset | Why excluded |
 |---------|--------------|
-| RecipeNLG (2.2M) | Overwhelmingly Western. Volume is not the problem this project has; regional fidelity is. A high-Jaccard match to a Western dish would be a wrong match dressed as a confident one |
-| Recipe1M+ | Same. Western-dominant scraped corpus |
+| RecipeNLG (2.2M) | Licensed for non-commercial research only, which no longer applies. Also overwhelmingly Western: a high-Jaccard match to a Western dish is a wrong match dressed as a confident one |
+| Recipe1M+ | Same licence problem, same Western-dominant scraped corpus |
 | datahiveai/recipes-with-nutrition | Nutrition attached to scraped recipes, which rule 4 below already forbids as a nutrition source, and its recipes are not South Asian |
 | Culinary Recipes Dataset (Zenodo, 50k) | Clean and well-labelled, but not regionally relevant. Nothing it offers is not better served by the Indian set |
 
