@@ -136,3 +136,43 @@ func (h *Handlers) ReferenceNutritionTargets(w http.ResponseWriter, r *http.Requ
 	}
 	writeJSON(w, http.StatusOK, out)
 }
+
+// ReferenceAllergens returns allergen_tag_vocabulary: the eleven provider allergen groups
+// with the literal corpus tag each maps to, and whether declaring it screens anything at
+// all. Four groups have no corpus tag (migration 0011 verified this against the live
+// corpus), so screens is false for them and the picker built from this endpoint must show
+// that state rather than offering them as though they filter.
+//
+// screens is derived from corpus_tag rather than stored, so the two can never disagree.
+func (h *Handlers) ReferenceAllergens(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.pool.Query(r.Context(), `
+		SELECT allergen_group, corpus_tag, note, corpus_tag IS NOT NULL AS screens
+		FROM allergen_tag_vocabulary
+		ORDER BY (corpus_tag IS NULL), allergen_group`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "allergen list failed: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	type allergen struct {
+		AllergenGroup string  `json:"allergen_group"`
+		CorpusTag     *string `json:"corpus_tag"`
+		Note          string  `json:"note"`
+		Screens       bool    `json:"screens"`
+	}
+	out := []allergen{}
+	for rows.Next() {
+		var a allergen
+		if err := rows.Scan(&a.AllergenGroup, &a.CorpusTag, &a.Note, &a.Screens); err != nil {
+			writeError(w, http.StatusInternalServerError, "allergen scan failed: "+err.Error())
+			return
+		}
+		out = append(out, a)
+	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "allergen rows failed: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
