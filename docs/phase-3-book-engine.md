@@ -2,7 +2,7 @@
 
 **Status: not built. Nothing in this document exists in code.**
 
-Recorded 18 August 2026, after the provider delivered eight new files into the repository
+Recorded 18 August 2026, after the provider delivered nine new files into the repository
 root on 17 August. This document describes what those files ask for, what follows from
 them, and what has been decided. It is a specification of absent work, not a description
 of the system.
@@ -14,7 +14,7 @@ Phase 3 is everything below.
 
 ## 1. What arrived
 
-Eight files, dropped into the repository root, untracked in git at time of writing:
+Nine files, dropped into the repository root, untracked in git at time of writing:
 
 | File | What it is |
 |------|-----------|
