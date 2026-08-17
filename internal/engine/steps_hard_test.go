@@ -44,7 +44,7 @@ func TestAllergyFilterExcludesDeclaredAllergen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ageFilter: %v", err)
 	}
-	filtered, step, err := allergyFilter(ctx, pool, models.ChildProfile{Allergens: []string{"Peanut"}}, all)
+	filtered, step, _, err := allergyFilter(ctx, pool, models.ChildProfile{Allergens: []string{"Peanut"}}, all)
 	if err != nil {
 		t.Fatalf("allergyFilter: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestAllergyFilterErrorsOnUnmatchedAllergen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ageFilter: %v", err)
 	}
-	_, _, err = allergyFilter(ctx, pool, models.ChildProfile{Allergens: []string{"Peanut", "not-a-real-allergen"}}, all)
+	_, _, _, err = allergyFilter(ctx, pool, models.ChildProfile{Allergens: []string{"Peanut", "not-a-real-allergen"}}, all)
 	if err == nil {
 		t.Fatal("allergyFilter must error on unmatched allergen, got nil")
 	}
@@ -86,7 +86,7 @@ func TestAllergyFilterWheatMatchesGlutenContainingCerealTag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ageFilter: %v", err)
 	}
-	filtered, _, err := allergyFilter(ctx, pool, models.ChildProfile{Allergens: []string{"Wheat"}}, all)
+	filtered, _, _, err := allergyFilter(ctx, pool, models.ChildProfile{Allergens: []string{"Wheat"}}, all)
 	if err != nil {
 		t.Fatalf("allergyFilter: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestAllergyFilterGenuinelyAbsentGroupNotesZeroExclusions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ageFilter: %v", err)
 	}
-	filtered, step, err := allergyFilter(ctx, pool, models.ChildProfile{Allergens: []string{"Tree nuts"}}, all)
+	filtered, step, _, err := allergyFilter(ctx, pool, models.ChildProfile{Allergens: []string{"Tree nuts"}}, all)
 	if err != nil {
 		t.Fatalf("allergyFilter: %v", err)
 	}
@@ -115,6 +115,44 @@ func TestAllergyFilterGenuinelyAbsentGroupNotesZeroExclusions(t *testing.T) {
 	}
 	if !contains(step.Note, "Tree nuts") {
 		t.Fatalf("step note must name the allergen with no corpus tag so the operator can tell absence from a silent bug, got %q", step.Note)
+	}
+}
+
+func TestAllergyFilterReportsUnscreenedGroups(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	all, _, err := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	if err != nil {
+		t.Fatalf("ageFilter: %v", err)
+	}
+
+	cases := []struct {
+		name           string
+		allergens      []string
+		wantUnscreened []string
+	}{
+		{"tree nuts have no corpus tag", []string{"Tree nuts"}, []string{"Tree nuts"}},
+		{"peanut has one", []string{"Peanut"}, nil},
+		{"mixed reports only the unscreened half", []string{"Peanut", "Mustard"}, []string{"Mustard"}},
+		{"none declared", nil, nil},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, _, unscreened, err := allergyFilter(ctx, pool,
+				models.ChildProfile{AgeMonths: 36, Allergens: c.allergens}, all)
+			if err != nil {
+				t.Fatalf("allergyFilter: %v", err)
+			}
+			if len(unscreened) != len(c.wantUnscreened) {
+				t.Fatalf("unscreened = %v, want %v", unscreened, c.wantUnscreened)
+			}
+			for i := range c.wantUnscreened {
+				if unscreened[i] != c.wantUnscreened[i] {
+					t.Fatalf("unscreened = %v, want %v", unscreened, c.wantUnscreened)
+				}
+			}
+		})
 	}
 }
 

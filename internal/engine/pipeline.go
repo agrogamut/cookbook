@@ -28,7 +28,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (models
 	step1.CandidatesIn = totalInBand
 	steps = append(steps, step1)
 
-	ids, step2, err := allergyFilter(ctx, pool, p, ids)
+	ids, step2, unscreened, err := allergyFilter(ctx, pool, p, ids)
 	if err != nil {
 		return models.EngineResult{}, err
 	}
@@ -42,7 +42,13 @@ func Run(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (models
 	if blocked {
 		// Same nil-vs-empty-array concern as the final return below: an unset Recipes
 		// field is the Go zero value (nil), which marshals to JSON null.
-		return models.EngineResult{Recipes: []models.RankedRecipe{}, Steps: steps, Blocked: true, BlockReason: blockReason}, nil
+		return models.EngineResult{
+			Recipes:             []models.RankedRecipe{},
+			Steps:               steps,
+			Blocked:             true,
+			BlockReason:         blockReason,
+			UnscreenedAllergens: unscreened,
+		}, nil
 	}
 
 	ids, step4, err := dietFilter(ctx, pool, p, ids)
@@ -125,9 +131,10 @@ func Run(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (models
 	}
 
 	return models.EngineResult{
-		Recipes:      ranked,
-		Steps:        steps,
-		ActiveTarget: targetCode,
-		TargetReason: targetReason,
+		Recipes:             ranked,
+		Steps:               steps,
+		ActiveTarget:        targetCode,
+		TargetReason:        targetReason,
+		UnscreenedAllergens: unscreened,
 	}, nil
 }

@@ -38,7 +38,7 @@ func ageFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (
 
 	return ids, models.StepResult{
 		Step: 1, Name: "Age / feeding stage", Kind: "hard_filter",
-		CandidatesIn: -1, // no upstream step; the caller fills this in from the total recipe count
+		CandidatesIn:  -1, // no upstream step; the caller fills this in from the total recipe count
 		CandidatesOut: len(ids),
 	}, nil
 }
@@ -48,32 +48,32 @@ func ageFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (
 // or any mapped ingredient's ingredient_allergen_tag does -- both columns are verified
 // clean per CLAUDE.md ("Verified clean": zero allergen-propagation omissions), so this
 // is a straight substring match against real data, not a fuzzy join.
-func allergyFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile, candidateIDs []string) ([]string, models.StepResult, error) {
+func allergyFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile, candidateIDs []string) ([]string, models.StepResult, []string, error) {
 	stepIn := len(candidateIDs)
 	if len(p.Allergens) == 0 || stepIn == 0 {
 		return candidateIDs, models.StepResult{
 			Step: 2, Name: "Allergy / intolerance / safety", Kind: "hard_filter",
 			CandidatesIn: stepIn, CandidatesOut: stepIn,
 			Note: "no allergens declared, step is a no-op",
-		}, nil
+		}, nil, nil
 	}
 
 	validRows, err := pool.Query(ctx, `SELECT DISTINCT allergen_group FROM allergen_mapping WHERE allergen_group = ANY($1)`, p.Allergens)
 	if err != nil {
-		return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter validate: %w", err)
+		return nil, models.StepResult{}, nil, fmt.Errorf("engine: allergy filter validate: %w", err)
 	}
 	valid := make(map[string]bool)
 	for validRows.Next() {
 		var g string
 		if err := validRows.Scan(&g); err != nil {
 			validRows.Close()
-			return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter validate scan: %w", err)
+			return nil, models.StepResult{}, nil, fmt.Errorf("engine: allergy filter validate scan: %w", err)
 		}
 		valid[g] = true
 	}
 	if err := validRows.Err(); err != nil {
 		validRows.Close()
-		return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter validate rows: %w", err)
+		return nil, models.StepResult{}, nil, fmt.Errorf("engine: allergy filter validate rows: %w", err)
 	}
 	validRows.Close()
 
@@ -84,7 +84,7 @@ func allergyFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfil
 		}
 	}
 	if len(unmatched) > 0 {
-		return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter: unrecognized allergen(s) %v — must match allergen_mapping.allergen_group exactly: %w", unmatched, ErrInvalidProfile)
+		return nil, models.StepResult{}, nil, fmt.Errorf("engine: allergy filter: unrecognized allergen(s) %v — must match allergen_mapping.allergen_group exactly: %w", unmatched, ErrInvalidProfile)
 	}
 
 	// Join through allergen_tag_vocabulary rather than matching am.allergen_group
@@ -109,7 +109,7 @@ func allergyFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfil
 		  )`,
 		candidateIDs, p.Allergens)
 	if err != nil {
-		return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter: %w", err)
+		return nil, models.StepResult{}, nil, fmt.Errorf("engine: allergy filter: %w", err)
 	}
 	defer rows.Close()
 
@@ -117,12 +117,12 @@ func allergyFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfil
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter scan: %w", err)
+			return nil, models.StepResult{}, nil, fmt.Errorf("engine: allergy filter scan: %w", err)
 		}
 		ids = append(ids, id)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter rows: %w", err)
+		return nil, models.StepResult{}, nil, fmt.Errorf("engine: allergy filter rows: %w", err)
 	}
 
 	// A declared allergen whose allergen_group has no corpus_tag at all (Crustacean/
@@ -134,20 +134,20 @@ func allergyFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfil
 		WHERE allergen_group = ANY($1) AND corpus_tag IS NULL
 		ORDER BY allergen_group`, p.Allergens)
 	if err != nil {
-		return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter absent-tag lookup: %w", err)
+		return nil, models.StepResult{}, nil, fmt.Errorf("engine: allergy filter absent-tag lookup: %w", err)
 	}
 	var absent []string
 	for absentRows.Next() {
 		var g string
 		if err := absentRows.Scan(&g); err != nil {
 			absentRows.Close()
-			return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter absent-tag scan: %w", err)
+			return nil, models.StepResult{}, nil, fmt.Errorf("engine: allergy filter absent-tag scan: %w", err)
 		}
 		absent = append(absent, g)
 	}
 	if err := absentRows.Err(); err != nil {
 		absentRows.Close()
-		return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter absent-tag rows: %w", err)
+		return nil, models.StepResult{}, nil, fmt.Errorf("engine: allergy filter absent-tag rows: %w", err)
 	}
 	absentRows.Close()
 
@@ -159,5 +159,5 @@ func allergyFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfil
 	return ids, models.StepResult{
 		Step: 2, Name: "Allergy / intolerance / safety", Kind: "hard_filter",
 		CandidatesIn: stepIn, CandidatesOut: len(ids), Note: note,
-	}, nil
+	}, absent, nil
 }
