@@ -6,7 +6,11 @@ import {
 } from "@/components/ui/table";
 
 export default async function IngredientsPage() {
-  const ingredients = await listIngredients(200);
+  // 500 is the API's hard cap (internal/api/handlers/ingredients.go) and exceeds the full
+  // 406-row ingredient_master, so this fetches everything -- the heading below can then
+  // read as the true total rather than an arbitrary page size an operator would mistake
+  // for the whole table.
+  const ingredients = await listIngredients(500);
 
   return (
     <div>

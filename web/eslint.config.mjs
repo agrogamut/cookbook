@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // shadcn-generated code: owned by the CLI, re-added verbatim on every `shadcn add`,
+    // never hand-edited -- lint findings here are the upstream template's, not this repo's.
+    "src/components/ui/**",
+    "src/hooks/use-mobile.ts",
   ]),
 ]);
 

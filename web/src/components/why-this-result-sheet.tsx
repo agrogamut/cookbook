@@ -39,6 +39,15 @@ export function WhyThisResultSheet({ result }: { result: EngineResult }) {
                 {s.candidates_in >= 0 ? s.candidates_in : "?"} in -&gt; {s.candidates_out} out
               </div>
               {s.note && <div className="mt-1 text-muted-foreground">{s.note}</div>}
+              {s.excluded && s.excluded.length > 0 && (
+                <ul className="mt-1 space-y-0.5">
+                  {s.excluded.map((ex) => (
+                    <li key={ex.recipe_id} className="text-muted-foreground">
+                      {ex.recipe_id} {ex.recipe_name}: {ex.reason}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           ))}
         </div>

@@ -34,7 +34,7 @@ export function ProvenanceChip({ source, confidence, explanation }: ProvenanceCh
           )}
         >
           {source}
-          {confidence !== undefined && ` · ${(confidence * 100).toFixed(0)}%`}
+          {confidence !== undefined && ` · ${(confidence * 100).toFixed(1)}%`}
         </Badge>
       </HoverCardTrigger>
       <HoverCardContent className="w-80 font-mono text-xs">

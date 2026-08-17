@@ -59,7 +59,7 @@ export default function EngineConsolePage() {
           <Alert>
             <AlertTitle>No recipes matched</AlertTitle>
             <AlertDescription>
-              Every step is recorded in "Why this result" -- open it to see which step
+              Every step is recorded in &quot;Why this result&quot; -- open it to see which step
               emptied the pool.
             </AlertDescription>
           </Alert>

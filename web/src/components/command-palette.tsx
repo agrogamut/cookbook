@@ -32,7 +32,7 @@ export function CommandPalette() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Jump to a screen, or paste a recipe / ingredient ID..." />
+      <CommandInput placeholder="Jump to a screen..." />
       <CommandList>
         <CommandEmpty>No match.</CommandEmpty>
         <CommandGroup heading="Screens">
