@@ -10,7 +10,7 @@ consequences for the UI - see "Frontend" below - and it does not soften a single
 "Hard rule: never invent data". An operator reading a wrong number will repeat it to a
 parent, so the data has to be right for exactly the same reasons it always did.
 
-Source data is 13 Excel workbooks in this directory, authored by an external clinical
+Source data is 13 Excel workbooks in `data/provider/`, authored by an external clinical
 data provider, plus two external datasets in `data/external/` used for verification and
 gap-filling. Scope is India and Bangladesh, weighted toward West Bengal.
 
@@ -25,7 +25,7 @@ demo polish.
 **Every value that reaches a user must trace to a verified source.** A verified source is
 one of exactly three things:
 
-1. The provider's workbooks in this directory.
+1. The provider's workbooks in `data/provider/`.
 2. A named external dataset from the "External datasets" table below, with its row id and
    URL recorded.
 3. A documented computation over (1) or (2), where the formula lives in this file and the
@@ -563,7 +563,7 @@ UI decision, and needs the provider's written sign-off before it ships.
 
 ## Datasets
 
-13 workbooks, 67 sheets. Core relational tables:
+13 workbooks, 67 sheets, in `data/provider/`. Core relational tables:
 
 | File | Sheets | Core rows |
 |------|--------|-----------|
@@ -914,8 +914,9 @@ WHERE a.run_id = 1 AND b.run_id = 2 AND a.content_hash <> b.content_hash;
 Private repo on GitHub. Standard flow:
 
 - Never commit `.env` or `.env.local`. `.env.example` documents every variable.
-- The 13 provider workbooks ARE committed - they are the source of truth and the
-  importer reads them directly.
+- The 13 provider workbooks ARE committed, in `data/provider/` - they are the source of
+  truth and the importer reads them directly. The Book Engine spec deliverables
+  (docx/json/pdf) live alongside in `data/book-engine-spec/`.
 - The external datasets are NOT committed. `data/external/*.csv` is gitignored;
   `SHA256SUMS` is tracked, and `scripts/fetch_data.fish` re-downloads and verifies them.
 - Commit messages describe what changed and why. No attribution trailers of any kind.
@@ -929,6 +930,6 @@ Copy `.env.example` to `.env` to start.
 | Var | Required | Purpose |
 |-----|----------|---------|
 | `DATABASE_URL` | yes | Postgres connection string |
-| `XLSX_DIR` | no, defaults to `.` | Directory holding the 13 provider workbooks |
+| `XLSX_DIR` | no, defaults to `data/provider` | Directory holding the 13 provider workbooks |
 | `PORT` | no, defaults to 8080 | HTTP listen port. Unused until Phase 2 |
 | `TEST_DATABASE_URL` | no | Throwaway database for the integrity suite. Unset, the suite skips |

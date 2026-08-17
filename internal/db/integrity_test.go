@@ -34,7 +34,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 
 	dir := os.Getenv("XLSX_DIR")
 	if dir == "" {
-		dir = "../.."
+		dir = "../../data/provider"
 	}
 	var loaded int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM recipe_master`).Scan(&loaded); err != nil {
@@ -320,7 +320,7 @@ func TestImportIsIdempotent(t *testing.T) {
 
 	dir := os.Getenv("XLSX_DIR")
 	if dir == "" {
-		dir = "../.."
+		dir = "../../data/provider"
 	}
 
 	first, err := importer.Run(ctx, pool, dir)

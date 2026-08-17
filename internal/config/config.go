@@ -27,7 +27,7 @@ func Load() (Config, error) {
 
 	c.XlsxDir = os.Getenv("XLSX_DIR")
 	if c.XlsxDir == "" {
-		c.XlsxDir = "."
+		c.XlsxDir = "data/provider"
 	}
 
 	c.Port = 8080

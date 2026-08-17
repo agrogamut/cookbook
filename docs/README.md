@@ -44,8 +44,8 @@ They are named after each other but are not parallel in content. See
 ## Provider source documents
 
 The Phase 3 specification arrived as eight files in the repository root on 17 August 2026,
-committed as `84966cd`, and is summarised in `phase-3-book-engine.md`. The originals are
-authoritative:
+committed as `84966cd`, and is summarised in `phase-3-book-engine.md`. They now live in
+`data/book-engine-spec/`. The originals are authoritative:
 
 - `MadamGY_Knowledge_Book_Engine_SRS_V1 (1).docx`
 - `MadamGY_Book1_Book2_JSON_PDF_Template_Contract_V1.docx`

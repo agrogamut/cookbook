@@ -31,6 +31,10 @@ Eight files, dropped into the repository root, untracked in git at time of writi
 These files are the provider's answer to "what is this product". They should be committed
 so they cannot be lost. They supersede nothing in `CLAUDE.md` - they extend it.
 
+Since committed, they were moved into `data/book-engine-spec/` alongside the provider
+workbooks (now `data/provider/`) to keep the repository root clean. Paths above are
+historical - see `docs/README.md` for the current location.
+
 ---
 
 ## 2. The output contract

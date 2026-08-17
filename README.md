@@ -66,7 +66,7 @@ Useful views once loaded:
 
 ## The data
 
-Thirteen Excel workbooks in this directory, authored by an external clinical data
+Thirteen Excel workbooks in `data/provider/`, authored by an external clinical data
 provider: 1000 recipes, 406 ingredients, 3317 recipe-ingredient mappings, plus clinical
 rule, allergy/safety, nutrition target, age/feeding stage and culture masters.
 

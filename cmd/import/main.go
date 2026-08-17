@@ -1,6 +1,6 @@
 // Command import loads the provider workbooks into Postgres.
 //
-//	DATABASE_URL=... XLSX_DIR=. go run ./cmd/import
+//	DATABASE_URL=... go run ./cmd/import  # reads data/provider by default
 //
 // Running it twice over unchanged workbooks leaves an identical database. Provider
 // columns, including Review_Status, are written verbatim and never marked approved.
