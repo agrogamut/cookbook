@@ -4,6 +4,7 @@ import { ProvenanceChip } from "@/components/provenance-chip";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { safeHref } from "@/lib/utils";
 
 export default async function RecipeDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -17,6 +18,7 @@ export default async function RecipeDetailPage({ params }: { params: Promise<{ i
   }
 
   const { method, nutrition } = detail;
+  const sourceHref = method.suggested_method_url ? safeHref(method.suggested_method_url) : null;
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -47,8 +49,8 @@ export default async function RecipeDetailPage({ params }: { params: Promise<{ i
                 explanation={method.suggestion_disclosure}
               />
               <p className="whitespace-pre-wrap">{method.suggested_method_external}</p>
-              {method.suggested_method_url && (
-                <a href={method.suggested_method_url} target="_blank" rel="noreferrer" className="text-xs underline">
+              {sourceHref && (
+                <a href={sourceHref} target="_blank" rel="noreferrer" className="text-xs underline">
                   Source
                 </a>
               )}
