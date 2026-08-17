@@ -123,13 +123,58 @@ reads none of them - `clinical.go` blocks on a hand-written `escalationOnlyDomai
 instead. `EngineResult.Blocked` and `BlockReason` work and are already surfaced by the
 console.
 
+### What the columns actually hold
+
+Read live from `MadamGY_Clinical_Rule_Master_V1.xlsx`, because the column names are
+misleading:
+
+- **`specialist_required` is free text on all 31 rows**, not a flag. Values run
+  "Pediatric review if concern", "Allergy specialist when indicated", "Not applicable".
+  Treating it as truthy would escalate every rule in the master, including
+  `CR-IRON-001` (boost iron-rich recipes). It is guidance text naming *which* specialist,
+  in the same family as the Book 1 link columns.
+- **`human_approval_level` is the discrete tier**, taking five values. One of them,
+  `Specialist clinical approval`, marks exactly 14 rules and is the provider's own
+  machine-readable escalation boundary.
+
+### The gap this exposes
+
+The 14 rules at `Specialist clinical approval` and the 10 domains in
+`escalationOnlyDomains` are **not the same set, in both directions**:
+
+| Missed today | Rule | `hard_exclude_yn` | Why it escapes |
+|---|---|---|---|
+| `Diabetes_Type` | `CR-DM-001`, `CR-DM-002` | `N` | Domain `Diabetes` is absent from the map, and the query only loads `hard_exclude_yn = 'Y'` rows |
+| `Multiple_Food_Allergies` | `CR-ALL-003` | `Y` | Domain `Food Allergy` is excluded from the query on the assumption step 2 covers it; step 2 covers allergen tags, not the multiple-allergy specialist pathway |
+
+`CR-DM-001`'s own `engine_action` reads "permit recipes only inside diabetes-team
+carbohydrate framework". No carbohydrate framework exists on any table. **A diabetic child
+currently receives a full, unescalated recipe list.** That is the same class of failure as
+the four unscreened allergens: the interface implies a clinical safeguard that is not
+running.
+
+In the other direction the map is broader: `Vomiting / Poor Intake` (`CR-GI-002`) sits at
+`Clinical approval`, not `Specialist clinical approval`, yet the map escalates it. That is
+defensible and should stay.
+
 ### Decision
 
-**Drive the hold from `specialist_required` rather than the hand-written domain map.**
-Reading a populated provider column is not inventing data; hardcoding a domain list in Go
-that can drift from the workbook is the weaker position. The map becomes a fallback for
-rows where the column is empty, and a test asserts the two agree on the current corpus so
-a drift is caught rather than silently preferred.
+**Block on the union: `human_approval_level = 'Specialist clinical approval'` OR a domain
+in `escalationOnlyDomains`.** Neither source alone is correct, and taking the union is the
+safe direction in both. Widen the rule query to load a rule when either condition holds,
+rather than filtering on `hard_exclude_yn = 'Y'` first - that filter is what hides the
+diabetes rules.
+
+**Keep the hand-written map**, with its comment explaining that it predates the column and
+is retained where it is broader. Add a test that names every rule where the two disagree,
+so the difference is a printed list rather than a silent preference.
+
+**Surface `specialist_required` verbatim in `BlockReason`.** An operator told "this needs a
+specialist" should see which specialist the provider named. Verbatim, never parsed.
+
+Add `GAP-016`, severity `blocker`: clinical rules at the provider's own specialist tier
+that the engine does not escalate, measured as a live count of the disagreement so it
+reaches zero when the union lands and stays a regression guard afterwards.
 
 **Do not extend the condition list.** Down syndrome, cerebral palsy, congenital heart
 disease, cleft lip and palate, autism and intellectual disability have no row in
@@ -381,7 +426,7 @@ Matching the existing suite's shape: table-driven, package-local, real database 
 | Step | Assertion |
 |---|---|
 | 1 | Declaring `Tree nuts` populates `UnscreenedAllergens`; declaring `Peanut` does not; every reference-endpoint allergen resolves to a corpus tag (skipped, naming the gap) |
-| 2 | A `specialist_required` rule blocks; `BlockReason` names the approval level; the column and the legacy domain map agree on the current corpus |
+| 2 | `Diabetes_Type` and `Multiple_Food_Allergies` now block; `BlockReason` quotes `specialist_required` verbatim; a rule at neither the specialist tier nor in the map still passes through; the disagreement test prints both directions |
 | 3 | Every enum value returned carries a live count; no endpoint invents a vocabulary word |
 | 4 | Each new control changes the result set and appears in step accounting |
 | 5 | Non-vegetarian returns 940 with non-veg concentrated at the top; vegetarian unchanged |
@@ -403,7 +448,11 @@ never inserts. Nothing is missing from the database; the number in the prose is 
 That matters more than an ordinary typo because the register's stated purpose is to account
 for every known hole, so a reader checking "are all 16 there?" gets a wrong answer to the
 one question the register exists to answer. Correct the four documents in the same change
-that adds `GAP-013`, `GAP-014` and `GAP-015`, taking the count to fifteen.
+that adds `GAP-013`, `GAP-014`, `GAP-015` and `GAP-016`, taking the count to sixteen.
+
+That the corrected count lands on sixteen is a coincidence, not a vindication of the prose.
+The four documents were wrong when written and happen to become right afterwards; say so in
+the correction so a later reader does not conclude the number was fine all along.
 
 `docs/not-built.md` §1.1 needs the same treatment for a different reason - it describes the
 allergen bridge as unbuilt when migration `0011` built it. Both corrections are part of
@@ -435,6 +484,10 @@ Beyond the ten already in `docs/not-built.md` §6:
     never written?
 12. What is the expiry window for each acute condition class? Needed before an acute flag
     can safely stop applying.
+13. `CR-DM-001` requires recipes to sit "inside diabetes-team carbohydrate framework" and
+    `CR-CEL-002` requires a "strict gluten-free ingredient/recipe filter". Neither a
+    carbohydrate framework nor a gluten-free flag exists on any table. Is the engine
+    expected to hold for these, as it now does, or is a per-recipe field coming?
 
 ---
 
