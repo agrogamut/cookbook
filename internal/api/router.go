@@ -41,6 +41,8 @@ func NewRouter(pool *pgxpool.Pool) http.Handler {
 	r.Get("/api/reference/cuisines", h.ReferenceCuisines)
 	r.Get("/api/reference/nutrition-targets", h.ReferenceNutritionTargets)
 	r.Get("/api/reference/allergens", h.ReferenceAllergens)
+	r.Get("/api/reference/clinical-markers", h.ReferenceClinicalMarkers)
+	r.Get("/api/reference/enums", h.ReferenceEnums)
 
 	return r
 }

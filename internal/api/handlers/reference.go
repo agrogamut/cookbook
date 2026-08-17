@@ -1,6 +1,11 @@
 package handlers
 
-import "net/http"
+import (
+	"fmt"
+	"net/http"
+
+	"github.com/jackc/pgx/v5"
+)
 
 // ReferenceRegions returns region_focus: the 9 scoped regions with their tier and
 // derived rank_weight, so the frontend's region picker matches what the engine's step 7
@@ -174,5 +179,118 @@ func (h *Handlers) ReferenceAllergens(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "allergen rows failed: "+err.Error())
 		return
 	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// ReferenceClinicalMarkers returns the 28 distinct clinical_rule_master.trigger_field
+// values with the rules behind each, so a client can offer a clinical-flags control whose
+// keys are guaranteed to resolve. ChildProfile.ClinicalFlags is validated against exactly
+// this vocabulary and an unrecognized key returns 400, so a free-text input is a trap.
+//
+// escalates says whether setting this marker will hold generation rather than filter it.
+// An operator deserves to know that before typing, not after an empty result page.
+func (h *Handlers) ReferenceClinicalMarkers(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.pool.Query(r.Context(), `
+		SELECT trigger_field,
+		       string_agg(DISTINCT rule_id, ', ' ORDER BY rule_id)          AS rule_ids,
+		       string_agg(DISTINCT clinical_domain, ', ')                   AS domains,
+		       string_agg(DISTINCT engine_action, ' | ')                    AS engine_actions,
+		       string_agg(DISTINCT coalesce(specialist_required, ''), ' | ') AS specialist_required,
+		       bool_or(human_approval_level = 'Specialist clinical approval') AS escalates
+		FROM clinical_rule_master
+		GROUP BY trigger_field
+		ORDER BY trigger_field`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "clinical marker list failed: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	type marker struct {
+		TriggerField       string `json:"trigger_field"`
+		RuleIDs            string `json:"rule_ids"`
+		Domains            string `json:"domains"`
+		EngineActions      string `json:"engine_actions"`
+		SpecialistRequired string `json:"specialist_required"`
+		Escalates          bool   `json:"escalates"`
+	}
+	out := []marker{}
+	for rows.Next() {
+		var m marker
+		if err := rows.Scan(&m.TriggerField, &m.RuleIDs, &m.Domains, &m.EngineActions,
+			&m.SpecialistRequired, &m.Escalates); err != nil {
+			writeError(w, http.StatusInternalServerError, "clinical marker scan failed: "+err.Error())
+			return
+		}
+		out = append(out, m)
+	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "clinical marker rows failed: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// enumColumns are the recipe_master columns a client may offer as a filter or a ranker
+// input. Each is returned with a live count so a control can show how much corpus sits
+// behind each option, and so a zero-count value is visibly zero rather than absent.
+//
+// prep_time_min and cook_time_min are included as enums on purpose: the corpus holds four
+// and six distinct values respectively, so a free minute entry would imply a precision the
+// data has not got. A client renders them as stop selectors.
+var enumColumns = []string{
+	"diet_type", "meal_type", "budget_band", "season",
+	"texture", "growth_target", "post_vaccine_context",
+	"prep_time_min", "cook_time_min",
+}
+
+// ReferenceEnums returns every offerable recipe_master vocabulary with live counts.
+//
+// Unlike cuisine_option, which filters on COUNT(*) > 0 inside the view because a cuisine
+// with no recipes is a broken option, a zero-count enum value is kept: season and texture
+// are facts about the corpus an operator may want to see even at zero. The client decides
+// whether to hide or disable.
+func (h *Handlers) ReferenceEnums(w http.ResponseWriter, r *http.Request) {
+	type value struct {
+		Value string `json:"value"`
+		Count int    `json:"count"`
+	}
+	out := map[string][]value{}
+
+	for _, col := range enumColumns {
+		// col is not user input: it comes from the package-level enumColumns slice, and
+		// is sanitized anyway so a future edit cannot turn this into an injection.
+		q := fmt.Sprintf(`
+			SELECT %s::text AS value, count(*) AS n
+			FROM recipe_master
+			WHERE %s IS NOT NULL
+			GROUP BY 1
+			ORDER BY n DESC, 1`,
+			pgx.Identifier{col}.Sanitize(), pgx.Identifier{col}.Sanitize())
+
+		rows, err := h.pool.Query(r.Context(), q)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "enum list failed for "+col+": "+err.Error())
+			return
+		}
+		vals := []value{}
+		for rows.Next() {
+			var v value
+			if err := rows.Scan(&v.Value, &v.Count); err != nil {
+				rows.Close()
+				writeError(w, http.StatusInternalServerError, "enum scan failed for "+col+": "+err.Error())
+				return
+			}
+			vals = append(vals, v)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			writeError(w, http.StatusInternalServerError, "enum rows failed for "+col+": "+err.Error())
+			return
+		}
+		rows.Close()
+		out[col] = vals
+	}
+
 	writeJSON(w, http.StatusOK, out)
 }

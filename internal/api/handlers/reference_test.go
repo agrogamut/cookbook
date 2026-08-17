@@ -130,3 +130,78 @@ func TestEveryOfferedAllergenScreensSomething(t *testing.T) {
 			"This test passes when the provider tags the corpus.", len(unscreened), unscreened)
 	}
 }
+func TestReferenceClinicalMarkersCoversEveryTriggerField(t *testing.T) {
+	h := New(testPool(t))
+	req := httptest.NewRequest("GET", "/api/reference/clinical-markers", nil)
+	rec := httptest.NewRecorder()
+
+	h.ReferenceClinicalMarkers(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var got []struct {
+		TriggerField string `json:"trigger_field"`
+		RuleIDs      string `json:"rule_ids"`
+		Escalates    bool   `json:"escalates"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got) != 28 {
+		t.Fatalf("expected 28 distinct trigger_field values across the 31 rules, got %d", len(got))
+	}
+	var escalating int
+	for _, m := range got {
+		if m.RuleIDs == "" {
+			t.Fatalf("%s carries no rule id; a marker with no rule cannot be offered", m.TriggerField)
+		}
+		if m.Escalates {
+			escalating++
+		}
+	}
+	if escalating == 0 {
+		t.Fatal("no marker reports escalates=true, but the specialist tier is non-empty")
+	}
+}
+
+func TestReferenceEnumsCarryLiveCounts(t *testing.T) {
+	h := New(testPool(t))
+	req := httptest.NewRequest("GET", "/api/reference/enums", nil)
+	rec := httptest.NewRecorder()
+
+	h.ReferenceEnums(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var got map[string][]struct {
+		Value string `json:"value"`
+		Count int    `json:"count"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	for _, key := range []string{"diet_type", "meal_type", "budget_band", "season",
+		"texture", "growth_target", "post_vaccine_context", "prep_time_min", "cook_time_min"} {
+		if len(got[key]) == 0 {
+			t.Fatalf("enum %q is empty; every one of these columns is populated on all 940 rows", key)
+		}
+	}
+	if len(got["diet_type"]) != 3 {
+		t.Fatalf("diet_type has 3 values in scope, got %d", len(got["diet_type"]))
+	}
+	if len(got["prep_time_min"]) != 4 {
+		t.Fatalf("prep_time_min has 4 distinct corpus values, got %d", len(got["prep_time_min"]))
+	}
+	if len(got["cook_time_min"]) != 6 {
+		t.Fatalf("cook_time_min has 6 distinct corpus values, got %d", len(got["cook_time_min"]))
+	}
+	var total int
+	for _, v := range got["diet_type"] {
+		total += v.Count
+	}
+	if total != 940 {
+		t.Fatalf("diet_type counts sum to %d, want 940: counts must be live, not stored", total)
+	}
+}
