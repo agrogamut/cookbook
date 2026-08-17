@@ -83,7 +83,7 @@ FROM recipe_master r
 JOIN recipe_target_score s ON s.recipe_id = r.recipe_id AND s.target_code = $3
 JOIN region_focus        f ON f.region_culture = r.region_culture
 WHERE r.min_age_months <= $1 AND r.max_age_months >= $1          -- hard: age
-  AND lower(r.diet_type) = lower($2)                              -- hard: food practice
+  AND lower(r.diet_type) = ANY($2::text[])                        -- hard: food practice, nested
   AND NOT EXISTS (                                                -- hard: allergy
       SELECT 1
       FROM recipe_ingredient_mapping m
@@ -110,8 +110,21 @@ func TestPersonaQueriesNeverCollapse(t *testing.T) {
 				allergens = []string{}
 			}
 
+			// Diet is nested, not categorical -- the same rule the engine's dietPermits
+			// encodes. A persona declaring Non-vegetarian may eat every diet_type; one
+			// declaring Vegetarian may eat only Vegetarian. Matching for equality here
+			// would hold this suite to semantics the engine no longer uses.
+			permitted := map[string][]string{
+				"Vegetarian":     {"vegetarian"},
+				"Eggetarian":     {"vegetarian", "eggetarian"},
+				"Non-vegetarian": {"vegetarian", "eggetarian", "non-vegetarian"},
+			}[p.dietType]
+			if permitted == nil {
+				t.Fatalf("persona declares unrecognized diet_type %q", p.dietType)
+			}
+
 			rows, err := pool.Query(ctx, personaQuery,
-				p.ageMonths, p.dietType, p.targetCode, p.preferRegion, p.preferMealType, allergens)
+				p.ageMonths, permitted, p.targetCode, p.preferRegion, p.preferMealType, allergens)
 			if err != nil {
 				t.Fatalf("query: %v", err)
 			}
