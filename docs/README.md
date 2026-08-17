@@ -4,6 +4,7 @@
 |---|---|---|
 | [`handover-2026-08-18.md`](handover-2026-08-18.md) | Session record: what was found, decided and changed on 18 Aug | - |
 | [`engine-inputs.md`](engine-inputs.md) | Every field the engine accepts, every legal value, live counts | **built** |
+| [`clinical-intake-model.md`](clinical-intake-model.md) | The full clinician-entered profile the books need, and how each field behaves | **not built** |
 | [`phase-3-book-engine.md`](phase-3-book-engine.md) | The Book 1 + Book 2 generation engine the provider specified on 17 Aug 2026 | **not built** |
 | [`not-built.md`](not-built.md) | Register of missing capability, wrong data and unresolved decisions | - |
 | [`next-steps.md`](next-steps.md) | Proposed build order, with what it deliberately avoids | - |
