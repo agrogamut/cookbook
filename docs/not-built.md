@@ -46,7 +46,29 @@ Until one is chosen, the four should not appear in an operator-facing picker.
 incomplete, not a result. An unscreened ingredient must never render as "no allergens".
 Open Food Facts was named in `CLAUDE.md` as a cross-check source and has not been loaded.
 
-### 1.3 Nothing is approved
+### 1.3 Congenital and complex conditions have no hold behaviour
+
+The clinical masters cover `Metabolic_Disorder`, `Prematurity_or_Complexity`,
+`Dysphagia_Suspected` and `Coeliac_Status`. They do **not** cover Down syndrome, cerebral
+palsy, congenital heart disease, cleft lip and palate, autism, or intellectual disability -
+every one of which changes feeding through texture, energy density, oral-motor ability,
+mealtime behaviour and sometimes fluid restriction.
+
+Today the engine has no way to know about any of them, so a child with an uncorrected
+congenital heart defect and no dietitian input gets a confidently-generated recipe list
+like any other child.
+
+**The correct behaviour is to hold generation, not to filter harder.** The SRS agrees: its
+hard-stop list includes "specialist therapeutic target is required but has not been
+entered/approved", and its edge-case table holds specialized personalization for complex
+conditions lacking specialist targets. `EngineResult.Blocked` and `BlockReason` already
+exist and work - nothing is wired to them.
+
+**We cannot invent which conditions require a specialist.** Extending
+`clinical_rule_master` is provider work. See `docs/clinical-intake-model.md` §2.5 for the
+proposed model and `docs/not-built.md` §6 question 10.
+
+### 1.4 Nothing is approved
 
 All 940 recipes carry `Review_Status = Draft - Culinary/Nutrition/Clinical Review
 Required`. All 406 ingredients are `Needs Validation` with `Data_Quality = Provisional
@@ -276,3 +298,7 @@ more.
 7. Who authors the Book 1 content-block variants, and how many per block?
 8. What is the licence position on the external recipe corpus?
 9. When does clinical sign-off happen? Nothing may ship until it does.
+10. Which congenital and neurodevelopmental conditions require a specialist hold? The
+    masters name four; Down syndrome, cerebral palsy, congenital heart disease, cleft lip
+    and palate, autism and intellectual disability are absent. This list cannot be
+    invented on our side. See §1.3.
