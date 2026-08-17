@@ -23,7 +23,8 @@ func (h *Handlers) ReferenceRegions(w http.ResponseWriter, r *http.Request) {
 		EnrichmentScope  bool    `json:"enrichment_scope"`
 		Rationale        string  `json:"rationale"`
 	}
-	var out []region
+	// Nil-slice-marshals-to-null would violate the frontend's Region[] contract.
+	out := []region{}
 	for rows.Next() {
 		var reg region
 		if err := rows.Scan(&reg.RegionCulture, &reg.Country, &reg.FocusTier, &reg.RankWeight, &reg.EnrichmentScope, &reg.Rationale); err != nil {
@@ -62,7 +63,8 @@ func (h *Handlers) ReferenceCuisines(w http.ResponseWriter, r *http.Request) {
 		RankWeight      float64 `json:"rank_weight"`
 		RecipeCount     int     `json:"recipe_count"`
 	}
-	var out []cuisine
+	// Nil-slice-marshals-to-null would violate the frontend's Cuisine[] contract.
+	out := []cuisine{}
 	for rows.Next() {
 		var c cuisine
 		if err := rows.Scan(&c.CultureCode, &c.CuisineCluster, &c.Country, &c.StateProvince,
@@ -114,7 +116,8 @@ func (h *Handlers) ReferenceNutritionTargets(w http.ResponseWriter, r *http.Requ
 		HardExclusions  *string `json:"hard_exclusions"`
 		SoftPenalties   *string `json:"soft_penalties"`
 	}
-	var out []target
+	// Nil-slice-marshals-to-null would violate the frontend's NutritionTarget[] contract.
+	out := []target{}
 	for rows.Next() {
 		var t target
 		if err := rows.Scan(&t.TargetCode, &t.TargetName, &t.TargetCategory, &t.AgeFromMonths, &t.AgeToMonths,

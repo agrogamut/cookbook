@@ -40,7 +40,9 @@ func (h *Handlers) NutritionAudit(w http.ResponseWriter, r *http.Request) {
 		CalciumPctDiff   *float64 `json:"calcium_pct_diff"`
 	}
 
-	var out []discrepancy
+	// Nil-slice-marshals-to-null would violate the frontend's NutritionDiscrepancy[]
+	// contract on a zero-row result.
+	out := []discrepancy{}
 	for rows.Next() {
 		var d discrepancy
 		if err := rows.Scan(&d.IngredientID, &d.EnglishName, &d.MatchedIFCTFood, &d.UsedInRecipes,
@@ -89,7 +91,8 @@ func (h *Handlers) Gaps(w http.ResponseWriter, r *http.Request) {
 		MeasuredAt     *time.Time `json:"measured_at"`
 	}
 
-	var out []gap
+	// Same nil-vs-empty-array concern as NutritionAudit above.
+	out := []gap{}
 	for rows.Next() {
 		var g gap
 		if err := rows.Scan(&g.GapID, &g.Severity, &g.Area, &g.SourceTable, &g.SourceColumn,

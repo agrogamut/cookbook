@@ -77,3 +77,26 @@ func TestSearchRejectsUnrecognizedAllergenWith400(t *testing.T) {
 		t.Fatalf("status = %d, body = %s, want 400 for an unrecognized allergen", rec.Code, rec.Body.String())
 	}
 }
+
+// TestSearchBlockedResponseHasEmptyArrayNotNullRecipes pins a fix found during Task 3's
+// frontend TypeScript review: the wire JSON must carry "recipes":[] on a blocked/empty
+// result, never "recipes":null -- the frontend's EngineResult type promises a plain
+// array, and a null would crash the results table instead of rendering the empty state.
+func TestSearchBlockedResponseHasEmptyArrayNotNullRecipes(t *testing.T) {
+	h := New(testPool(t))
+	body, _ := json.Marshal(models.ChildProfile{AgeMonths: 36, ClinicalFlags: map[string]string{"CKD": "Yes"}})
+	req := httptest.NewRequest("POST", "/api/search", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	h.Search(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte(`"recipes":[]`)) {
+		t.Fatalf("expected literal \"recipes\":[] in the response body, got %s", rec.Body.String())
+	}
+	if bytes.Contains(rec.Body.Bytes(), []byte(`"recipes":null`)) {
+		t.Fatalf("response body must never carry \"recipes\":null: %s", rec.Body.String())
+	}
+}

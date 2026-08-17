@@ -40,7 +40,9 @@ func Run(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (models
 	}
 	steps = append(steps, step3)
 	if blocked {
-		return models.EngineResult{Steps: steps, Blocked: true, BlockReason: blockReason}, nil
+		// Same nil-vs-empty-array concern as the final return below: an unset Recipes
+		// field is the Go zero value (nil), which marshals to JSON null.
+		return models.EngineResult{Recipes: []models.RankedRecipe{}, Steps: steps, Blocked: true, BlockReason: blockReason}, nil
 	}
 
 	ids, step4, err := dietFilter(ctx, pool, p, ids)
@@ -111,6 +113,16 @@ func Run(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (models
 		return models.EngineResult{}, err
 	}
 	steps = append(steps, step13)
+
+	// A hard filter collapsing the pool to zero (steps 1, 2 or 4; see CLAUDE.md's "Filter
+	// collapse") leaves ranked as a nil slice all the way through -- rankByTarget returns
+	// nil on zero input, and every ranker after it passes an empty slice through
+	// unchanged. A nil slice marshals to JSON null, not []; the frontend's EngineResult
+	// type promises recipes is always an array, and the zero-result case is exactly the
+	// "why is this empty" scenario the UI most needs to render correctly, not crash on.
+	if ranked == nil {
+		ranked = []models.RankedRecipe{}
+	}
 
 	return models.EngineResult{
 		Recipes:      ranked,

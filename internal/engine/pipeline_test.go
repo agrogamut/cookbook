@@ -65,3 +65,28 @@ func TestRunAllergyHardFilterNeverReturnsAllergenRecipe(t *testing.T) {
 		t.Fatalf("%d peanut-tagged recipes leaked past the allergy hard filter", count)
 	}
 }
+
+// TestRunBlockedResultHasEmptyNotNilRecipes pins a fix found while building the
+// frontend's TypeScript client: EngineResult.Recipes is typed RankedRecipe[] (never
+// null) on the TS side, but the blocked early-return in pipeline.go used to leave
+// Recipes at its Go zero value (nil), which marshals to JSON null rather than [] --
+// exactly the "why is this empty" scenario the frontend's most important screen has to
+// render, not crash on.
+func TestRunBlockedResultHasEmptyNotNilRecipes(t *testing.T) {
+	pool := testPool(t)
+	result, err := Run(context.Background(), pool, models.ChildProfile{
+		AgeMonths: 36, ClinicalFlags: map[string]string{"CKD": "Yes"},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !result.Blocked {
+		t.Fatal("CKD must block generation; test assumption invalid if this changes")
+	}
+	if result.Recipes == nil {
+		t.Fatal("Recipes must be an empty slice, not nil, so it marshals to JSON [] rather than null")
+	}
+	if len(result.Recipes) != 0 {
+		t.Fatalf("a blocked result must carry zero recipes, got %d", len(result.Recipes))
+	}
+}

@@ -54,7 +54,9 @@ func (h *Handlers) Ingredients(w http.ResponseWriter, r *http.Request) {
 		ProviderDataQuality     string   `json:"provider_data_quality"`
 	}
 
-	var out []ingredient
+	// A zero-row result must marshal to JSON [], not null -- a nil Go slice marshals to
+	// null, which would violate the frontend's Ingredient[] contract on an empty table.
+	out := []ingredient{}
 	for rows.Next() {
 		var i ingredient
 		if err := rows.Scan(&i.IngredientID, &i.EnglishName, &i.BengaliName, &i.FoodGroup,
