@@ -60,3 +60,20 @@ func TestSearchRejectsMissingAge(t *testing.T) {
 		t.Fatalf("status = %d, want 400 for a profile with no age", rec.Code)
 	}
 }
+
+// TestSearchRejectsUnrecognizedAllergenWith400 pins the fix for the final whole-branch
+// review's Important #6: an unrecognized allergen is an operator input mistake, not a
+// server failure. Before ErrInvalidProfile existed, engine.Run's validation error was
+// mapped to a bare 500 indistinguishable from a real database or query failure.
+func TestSearchRejectsUnrecognizedAllergenWith400(t *testing.T) {
+	h := New(testPool(t))
+	body, _ := json.Marshal(models.ChildProfile{AgeMonths: 24, Allergens: []string{"not-a-real-allergen"}})
+	req := httptest.NewRequest("POST", "/api/search", bytes.NewReader(body))
+	rec := httptest.NewRecorder()
+
+	h.Search(rec, req)
+
+	if rec.Code != 400 {
+		t.Fatalf("status = %d, body = %s, want 400 for an unrecognized allergen", rec.Code, rec.Body.String())
+	}
+}

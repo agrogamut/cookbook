@@ -59,6 +59,40 @@ func clinicalFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfi
 		}, false, "", nil
 	}
 
+	// Validate every declared flag key against clinical_rule_master.trigger_field before
+	// evaluating anything. This is the same class of check as allergyFilter's unmatched-
+	// allergen validation, but the stakes are higher here: an unrecognized key (a typo
+	// like "CDK" for "CKD") must not fail open into a full, unescalated recipe list --
+	// this is the boundary between a general recipe and a clinical-escalation pathway.
+	validRows, err := pool.Query(ctx, `SELECT DISTINCT trigger_field FROM clinical_rule_master`)
+	if err != nil {
+		return nil, models.StepResult{}, false, "", fmt.Errorf("engine: clinical trigger field lookup: %w", err)
+	}
+	validFields := make(map[string]bool)
+	for validRows.Next() {
+		var f string
+		if err := validRows.Scan(&f); err != nil {
+			validRows.Close()
+			return nil, models.StepResult{}, false, "", fmt.Errorf("engine: clinical trigger field scan: %w", err)
+		}
+		validFields[f] = true
+	}
+	if err := validRows.Err(); err != nil {
+		validRows.Close()
+		return nil, models.StepResult{}, false, "", fmt.Errorf("engine: clinical trigger field rows: %w", err)
+	}
+	validRows.Close()
+
+	var unmatched []string
+	for key := range p.ClinicalFlags {
+		if !validFields[key] {
+			unmatched = append(unmatched, key)
+		}
+	}
+	if len(unmatched) > 0 {
+		return nil, models.StepResult{}, false, "", fmt.Errorf("engine: clinical filter: unrecognized clinical flag key(s) %v — must match clinical_rule_master.trigger_field exactly: %w", unmatched, ErrInvalidProfile)
+	}
+
 	rows, err := pool.Query(ctx, `
 		SELECT rule_id, clinical_domain, trigger_field, trigger_operator, trigger_value, escalation_reason
 		FROM clinical_rule_master

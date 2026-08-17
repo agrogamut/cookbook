@@ -56,6 +56,10 @@ func (h *Handlers) Runs(w http.ResponseWriter, r *http.Request) {
 		}
 		byID[runID].Tables = append(byID[runID].Tables, ts)
 	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "run history rows failed: "+err.Error())
+		return
+	}
 
 	out := make([]*run, 0, len(order))
 	for _, id := range order {

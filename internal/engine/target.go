@@ -43,7 +43,7 @@ func selectTarget(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile
 	if p.ClinicalMarker != "" {
 		code, ok := clinicalMarkerToTarget[p.ClinicalMarker]
 		if !ok {
-			return "", "", fmt.Errorf("engine: unknown clinical marker %q", p.ClinicalMarker)
+			return "", "", fmt.Errorf("engine: unknown clinical marker %q: %w", p.ClinicalMarker, ErrInvalidProfile)
 		}
 		var ageFrom, ageTo int
 		err := pool.QueryRow(ctx,

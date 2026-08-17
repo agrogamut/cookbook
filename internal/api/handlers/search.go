@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/madamgy/recipie/internal/engine"
@@ -23,6 +24,13 @@ func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) {
 
 	result, err := engine.Run(r.Context(), h.pool, p)
 	if err != nil {
+		// An unrecognized allergen, clinical flag key or cuisine code is an operator
+		// input mistake, not a server failure -- report it as 400 so it reads as "fix
+		// your request" rather than "the server is broken".
+		if errors.Is(err, engine.ErrInvalidProfile) {
+			writeError(w, http.StatusBadRequest, "invalid profile: "+err.Error())
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "search failed: "+err.Error())
 		return
 	}

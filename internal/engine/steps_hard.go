@@ -84,21 +84,28 @@ func allergyFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfil
 		}
 	}
 	if len(unmatched) > 0 {
-		return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter: unrecognized allergen(s) %v — must match allergen_mapping.allergen_group exactly", unmatched)
+		return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter: unrecognized allergen(s) %v — must match allergen_mapping.allergen_group exactly: %w", unmatched, ErrInvalidProfile)
 	}
 
+	// Join through allergen_tag_vocabulary rather than matching am.allergen_group
+	// directly: allergen_mapping's vocabulary (e.g. "Wheat") and the corpus's actual tag
+	// strings (e.g. "Gluten-containing cereal") differ for some groups. Matching only
+	// rows with a non-NULL corpus_tag means a declared allergen whose group has no
+	// corpus tag correctly excludes nothing, rather than being silently coerced into a
+	// (wrong) direct match against a vocabulary word the corpus never uses.
 	rows, err := pool.Query(ctx, `
 		SELECT r.recipe_id
 		FROM recipe_master r
 		WHERE r.recipe_id = ANY($1)
 		  AND NOT EXISTS (
-		      SELECT 1 FROM allergen_mapping am
-		      WHERE am.allergen_group = ANY($2)
-		        AND (r.allergen_tags ILIKE '%' || am.allergen_group || '%'
+		      SELECT 1 FROM allergen_tag_vocabulary v
+		      WHERE v.allergen_group = ANY($2)
+		        AND v.corpus_tag IS NOT NULL
+		        AND (r.allergen_tags ILIKE '%' || v.corpus_tag || '%'
 		             OR EXISTS (
 		                 SELECT 1 FROM recipe_ingredient_mapping m
 		                 WHERE m.recipe_id = r.recipe_id
-		                   AND m.ingredient_allergen_tag ILIKE '%' || am.allergen_group || '%'))
+		                   AND m.ingredient_allergen_tag ILIKE '%' || v.corpus_tag || '%'))
 		  )`,
 		candidateIDs, p.Allergens)
 	if err != nil {
@@ -118,8 +125,39 @@ func allergyFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfil
 		return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter rows: %w", err)
 	}
 
+	// A declared allergen whose allergen_group has no corpus_tag at all (Crustacean/
+	// Mollusc, Mustard, Sulphites, Tree nuts as verified live) correctly excludes zero
+	// recipes -- there's genuinely nothing tagged. That is indistinguishable from an
+	// ordinary no-op exclusion unless it's called out explicitly, so name it here.
+	absentRows, err := pool.Query(ctx, `
+		SELECT allergen_group FROM allergen_tag_vocabulary
+		WHERE allergen_group = ANY($1) AND corpus_tag IS NULL
+		ORDER BY allergen_group`, p.Allergens)
+	if err != nil {
+		return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter absent-tag lookup: %w", err)
+	}
+	var absent []string
+	for absentRows.Next() {
+		var g string
+		if err := absentRows.Scan(&g); err != nil {
+			absentRows.Close()
+			return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter absent-tag scan: %w", err)
+		}
+		absent = append(absent, g)
+	}
+	if err := absentRows.Err(); err != nil {
+		absentRows.Close()
+		return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter absent-tag rows: %w", err)
+	}
+	absentRows.Close()
+
+	note := ""
+	if len(absent) > 0 {
+		note = fmt.Sprintf("declared allergen(s) %v have no matching tag anywhere in the recipe corpus -- excluded 0 recipes because none carry this tag, not because the filter failed", absent)
+	}
+
 	return ids, models.StepResult{
 		Step: 2, Name: "Allergy / intolerance / safety", Kind: "hard_filter",
-		CandidatesIn: stepIn, CandidatesOut: len(ids),
+		CandidatesIn: stepIn, CandidatesOut: len(ids), Note: note,
 	}, nil
 }

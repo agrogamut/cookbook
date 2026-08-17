@@ -74,6 +74,50 @@ func TestAllergyFilterErrorsOnUnmatchedAllergen(t *testing.T) {
 	}
 }
 
+// TestAllergyFilterWheatMatchesGlutenContainingCerealTag pins the fix for the final
+// whole-branch review's Critical #1: allergen_mapping names this group "Wheat" but the
+// corpus tags it "Gluten-containing cereal". Before allergen_tag_vocabulary existed,
+// declaring a Wheat allergy matched zero recipes even though wheat-containing recipes
+// are tagged in the corpus -- a silent safety gap, not an honest absence.
+func TestAllergyFilterWheatMatchesGlutenContainingCerealTag(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	all, _, err := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	if err != nil {
+		t.Fatalf("ageFilter: %v", err)
+	}
+	filtered, _, err := allergyFilter(ctx, pool, models.ChildProfile{Allergens: []string{"Wheat"}}, all)
+	if err != nil {
+		t.Fatalf("allergyFilter: %v", err)
+	}
+	if len(filtered) >= len(all) {
+		t.Fatalf("declaring Wheat must remove at least one recipe via the Gluten-containing cereal corpus tag: before=%d after=%d", len(all), len(filtered))
+	}
+}
+
+// TestAllergyFilterGenuinelyAbsentGroupNotesZeroExclusions covers the other half of the
+// same fix: a declared allergen whose group has no corpus tag at all (e.g. Tree nuts)
+// must still return the full candidate pool -- there is nothing to exclude -- but the
+// step result must say so explicitly rather than reading like an ordinary no-op.
+func TestAllergyFilterGenuinelyAbsentGroupNotesZeroExclusions(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	all, _, err := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	if err != nil {
+		t.Fatalf("ageFilter: %v", err)
+	}
+	filtered, step, err := allergyFilter(ctx, pool, models.ChildProfile{Allergens: []string{"Tree nuts"}}, all)
+	if err != nil {
+		t.Fatalf("allergyFilter: %v", err)
+	}
+	if len(filtered) != len(all) {
+		t.Fatalf("Tree nuts has no corpus tag: expected zero exclusions, before=%d after=%d", len(all), len(filtered))
+	}
+	if !contains(step.Note, "Tree nuts") {
+		t.Fatalf("step note must name the allergen with no corpus tag so the operator can tell absence from a silent bug, got %q", step.Note)
+	}
+}
+
 func contains(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {

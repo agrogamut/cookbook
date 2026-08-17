@@ -2,10 +2,12 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/madamgy/recipie/internal/models"
 )
@@ -40,9 +42,12 @@ func applyMealFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProf
 
 // applyCultureRank is engine step 7. An explicit RegionCulture or CuisineCode beats the
 // project's region_focus default tiers (CLAUDE.md, "A user's stated region beats our
-// default"): matching recipes get a flat boost above everything else rather than a
-// blended multiplier, so the user's choice is visibly respected rather than merely
-// nudged.
+// default"): matching recipes get a flat boost that reorders within the pool the
+// nutrition rubric already ranked, rather than a blended multiplier -- but per CLAUDE.md's
+// "Region focus" principle (region preference "can never outweigh the nutrition rubric or
+// remove a recipe"), that boost is sized as a tie-breaking nudge against
+// recipe_ranked.ranked_score's live spread, not a magnitude large enough to override
+// nutrition fitness outright. See the boost constant below for the exact sizing.
 func applyCultureRank(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile, recipes []models.RankedRecipe) ([]models.RankedRecipe, models.StepResult, error) {
 	stepIn := len(recipes)
 	if p.RegionCulture == "" && p.CuisineCode == "" {
@@ -51,12 +56,23 @@ func applyCultureRank(ctx context.Context, pool *pgxpool.Pool, p models.ChildPro
 
 	region := p.RegionCulture
 	if region == "" && p.CuisineCode != "" {
-		if err := pool.QueryRow(ctx, `SELECT region_culture FROM culture_region_map WHERE culture_code = $1`, p.CuisineCode).Scan(&region); err != nil {
+		err := pool.QueryRow(ctx, `SELECT region_culture FROM culture_region_map WHERE culture_code = $1`, p.CuisineCode).Scan(&region)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, models.StepResult{}, fmt.Errorf("engine: unrecognized cuisine_code %q: no matching row in culture_region_map: %w", p.CuisineCode, ErrInvalidProfile)
+		}
+		if err != nil {
 			return nil, models.StepResult{}, fmt.Errorf("engine: resolve cuisine code %s: %w", p.CuisineCode, err)
 		}
 	}
 
-	const boost = 1000.0 // pushes every matching recipe above the entire non-matching pool without reordering within either group
+	// Rescaled from an earlier 1000.0 (found in the final whole-branch review to be
+	// ~1500x recipe_ranked.ranked_score's live spread, which made region match an
+	// unreported hard filter rather than a ranker nudge). 0.05 never exceeds ~8% of
+	// that spread (ranked_score spans roughly 0.113-0.765, a 0.65 spread, verified
+	// live) -- nutrition fitness stays the dominant ordering signal, this is a
+	// tie-breaking nudge, not an override. The original intent (an explicit region
+	// choice should visibly reorder the list) was right; only the magnitude was wrong.
+	const boost = 0.05
 	out := make([]models.RankedRecipe, len(recipes))
 	copy(out, recipes)
 	for i := range out {
@@ -119,7 +135,13 @@ func applyAvailabilityRank(ctx context.Context, pool *pgxpool.Pool, p models.Chi
 		return nil, models.StepResult{}, fmt.Errorf("engine: availability rank rows: %w", err)
 	}
 
-	const weight = 5.0 // small nudge: availability is a convenience signal, must never outrank nutrition fitness or an explicit region choice
+	// Rescaled from an earlier 5.0 (found in the final whole-branch review to be up to
+	// ~7.7x recipe_ranked.ranked_score's live spread at share=1.0, an unreported hard
+	// filter in practice). 0.05 never exceeds ~8% of that spread (ranked_score spans
+	// roughly 0.113-0.765, a 0.65 spread, verified live) -- nutrition fitness stays the
+	// dominant ordering signal. Availability is still a real convenience signal, it just
+	// nudges rather than overrides.
+	const weight = 0.05
 	out := make([]models.RankedRecipe, len(recipes))
 	copy(out, recipes)
 	for i := range out {
@@ -183,7 +205,13 @@ func applyBudgetRank(ctx context.Context, pool *pgxpool.Pool, p models.ChildProf
 		return nil, models.StepResult{}, fmt.Errorf("engine: budget rank rows: %w", err)
 	}
 
-	const boost = 2.0
+	// Rescaled from an earlier 2.0 (found in the final whole-branch review to be ~3x
+	// recipe_ranked.ranked_score's live spread, which made an exact budget-band match
+	// an unreported hard filter). 0.03 never exceeds ~5% of that spread (ranked_score
+	// spans roughly 0.113-0.765, a 0.65 spread, verified live) -- the continuous cost
+	// score from step 5 already does the real work; this is only a tie-breaking nudge
+	// for an exact band match on top of it, never an override.
+	const boost = 0.03
 	out := make([]models.RankedRecipe, len(recipes))
 	copy(out, recipes)
 	for i := range out {
@@ -299,7 +327,14 @@ func dedupeNearDuplicates(ctx context.Context, pool *pgxpool.Pool, recipes []mod
 			}
 		}
 		if isDup {
-			out[i].RankedScore -= 0.5 // small, consistent demotion; never enough to cross a whole tier
+			// Rescaled from an earlier 0.5 (found in the final whole-branch review to be
+			// ~77% of recipe_ranked.ranked_score's live spread, which made near-duplicate
+			// demotion an unreported hard filter in practice). 0.02 never exceeds ~3% of
+			// that spread (ranked_score spans roughly 0.113-0.765, a 0.65 spread, verified
+			// live) -- nutrition fitness stays dominant; this only nudges a near-duplicate
+			// a little further down among otherwise-similar candidates, never past a whole
+			// tier of genuinely different recipes.
+			out[i].RankedScore -= 0.02
 			demoted++
 		} else {
 			kept = append(kept, set)

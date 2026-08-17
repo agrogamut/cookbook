@@ -32,6 +32,10 @@ func (h *Handlers) ReferenceRegions(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, reg)
 	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "region rows failed: "+err.Error())
+		return
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -67,6 +71,10 @@ func (h *Handlers) ReferenceCuisines(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "cuisine rows failed: "+err.Error())
+		return
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -118,6 +126,10 @@ func (h *Handlers) ReferenceNutritionTargets(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		out = append(out, t)
+	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "nutrition target rows failed: "+err.Error())
+		return
 	}
 	writeJSON(w, http.StatusOK, out)
 }

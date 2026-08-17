@@ -29,12 +29,20 @@ func dietFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile, 
 	query := `SELECT recipe_id FROM recipe_master WHERE recipe_id = ANY($1) AND diet_type = $2`
 	args := []any{candidateIDs, p.DietType}
 	if p.Vegan {
+		// food_group alone misses ghee (ING0060): it is bucketed under "Fat", not
+		// "Dairy", so it survives the food-group exclusion -- verified live, 103
+		// recipes contain it. The provider did correctly tag it
+		// ingredient_allergen_tag = 'Milk' on the mapping row even though the
+		// food-group bucketing missed it, so also excluding on that tag catches ghee
+		// (and anything else tagged as a milk allergen but bucketed outside Dairy)
+		// without touching the vegetarian path, which still allows dairy.
 		query = `
 			SELECT r.recipe_id FROM recipe_master r
 			WHERE r.recipe_id = ANY($1) AND r.diet_type = $2
 			  AND NOT EXISTS (
 			      SELECT 1 FROM recipe_ingredient_mapping m
-			      WHERE m.recipe_id = r.recipe_id AND m.food_group = ANY($3))`
+			      WHERE m.recipe_id = r.recipe_id
+			        AND (m.food_group = ANY($3) OR m.ingredient_allergen_tag ILIKE '%Milk%'))`
 		args = append(args, animalFoodGroups)
 	}
 
@@ -58,7 +66,7 @@ func dietFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile, 
 
 	note := ""
 	if p.Vegan {
-		note = "vegan: also excludes Animal protein, Dairy, Fish, Dried fish, Fish product, Shellfish, Organ meat food groups"
+		note = "vegan: also excludes Animal protein, Dairy, Fish, Dried fish, Fish product, Shellfish, Organ meat food groups, and any ingredient carrying a Milk allergen tag regardless of food_group (catches ghee)"
 	}
 	return ids, models.StepResult{
 		Step: 4, Name: "Declared food practice", Kind: "hard_filter",

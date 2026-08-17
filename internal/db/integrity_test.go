@@ -223,6 +223,21 @@ var violations = []violation{
 		why:   "an unmeasured gap in the register is a gap nobody is watching",
 		query: `SELECT gap_id FROM gap_register WHERE measured_by = 'importer' AND measured_at IS NULL`,
 	},
+	{
+		name: "every allergen_mapping group has a vocabulary bridge row",
+		why:  "allergyFilter joins through allergen_tag_vocabulary; a group missing from it silently excludes nothing for that allergen",
+		query: `SELECT am.allergen_group FROM allergen_mapping am
+		        LEFT JOIN allergen_tag_vocabulary v ON v.allergen_group = am.allergen_group
+		        WHERE v.allergen_group IS NULL`,
+	},
+	{
+		name: "every non-null allergen_tag_vocabulary corpus_tag actually appears in the corpus",
+		why:  "a stale or mistyped corpus_tag would make allergyFilter silently exclude zero recipes for a real allergen, the exact bug this table fixes",
+		query: `SELECT v.allergen_group FROM allergen_tag_vocabulary v
+		        WHERE v.corpus_tag IS NOT NULL
+		          AND NOT EXISTS (SELECT 1 FROM recipe_master r WHERE r.allergen_tags ILIKE '%' || v.corpus_tag || '%')
+		          AND NOT EXISTS (SELECT 1 FROM recipe_ingredient_mapping m WHERE m.ingredient_allergen_tag ILIKE '%' || v.corpus_tag || '%')`,
+	},
 }
 
 func TestDataIntegrity(t *testing.T) {

@@ -53,6 +53,10 @@ func (h *Handlers) NutritionAudit(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, d)
 	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "nutrition audit rows failed: "+err.Error())
+		return
+	}
 	writeJSON(w, http.StatusOK, out)
 }
 
@@ -94,6 +98,10 @@ func (h *Handlers) Gaps(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		out = append(out, g)
+	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "gap register rows failed: "+err.Error())
+		return
 	}
 	writeJSON(w, http.StatusOK, out)
 }
