@@ -4,6 +4,7 @@
 |---|---|---|
 | [`handover-2026-08-18.md`](handover-2026-08-18.md) | Session record: what was found, decided and changed on 18 Aug | - |
 | [`engine-inputs.md`](engine-inputs.md) | Every field the engine accepts, every legal value, live counts | **built** |
+| [`clinical-intake-model.md`](clinical-intake-model.md) | The full clinician-entered profile the books need, and how each field behaves | **not built** |
 | [`phase-3-book-engine.md`](phase-3-book-engine.md) | The Book 1 + Book 2 generation engine the provider specified on 17 Aug 2026 | **not built** |
 | [`not-built.md`](not-built.md) | Register of missing capability, wrong data and unresolved decisions | - |
 | [`next-steps.md`](next-steps.md) | Proposed build order, with what it deliberately avoids | - |
@@ -43,13 +44,14 @@ They are named after each other but are not parallel in content. See
 
 ## Provider source documents
 
-The Phase 3 specification arrived as eight files in the repository root on 17 August 2026,
+The Phase 3 specification arrived as nine files in the repository root on 17 August 2026,
 committed as `84966cd`, and is summarised in `phase-3-book-engine.md`. They now live in
 `data/book-engine-spec/`. The originals are authoritative:
 
 - `MadamGY_Knowledge_Book_Engine_SRS_V1 (1).docx`
 - `MadamGY_Book1_Book2_JSON_PDF_Template_Contract_V1.docx`
-- `MadamGY_Full_Master_TOC_Page_Component_Map_V1.docx` / `.json`
+- `MadamGY_Full_Master_TOC_Page_Component_Map_V1.docx`
+- `MadamGY_Full_Master_TOC_Page_Component_Map_V1.json`
 - `MadamGY_Book1_JSON_Schema_V1.json`
 - `MadamGY_Book2_JSON_Schema_V1.json`
 - `MadamGY_PDF_Template_Contract_V1.json`
