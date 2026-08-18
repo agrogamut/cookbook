@@ -1914,6 +1914,12 @@ operator must not read the second as the first.
 Both responses carry the skipped-facts list in an `X-Book-Omissions` header, so a reviewer
 sees what the book does not contain without reading the whole document.
 
+**Wire format, fixed here because Task 8 parses it.** The header is a `; `-separated list of
+skipped facts, each already a human-readable sentence from the assembler. Error bodies are
+`{"error": "<reason>"}`, and the 409 body additionally carries `{"reviewer": "<name>"}` read
+from `special_care_condition_gate.mandatory_reviewer` -- an operator stopped by a clinical
+gate needs to know who to escalate to, and a stop with no named reviewer is a dead end.
+
 - [ ] **Step 2: Write the tests**
 
 ```go
