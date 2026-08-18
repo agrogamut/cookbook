@@ -44,6 +44,9 @@ func NewRouter(pool *pgxpool.Pool) http.Handler {
 	r.Get("/api/reference/clinical-markers", h.ReferenceClinicalMarkers)
 	r.Get("/api/reference/enums", h.ReferenceEnums)
 	r.Get("/api/reference/book1-blocks", h.ReferenceBook1Blocks)
+	r.Put("/api/profiles/{childID}", h.PutProfile)
+	r.Get("/api/profiles/{childID}", h.GetProfile)
+	r.Get("/api/profiles/{childID}/engine-input", h.GetProfileEngineInput)
 
 	return r
 }
