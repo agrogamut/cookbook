@@ -214,6 +214,7 @@ pass from an empty database.
 | 7 | External prep-text join | done - `cmd/enrich`, 166 of 940 recipes |
 | 8 | Gap register | done - 16 rows, re-counted on every run |
 | + | Corrected nutrition layer | done - migrations `0009`-`0010`, 139 ingredients on IFCT values, 410 recipes fully verified |
+| + | `Book1_Content_Master` import | done - migration `0013`, 9 tables, 4 sub-sheets. `internal/importer/spec.go`'s exclusion comment (which had listed it alongside the empty Review/Version Control scaffold and the PDF-pagination Page Registry) is corrected: it is the general content layer of Book 1, not a pagination concern, and is bound to the importer like every other master |
 
 Exit criteria, checked:
 
@@ -239,6 +240,24 @@ TEST_DATABASE_URL=$DATABASE_URL go test ./...
 
 The external datasets live in `data/external/` with their checksums in `SHA256SUMS` and
 their provenance in the `external_source` table.
+
+### Phase 3 - the book engine foundation
+
+Design and task plans live in `docs/superpowers/specs/2026-08-18-phase-3-foundation-design.md`
+and `docs/superpowers/plans/`. The Book 1 content layer (migration `0013`, nine tables)
+and the canonical child profile (migration `0014`, `internal/profile/`) are the first two
+slices, both built.
+
+**The `ai_can_draft` gate is narrower than the 18 August prose ruling, not a replacement
+for it.** `book1_content_block.ai_can_draft = 'N'` marks five blocks no drafted text may
+ever occupy - `B1-009` vaccination schedule, `B1-011` milestone surveillance, `B1-012`
+developmental red flags, `B1-014` development by age, `B1-022` reference and disclaimer -
+enforced by a CHECK constraint on the column and pinned by `TestAICanDraftGateIsPinned`.
+The 18 August ruling in `docs/decisions.md` ("No generated guidance prose in the
+unreviewed path") is the broader rule: no model-generated guidance prose reaches a parent
+through any path that has not been through human review, on any block, not only these
+five. The column is a database-enforced instance of that rule on one table; the other
+twenty-seven blocks are not thereby cleared for drafted prose.
 
 ### Region focus - India and Bangladesh
 
@@ -572,7 +591,7 @@ UI decision, and needs the provider's written sign-off before it ships.
 | `MadamGY_Ingredient_Super_Master_Complete_V1_Cost_Filled.xlsx` | 3 | 406 ingredients x 29 cols |
 | `MadamGY_Page_Registry_Section_Eligibility_Matrix_V1.xlsx` | 8 | 124 modules, 18 templates, 12 tests |
 | `MadamGY_Culture_Location_Master_V1.xlsx` | 1 | 37 regions x 54 cols |
-| `MadamGY_Book1_Content_Master_V1_1_DailyLife.xlsx` | 9 | 32 blocks, 44 vaccine, 33 milestones |
+| `MadamGY_Book1_Content_Master_V1_1_DailyLife.xlsx` | 9 | 32 blocks, 44 vaccine, 33 milestones, 16 assembly steps, 15 release checks |
 | `MadamGY_Book2_Content_Master_V1.xlsx` | 9 | 32 blocks, 20 card fields, 14 filters |
 | `MadamGY_Clinical_Rule_Master_V1.xlsx` | 4 | 31 rules x 33 cols |
 | `MadamGY_Allergy_Safety_Master_V1.xlsx` | 6 | 28 rules, 11 allergens, 8 choking, 8 SOP |
@@ -861,12 +880,19 @@ internal/db/migrations/
   0008_match_certainty          exact vs probable name match, discrepancy report
   0009_ifct_alias               hand-written food aliases + corrected ingredient view
   0010_recipe_nutrition_recomputed  recipe nutrition rebuilt from corrected ingredients
+  0013_book1_content             9 Book 1 tables, ai_can_draft CHECK gate, book_order
+  0014_child_profile             child_profile + 4 child tables, dated growth, three-state allergy
 internal/db/integrity_test.go   22 invariants + row counts + idempotency
 internal/db/persona_test.go     5 persona queries + allergy-filter guard
 internal/db/external_test.go    provenance and no-overwrite invariants
 internal/db/corrected_test.go   corrected layer + the brinjal-is-not-egg regression
+internal/db/book1_test.go       Book 1 row counts, ai_can_draft gate, book_order, assembly-step gap
 internal/enrich/                tokenising, matching, gap refresh
 internal/enrich/tokens_test.go  tokeniser, jaccard, cover, qualifier and boundary guards
+internal/profile/               stored profile -> engine input: dated growth, three-state
+                                allergy, expiring acute conditions
+internal/profile/profile_test.go  round-trip, age derivation, suspected-allergen and
+                                acute-expiry conversion
 data/external/                  downloaded datasets + SHA256SUMS
 scripts/dev_db.fish             throwaway Postgres
 scripts/fetch_data.fish         download external datasets, verify checksums

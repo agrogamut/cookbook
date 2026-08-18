@@ -54,19 +54,28 @@ palsy, congenital heart disease, cleft lip and palate, autism, or intellectual d
 every one of which changes feeding through texture, energy density, oral-motor ability,
 mealtime behaviour and sometimes fluid restriction.
 
-Today the engine has no way to know about any of them, so a child with an uncorrected
-congenital heart defect and no dietitian input gets a confidently-generated recipe list
-like any other child.
+**The hold mechanism itself is now wired.** `child_clinical_condition.class` accepts
+`congenital` alongside `acute` and `chronic`, and every stored condition's
+`trigger_field` / `flag_value` feeds `ChildProfile.ClinicalFlags`, which the existing
+engine step 3 (`internal/engine/clinical.go`) escalates to `EngineResult.Blocked` /
+`BlockReason` whenever a flag matches a `clinical_rule_master` row in an escalation-only
+domain. `EngineResult.Blocked` and `BlockReason` are no longer unwired - a clinician who
+records a condition the masters already recognise gets a genuine hold, not a
+silently-ignored flag.
 
-**The correct behaviour is to hold generation, not to filter harder.** The SRS agrees: its
-hard-stop list includes "specialist therapeutic target is required but has not been
-entered/approved", and its edge-case table holds specialized personalization for complex
-conditions lacking specialist targets. `EngineResult.Blocked` and `BlockReason` already
-exist and work - nothing is wired to them.
+What is still missing is the **vocabulary**, not the plumbing: `clinical_rule_master` has
+no `trigger_field` for Down syndrome, cerebral palsy, congenital heart disease, cleft lip
+and palate, autism or intellectual disability, so a clinician who records one of those
+today has nowhere to put it that the engine can read, and that child is scored like any
+other child.
 
 **We cannot invent which conditions require a specialist.** Extending
 `clinical_rule_master` is provider work. See `docs/clinical-intake-model.md` §2.5 for the
-proposed model and `docs/not-built.md` §6 question 10.
+proposed model and `docs/not-built.md` §6 question 10. (A `gap_register` row tracking this
+specifically, `GAP-015`, is defined by the parallel engine-honesty plan's migration `0012`
+and not yet present in this branch's database - the live register here still holds the
+Phase 1 numbering, where `GAP-015` means the IFCT nutrition-discrepancy count. Do not cite
+`GAP-015` for this finding until that migration lands and the two numberings reconcile.)
 
 ### 1.4 Nothing is approved
 
@@ -86,32 +95,37 @@ is no such flag in the schema, and if there were, nothing would qualify.
 
 ### 2.1 Fields the books need that nothing accepts
 
-None of these exist in the database, the API or the form. Sourced from SRS section 8 and
-the two book JSON schemas.
+**Built.** `child_profile` and its four child tables (migration `0014`, this plan's
+Task 5) now accept `display_name`, `date_of_birth`, `sex`, `language_id`, dated growth
+(`child_growth_measurement`: `weight_kg`, `height_cm`, `head_circumference_cm`, one row
+per measurement date, plus clinician-entered `bmi_for_age_z` / `weight_for_age_z` /
+`height_for_age_z`), `likes` / `dislikes` / `accepted` (`child_preference.kind`), and the
+clinical-condition fields (`child_clinical_condition`: `trigger_field`, `flag_value`,
+`class`, `onset_date`, `expires_after_days`). Allergy is `child_allergen`, three states
+(`confirmed`, `suspected`, `resolved`) rather than a flat list. `age_months` is still
+never stored - it is derived from `date_of_birth` at query time, by design, so a book
+read months after generation does not carry a stale age.
+
+Still outstanding, and nothing accepts them yet:
 
 | Input | Needed for | Blocks |
 |---|---|---|
-| `display_name` | Both covers, profile cards | Every page of personalization |
-| `date_of_birth` | Age display, growth reference | "4 years 3 months" on the cover |
-| `sex` | Growth reference charts | Book 1 growth comparison |
-| `language_id` | Localization layer | Any non-English book |
-| dated `weight`, `height`, `head_circumference` | Growth tables and trend | Book 1 sections B1-04 to B1-06 |
 | `feeding_stage_override` | Prematurity, dysphagia | Clinician texture control |
-| `likes`, `dislikes`, `accepted_foods` | Preference ranking (SRS weight 10) | Acceptance-driven ordering |
-| `equipment` | Feasibility ranking (SRS weight 5) | No recipe-side column exists either |
 | `vaccine_history[]` | Book 1 tracker rows | `B1-VAX-01` renders blank |
 | `development_observations[]` | Milestone comparison | `B1-DEV-01` renders blank |
 | `priority_goals[]` | Goal cards, selection reasons | The "why these recipes" page |
 | `consultation_date`, `reviewed_by` | Consultation summary | Required by the Book 1 schema |
 | `clinician_approval_id` | Release gate | Generation cannot legally start |
+| `equipment` | Feasibility ranking (SRS weight 5) | No recipe-side column exists either |
 
-Two are structural rather than a simple column addition:
-
-- **Growth measurements need their own dated table.** One child has many, and the trend is
-  the clinical point. A single `weight` column would destroy the thing Book 1 exists to
-  show.
-- **Equipment has no recipe-side column to match against.** `recipe_master` carries no
-  equipment field, so accepting the input is useless until the provider adds one.
+`vaccine_history[]` and `development_observations[]` are no longer blocked on a missing
+reference table - `book1_vaccine_schedule` (44 rows) and `book1_development_milestone`
+(33 rows) both exist as of migration `0013` - so what remains is wiring a child-side
+history table to them, not inventing the reference data. `equipment` stays deliberately
+uncollected: `recipe_master` carries no equipment column to match against, so accepting
+the input would be a form that lies about what it can act on. `consultation_date`,
+`reviewed_by` and `clinician_approval_id` need the release-gate model in
+`docs/clinical-intake-model.md`, not yet built.
 
 ### 2.2 Engine inputs the UI does not send
 

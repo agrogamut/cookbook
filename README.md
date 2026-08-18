@@ -33,6 +33,8 @@ TEST_DATABASE_URL=$DATABASE_URL go test ./...
 The importer is idempotent: running it twice over unchanged workbooks leaves an identical
 database, verified by a content hash per table.
 
+`cmd/import` now loads 30 tables from 11 workbooks.
+
 ## Running the API
 
 ```fish
@@ -51,6 +53,7 @@ go run ./cmd/server        # listens on :8080 by default, set PORT to override
 | `/api/reference/regions` | GET | The 9 scoped regions and their tiers |
 | `/api/reference/cuisines` | GET | Cuisine dropdown, guaranteed non-empty per entry |
 | `/api/reference/nutrition-targets` | GET | The NT00-NT12 rubric, weights and guidance text |
+| `/api/reference/book1-blocks` | GET | The 32 Book 1 content blocks in book render order |
 
 Useful views once loaded:
 
