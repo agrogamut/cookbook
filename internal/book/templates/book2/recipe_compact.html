@@ -1,0 +1,22 @@
+{{ define "B2-RECIPE-02" }}
+{{/* "compact 2-card spread for short recipes" per the template contract. Not dispatched by
+     body.html today: nothing in RecipeCard measures "short" without this code inventing a
+     length threshold the provider has not set, and guessing one is exactly what the hard
+     rule forbids. Defined and ready for whichever field or threshold eventually decides it,
+     using the same data B2-RECIPE-01 uses -- no new invented content, only a tighter layout. */}}
+<div class="card" style="break-inside: avoid; margin: 0 0 4mm;">
+  <h3>{{ .Title }}</h3>
+  <p class="mono">{{ .RecipeID }} &middot; version {{ .RecipeVersion }}</p>
+  <div class="card-row">
+    <div class="card">
+      <h3>Ingredients</h3>
+      <ul>{{ range .Ingredients }}<li class="mono">{{ . }}</li>{{ end }}</ul>
+    </div>
+    <div class="card">
+      <h3>Method</h3>
+      <ol>{{ range .MethodSteps }}<li>{{ . }}</li>{{ end }}</ol>
+    </div>
+  </div>
+  <p><span class="mono">{{ .Serving }}</span> -- {{ .Safety }}</p>
+</div>
+{{ end }}

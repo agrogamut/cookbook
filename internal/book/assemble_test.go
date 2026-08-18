@@ -2,6 +2,7 @@ package book
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -128,5 +129,74 @@ func TestEveryBlockIsEitherRenderedOrReported(t *testing.T) {
 				"a block that is neither rendered nor reported is silently absent",
 				months, len(b.Sections), blockSkips, got, total)
 		}
+	}
+}
+
+// The single most important property of this package. A special-care condition stops the
+// engine, and a recipe book is exactly the artifact that would override a clinician's
+// judgement if it were produced anyway.
+func TestBlockedEngineProducesNoBook(t *testing.T) {
+	pool := testPool(t)
+	s := profile.Stored{
+		ChildID:     "BOOK-TEST-003",
+		DateOfBirth: time.Date(2022, 5, 1, 0, 0, 0, 0, time.UTC),
+		Conditions: []profile.ClinicalCondition{{
+			TriggerField: "Special_Care_Condition", FlagValue: "SC-CP", Class: "congenital",
+		}},
+	}
+	_, _, err := AssembleBook2(context.Background(), pool, s,
+		time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC))
+	if !errors.Is(err, ErrBlocked) {
+		t.Fatalf("a blocked engine result must not become a book, got err = %v", err)
+	}
+}
+
+// An empty chapter is omitted and reported, never rendered as a heading with nothing under
+// it. Four of seven categories have no mapped recipes today.
+//
+// The assertion is the conservation invariant, not just "some skip happened": every one of
+// the 7 rows in meal_category_target must be either rendered as a chapter or named in the
+// skipped list. A weaker len(skipped) == 0 check already let a real defect ship once in this
+// plan, where content rows vanished from both the document and the skip list while the test
+// stayed green -- counting only meal-category skip entries and reconciling against the total
+// is what catches that class of bug.
+func TestEmptyChaptersAreOmittedAndReported(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	var total int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM meal_category_target`).Scan(&total); err != nil {
+		t.Fatalf("count meal categories: %v", err)
+	}
+
+	s := profile.Stored{
+		ChildID:     "BOOK-TEST-004",
+		DateOfBirth: time.Date(2022, 5, 1, 0, 0, 0, 0, time.UTC),
+		DietType:    "Vegetarian",
+	}
+	b, skipped, err := AssembleBook2(ctx, pool, s,
+		time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("AssembleBook2: %v", err)
+	}
+	for _, sec := range b.MealSections {
+		if len(sec.Recipes) == 0 {
+			t.Fatalf("chapter %s rendered with no recipes; it should have been omitted",
+				sec.MealCategoryID)
+		}
+	}
+
+	// Only entries prefixed "meal category " are counted, because skipped also carries
+	// profile-level drops from ToChildProfile, which are not meal categories.
+	categorySkips := 0
+	for _, sk := range skipped {
+		if strings.HasPrefix(sk, "meal category ") {
+			categorySkips++
+		}
+	}
+	if got := len(b.MealSections) + categorySkips; got != total {
+		t.Fatalf("%d rendered + %d reported skips = %d, want %d (all rows of "+
+			"meal_category_target); a category that is neither rendered nor reported is "+
+			"silently absent", len(b.MealSections), categorySkips, got, total)
 	}
 }

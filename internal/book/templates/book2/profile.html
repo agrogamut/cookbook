@@ -1,0 +1,28 @@
+{{ define "B2-PROFILE-01" }}
+{{/* "why these recipes were selected": the criteria this book was generated against, read
+     straight off the stored profile the same way every other page in this project reads it
+     -- no summary text invented, just the facts that drove the engine's filters. */}}
+<section class="page-break">
+  <div class="section-header">
+    <h2>Why these recipes</h2>
+    <p>The profile behind every recipe chosen for {{ .Child.DisplayName }}</p>
+  </div>
+  <table>
+    <thead>
+      <tr><th>Criterion</th><th>Recorded value</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Age</td><td class="mono">{{ .Child.AgeLabel }}</td></tr>
+      <tr><td>Food practice</td>
+          <td>{{ if .Child.FoodPractice }}{{ .Child.FoodPractice }}{{ else }}<span class="write-line"></span>{{ end }}</td></tr>
+      <tr><td>Allergy status</td><td>{{ .Child.AllergyStatus }}</td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <h3>Note: how recipes were chosen</h3>
+    <p>Each recipe card in this book states its own selection reasons -- the active
+       nutrition target, the region match and the diet practice -- taken directly from the
+       engine's own step-by-step record rather than summarised here.</p>
+  </div>
+</section>
+{{ end }}

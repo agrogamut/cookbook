@@ -1,0 +1,93 @@
+{{ define "B2-RECIPE-01" }}
+{{/* Prototype page 3. break-inside: avoid is applied on this wrapper directly rather than
+     through a new CSS class -- tokens.css defines no per-recipe-card class and this task
+     adds none -- to satisfy the contract's "one to two recipe cards per page" literally. */}}
+<div class="card" style="break-inside: avoid; margin: 0 0 6mm;">
+  <h3>{{ .Title }}</h3>
+  <p class="mono">{{ .RecipeID }} &middot; version {{ .RecipeVersion }} &middot; {{ .ReviewStatus }}</p>
+
+  {{/* Reason chips in a bordered strip: a row of cards, the same shape .card-row already
+       draws elsewhere, rather than a new chip style. Each reason is the engine's own
+       recorded decision -- the active nutrition target, a region match, a diet-practice
+       match -- never invented prose. */}}
+  {{ if .SelectionReasons }}
+  <div class="card-row">
+    {{ range .SelectionReasons }}<div class="card"><p>{{ . }}</p></div>{{ end }}
+  </div>
+  {{ end }}
+
+  {{/* GAP-001 surfaced at the point of use: if this method text is one of the six shared
+       across the corpus, the reader is told so directly on the card rather than having to
+       find it in the register. */}}
+  {{ if .MethodIsProviderBoilerplate }}
+  <div class="callout">
+    <h3>Note: shared method text</h3>
+    <p>This preparation method is one of a small number of texts shared across many
+       recipes in the provider's dataset (GAP-001, see the gap register) and is not
+       written specifically for this dish.</p>
+  </div>
+  {{ end }}
+
+  {{/* Cream ingredients panel beside the numbered method -- .card already carries
+     --card-fill (cream on book1, rose-cream on book2), so the existing card styling is
+     what draws the "cream panel" the prototype calls for. */}}
+  <div class="card-row">
+    <div class="card">
+      <h3>Ingredients</h3>
+      <ul>
+        {{ range .Ingredients }}<li class="mono">{{ . }}</li>{{ end }}
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Method</h3>
+      <ol>
+        {{ range .MethodSteps }}<li>{{ . }}</li>{{ end }}
+      </ol>
+    </div>
+  </div>
+
+  {{ if .NutritionTags }}
+  <p class="mono">{{ range $i, $t := .NutritionTags }}{{ if $i }} &middot; {{ end }}{{ $t }}{{ end }}</p>
+  {{ end }}
+
+  <table>
+    <thead>
+      <tr><th>Texture &amp; serving</th><th>Safety</th><th>Approved swap</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>
+          {{ if .TextureServing }}{{ .TextureServing }}{{ end }},
+          <span class="mono">{{ .Serving }}</span>
+        </td>
+        <td>{{ .Safety }}</td>
+        {{/* No substitute-ingredient data is joined into the recipe card in this
+             generation (see internal/book/templates/book2/swap.html), so this column
+             states the gap rather than guessing a swap. */}}
+        <td>not available for this recipe</td>
+      </tr>
+    </tbody>
+  </table>
+
+  {{ template "B2-TRACK-01" . }}
+</div>
+{{ end }}
+
+{{ define "B2-TRACK-01" }}
+{{/* The parent tracker row: four writing lines, always. This template has no branch that
+     can print a value here -- what happened after the recipe was tried is the family's to
+     record, not this project's to fabricate. */}}
+<table>
+  <thead>
+    <tr><th>Tried on</th><th>Amount accepted</th><th>Response</th><th>Parent note</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+    </tr>
+  </tbody>
+</table>
+{{ end }}

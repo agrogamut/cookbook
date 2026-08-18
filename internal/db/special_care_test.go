@@ -146,8 +146,8 @@ func TestSpecialCareGapsAreRegistered(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM gap_register`).Scan(&total); err != nil {
 		t.Fatalf("gap count: %v", err)
 	}
-	if total != 23 {
-		t.Fatalf("expected 23 gap register rows after migration 0016, got %d", total)
+	if total != 24 {
+		t.Fatalf("expected 24 gap register rows after migration 0017, got %d", total)
 	}
 
 	for _, id := range []string{"GAP-021", "GAP-022"} {

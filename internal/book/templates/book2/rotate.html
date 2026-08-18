@@ -1,0 +1,30 @@
+{{ define "B2-ROTATE-01" }}
+{{/* "7-day meal grid with Recipe_ID-backed titles". Dispatched by body.html only
+     `{{ with $b.RotationPlan }}`, and AssembleBook2 never builds one today (see its own
+     doc comment): filling seven days from a category that may hold only one or two
+     surviving recipes means repeating a recipe or inventing a schedule, and this project
+     does not guess either. The template is real and ready for whenever a real rotation
+     algorithm exists; every title it prints is a Recipe_ID pulled from that plan, never
+     text composed here. */}}
+<section class="page-break">
+  <div class="section-header">
+    <h2>Weekly rotation</h2>
+    <p>One suggested arrangement of the recipes above across a week</p>
+  </div>
+  <table>
+    <thead>
+      <tr><th>Day</th><th>Meals</th></tr>
+    </thead>
+    <tbody>
+      {{ range .Days }}
+      <tr>
+        <td>{{ .Day }}</td>
+        <td class="mono">
+          {{ range $meal, $recipeID := .Meals }}{{ $meal }}: {{ $recipeID }}<br>{{ end }}
+        </td>
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+</section>
+{{ end }}

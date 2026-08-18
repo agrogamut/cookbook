@@ -1,0 +1,14 @@
+{{ define "B2-SECTION-01" }}
+{{/* Meal opener, page 3-4 of the prototype: a full-bleed band like B1's section-header, but
+     in --brand rather than --brand-deep, so a meal opener and a chapter divider read as
+     visibly different weights on the page. No new token is added -- --brand already exists
+     on .book2 in tokens.css; this only picks the lighter of the two the palette defines. */}}
+<section class="page-break">
+  <div class="section-header" style="background: var(--brand);">
+    <h2>{{ .Title }}</h2>
+    <p>{{ len .Recipes }} recipe{{ if ne (len .Recipes) 1 }}s{{ end }} selected for this meal
+       {{ with .SelectionNote }}-- {{ . }}{{ end }}</p>
+  </div>
+  {{ range .Recipes }}{{ template "B2-RECIPE-01" . }}{{ end }}
+</section>
+{{ end }}

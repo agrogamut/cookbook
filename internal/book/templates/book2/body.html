@@ -1,2 +1,14 @@
-{{/* Placeholder. The Book 2 template task replaces this with the real "body" definition. */}}
-{{ define "body" }}{{ end }}
+{{ define "body" }}
+{{ $b := .Data }}
+{{ template "B2-COVER-01" $b }}
+{{ template "B2-PROFILE-01" $b }}
+{{ range $b.MealSections }}
+  {{ template "B2-SECTION-01" . }}
+{{ end }}
+{{/* RotationPlan is nullable, and AssembleBook2 never builds one today -- see its own doc
+     comment. This dispatch exists so the page appears automatically the day a real
+     rotation exists, without touching this template again. */}}
+{{ with $b.RotationPlan }}
+  {{ template "B2-ROTATE-01" . }}
+{{ end }}
+{{ end }}

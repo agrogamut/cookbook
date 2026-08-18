@@ -1,0 +1,20 @@
+{{ define "B2-FAV-01" }}
+{{/* "favorite/easy/school-friendly shortlist" per the template contract. Not dispatched by
+     body.html: nothing in the engine's pipeline records a family's likes or dislikes yet --
+     internal/engine/pipeline.go records step 8 (likes / dislikes / sensory) as an explicit
+     no-op because child_preference exists but is not wired into the engine's query input --
+     so there is no honest basis to call any recipe a "favorite" today. Defined against the
+     contract's shortlist shape so it is ready the moment step 8 has real input to read; it
+     accepts a list of already-chosen cards and renders them, it never chooses them itself. */}}
+{{ if . }}
+<section class="page-break">
+  <div class="section-header">
+    <h2>Favorites</h2>
+    <p>Easy and school-friendly picks from this book</p>
+  </div>
+  <ul>
+    {{ range . }}<li><span class="mono">{{ .RecipeID }}</span> -- {{ .Title }}</li>{{ end }}
+  </ul>
+</section>
+{{ end }}
+{{ end }}

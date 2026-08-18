@@ -114,6 +114,12 @@ var gapMeasures = []gapMeasure{
 	             WHERE NOT EXISTS (
 	                 SELECT 1 FROM meal_category_recipe_map m
 	                 WHERE m.meal_type = r.meal_type)`},
+
+	// Recipes with no provider-assigned version. recipe_master carries no version column
+	// at all, so this is every recipe currently in scope -- the count exists to keep
+	// GAP-024 visibly non-zero rather than to shrink toward it, since it only reaches
+	// zero if the provider adds a real revision column.
+	{"GAP-024", `SELECT count(*) FROM recipe_master`},
 }
 
 // measureGaps refreshes the counted gaps inside the import transaction.
