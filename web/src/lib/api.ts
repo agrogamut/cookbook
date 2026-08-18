@@ -1,6 +1,6 @@
 import type {
   ChildProfile, EngineResult, RecipeDetail, Ingredient, NutritionDiscrepancy,
-  Gap, ImportRun, Region, Cuisine, NutritionTarget,
+  Gap, ImportRun, Region, Cuisine, NutritionTarget, Book1Block,
 } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -58,6 +58,10 @@ export function getCuisines(): Promise<Cuisine[]> {
 
 export function getNutritionTargets(): Promise<NutritionTarget[]> {
   return request<NutritionTarget[]>("/api/reference/nutrition-targets");
+}
+
+export function getBook1Blocks(): Promise<Book1Block[]> {
+  return request<Book1Block[]>("/api/reference/book1-blocks");
 }
 
 export { ApiError };

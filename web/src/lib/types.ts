@@ -208,3 +208,22 @@ export interface NutritionTarget {
   hard_exclusions: string | null;
   soft_penalties: string | null;
 }
+
+export interface Book1Block {
+  block_id: string;
+  book_order: number;
+  part: string | null;
+  section: string | null;
+  subsection: string | null;
+  age_from_mo: number | null;
+  age_to_mo: number | null;
+  trigger_or_eligibility: string | null;
+  personalization_inputs: string | null;
+  table_or_format: string | null;
+  nutrition_target_link: string | null;
+  clinical_rule_link: string | null;
+  safety_link: string | null;
+  ai_can_draft: "Y" | "N";
+  human_approval: string | null;
+  status: string | null;
+}

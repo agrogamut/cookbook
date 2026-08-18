@@ -136,3 +136,64 @@ func (h *Handlers) ReferenceNutritionTargets(w http.ResponseWriter, r *http.Requ
 	}
 	writeJSON(w, http.StatusOK, out)
 }
+
+// ReferenceBook1Blocks returns the 32 Book 1 content blocks in render order.
+//
+// Ordered by book_order, never by block_id: the daily-life blocks B1-023..B1-032 occupy
+// positions 15-24, so id order produces a different book. Returning them pre-sorted means
+// no client can get that wrong.
+//
+// The link columns are returned verbatim. They are guidance text for a human, not
+// references, and a client renders them as text.
+func (h *Handlers) ReferenceBook1Blocks(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.pool.Query(r.Context(), `
+		SELECT block_id, book_order, part, section, subsection,
+		       age_from_mo, age_to_mo, trigger_or_eligibility,
+		       personalization_inputs, table_or_format,
+		       nutrition_target_link, clinical_rule_link, safety_link,
+		       ai_can_draft, human_approval, status
+		FROM book1_content_block
+		ORDER BY book_order`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "book1 block list failed: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	type block struct {
+		BlockID              string  `json:"block_id"`
+		BookOrder            int     `json:"book_order"`
+		Part                 *string `json:"part"`
+		Section              *string `json:"section"`
+		Subsection           *string `json:"subsection"`
+		AgeFromMo            *int    `json:"age_from_mo"`
+		AgeToMo              *int    `json:"age_to_mo"`
+		TriggerOrEligibility *string `json:"trigger_or_eligibility"`
+		PersonalizationInput *string `json:"personalization_inputs"`
+		TableOrFormat        *string `json:"table_or_format"`
+		NutritionTargetLink  *string `json:"nutrition_target_link"`
+		ClinicalRuleLink     *string `json:"clinical_rule_link"`
+		SafetyLink           *string `json:"safety_link"`
+		AICanDraft           string  `json:"ai_can_draft"`
+		HumanApproval        *string `json:"human_approval"`
+		Status               *string `json:"status"`
+	}
+	out := []block{}
+	for rows.Next() {
+		var b block
+		if err := rows.Scan(&b.BlockID, &b.BookOrder, &b.Part, &b.Section, &b.Subsection,
+			&b.AgeFromMo, &b.AgeToMo, &b.TriggerOrEligibility,
+			&b.PersonalizationInput, &b.TableOrFormat,
+			&b.NutritionTargetLink, &b.ClinicalRuleLink, &b.SafetyLink,
+			&b.AICanDraft, &b.HumanApproval, &b.Status); err != nil {
+			writeError(w, http.StatusInternalServerError, "book1 block scan failed: "+err.Error())
+			return
+		}
+		out = append(out, b)
+	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "book1 block rows failed: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}

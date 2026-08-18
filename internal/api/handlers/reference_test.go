@@ -69,3 +69,41 @@ func TestRunsReturnsImportHistoryWithTimestamptz(t *testing.T) {
 		}
 	}
 }
+
+func TestReferenceBook1BlocksAreInBookOrder(t *testing.T) {
+	h := New(testPool(t))
+	req := httptest.NewRequest("GET", "/api/reference/book1-blocks", nil)
+	rec := httptest.NewRecorder()
+
+	h.ReferenceBook1Blocks(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var got []struct {
+		BlockID    string `json:"block_id"`
+		BookOrder  int    `json:"book_order"`
+		AICanDraft string `json:"ai_can_draft"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got) != 32 {
+		t.Fatalf("expected 32 blocks, got %d", len(got))
+	}
+	for i := range got {
+		if got[i].BookOrder != i+1 {
+			t.Fatalf("row %d has book_order %d; the endpoint must return blocks in render "+
+				"order so a client never has to re-sort and never sorts by id", i, got[i].BookOrder)
+		}
+	}
+	var closed int
+	for _, b := range got {
+		if b.AICanDraft == "N" {
+			closed++
+		}
+	}
+	if closed != 5 {
+		t.Fatalf("expected 5 blocks closed to drafted text, got %d", closed)
+	}
+}
