@@ -172,7 +172,7 @@ they are the columns an operator reads to decide whether to trust a row.
 | `/recipe/[id]` | Provider method and external suggestion side by side, ingredients, nutrition provider-vs-corrected | `Tabs`, `Table`, `Badge`, `Alert`, `Separator` |
 | `/ingredients` | 406 ingredients, provider vs IFCT values, verified flag | `DataTable`, `Badge`, `Popover`, faceted filters |
 | `/audit/nutrition` | `nutrition_discrepancy_report` - the provider deliverable | `Table`, `Badge`, sortable columns, CSV export |
-| `/audit/gaps` | Gap register, 16 rows, severity-coloured | `Table`, `Badge`, `Accordion` |
+| `/audit/gaps` | Gap register, 20 rows, severity-coloured | `Table`, `Badge`, `Accordion` |
 | `/runs` | Import and enrichment history, content hashes, rows skipped | `Table`, `Collapsible` |
 | `/reference` | Regions, cuisines, NT00-NT12 weights, engine steps | `Tabs`, `Table` |
 
@@ -212,7 +212,7 @@ pass from an empty database.
 | 5 | NT00-NT12 ranker | done - migration `0003`, weights read from the provider table |
 | 6 | IFCT 2017 nutrition audit | done - `cmd/enrich`, 542 foods loaded |
 | 7 | External prep-text join | done - `cmd/enrich`, 166 of 940 recipes |
-| 8 | Gap register | done - 16 rows, re-counted on every run |
+| 8 | Gap register | done - 20 rows (12 seeded in 0002, 4 upserted by cmd/enrich, 4 added in 0012), re-counted on every run |
 | + | Corrected nutrition layer | done - migrations `0009`-`0010`, 139 ingredients on IFCT values, 410 recipes fully verified |
 
 Exit criteria, checked:
@@ -221,7 +221,7 @@ Exit criteria, checked:
 - [x] Re-running the importer twice produces identical content hashes
 - [x] All five persona queries return non-empty, correctly ordered results
 - [x] Every external value carries a source key, row id, URL and match confidence
-- [x] The gap register accounts for every known hole (16 entries)
+- [x] The gap register accounts for every known hole (20 entries)
 
 **Next: Phase 2.** Go API implementing the 14-step engine, then the Next.js frontend.
 

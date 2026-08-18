@@ -101,7 +101,7 @@ func TestReferenceAllergensReportsWhetherEachGroupScreens(t *testing.T) {
 }
 
 // TestEveryOfferedAllergenScreensSomething fails on four rows today and is meant to.
-// It is the tracking mechanism for GAP-013: it turns green only when the provider tags
+// It is the tracking mechanism for GAP-017: it turns green only when the provider tags
 // the corpus for Tree nuts, Crustacean/Mollusc, Mustard and Sulphites. It skips rather
 // than fails so it does not break CI, because the hole is the provider's to close and a
 // red suite trains people to ignore red suites.
@@ -125,7 +125,7 @@ func TestEveryOfferedAllergenScreensSomething(t *testing.T) {
 		t.Fatalf("rows: %v", err)
 	}
 	if len(unscreened) > 0 {
-		t.Skipf("GAP-013 still open: %d allergen group(s) screen nothing: %v. "+
+		t.Skipf("GAP-017 still open: %d allergen group(s) screen nothing: %v. "+
 			"They remain selectable and are reported in EngineResult.UnscreenedAllergens. "+
 			"This test passes when the provider tags the corpus.", len(unscreened), unscreened)
 	}
