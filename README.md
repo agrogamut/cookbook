@@ -51,6 +51,9 @@ go run ./cmd/server        # listens on :8080 by default, set PORT to override
 | `/api/reference/regions` | GET | The 9 scoped regions and their tiers |
 | `/api/reference/cuisines` | GET | Cuisine dropdown, guaranteed non-empty per entry |
 | `/api/reference/nutrition-targets` | GET | The NT00-NT12 rubric, weights and guidance text |
+| `/api/reference/allergens` | GET | The 11 allergen groups, their corpus tag, and a derived `screens` flag - `false` for the 4 groups with no matching tag anywhere in the corpus |
+| `/api/reference/clinical-markers` | GET | The 28 clinical trigger fields; each carries a `trigger_operator` and a `values` array, one entry per distinct trigger value, each with `value`, `rule_id`, `loadable` and `escalates` |
+| `/api/reference/enums` | GET | Every offerable `recipe_master` vocabulary with live counts |
 
 Useful views once loaded:
 

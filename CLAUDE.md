@@ -861,6 +861,8 @@ internal/db/migrations/
   0008_match_certainty          exact vs probable name match, discrepancy report
   0009_ifct_alias               hand-written food aliases + corrected ingredient view
   0010_recipe_nutrition_recomputed  recipe nutrition rebuilt from corrected ingredients
+  0011_allergen_tag_vocabulary  bridges allergen_mapping groups to the corpus's literal tags
+  0012_gap_register_additions   GAP-017..GAP-020, register goes from 16 rows to 20
 internal/db/integrity_test.go   22 invariants + row counts + idempotency
 internal/db/persona_test.go     5 persona queries + allergy-filter guard
 internal/db/external_test.go    provenance and no-overwrite invariants
