@@ -156,7 +156,59 @@ func (s Stored) ToChildProfile(asOf time.Time) (models.ChildProfile, []string, e
 		}
 	}
 
+	for _, c := range s.Conditions {
+		if c.Class == "acute" {
+			live, note := acuteStatus(c, asOf)
+			if note != "" {
+				notes = append(notes, note)
+			}
+			if !live {
+				continue
+			}
+		}
+		if cp.ClinicalFlags == nil {
+			cp.ClinicalFlags = map[string]string{}
+		}
+		cp.ClinicalFlags[c.TriggerField] = c.FlagValue
+	}
+
 	return cp, notes, nil
+}
+
+// acuteStatus decides whether an acute condition still applies, and returns the note the
+// caller should show either way.
+//
+// Two cases, and the difference matters:
+//
+//   - A condition past a stated window is dropped. A diarrhoea flag entered three weeks
+//     ago must stop pushing NT12, or every later generation is distorted by a fact that
+//     is no longer true.
+//   - A condition with no stated window is KEPT and reported as possibly stale. Dropping
+//     it would mean inventing an expiry the provider has not given (outstanding question
+//     12), and several acute triggers escalate -- failing to apply one is the dangerous
+//     direction, while applying a stale one is merely wrong in the cautious direction.
+func acuteStatus(c ClinicalCondition, asOf time.Time) (live bool, note string) {
+	if c.OnsetDate == nil {
+		// The CHECK constraint on child_clinical_condition forbids this, so reaching it
+		// means the row was written outside this package. Keep the flag and say so.
+		return true, fmt.Sprintf(
+			"%s is acute with no onset date, so its age cannot be checked; it is being applied as entered", c.TriggerField)
+	}
+
+	days := int(asOf.Sub(*c.OnsetDate).Hours() / 24)
+
+	if c.ExpiresAfterDays == nil {
+		return true, fmt.Sprintf(
+			"%s is acute, entered %d days ago, and no expiry window is set for its class; it is still being applied and may be stale (provider question 12)",
+			c.TriggerField, days)
+	}
+
+	if days > *c.ExpiresAfterDays {
+		return false, fmt.Sprintf(
+			"%s is acute, entered %d days ago, past its %d-day window; it no longer drives a nutrition target",
+			c.TriggerField, days, *c.ExpiresAfterDays)
+	}
+	return true, ""
 }
 
 // Save upserts the profile and replaces its child rows in one transaction.

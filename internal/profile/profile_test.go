@@ -175,3 +175,91 @@ func indexOf(h, n string) int {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+func TestToChildProfileDropsExpiredAcuteConditions(t *testing.T) {
+	onset := date("2026-07-01")
+	fourteen := 14
+
+	s := Stored{
+		ChildID:     "T",
+		DateOfBirth: date("2023-08-18"),
+		Conditions: []ClinicalCondition{
+			// Entered six weeks before the reference date with a 14-day window.
+			{TriggerField: "Acute_Diarrhoea", FlagValue: "Yes", Class: "acute",
+				OnsetDate: &onset, ExpiresAfterDays: &fourteen},
+			// Chronic conditions never expire.
+			{TriggerField: "Coeliac_Status", FlagValue: "Confirmed", Class: "chronic"},
+		},
+	}
+	cp, notes, err := s.ToChildProfile(date("2026-08-18"))
+	if err != nil {
+		t.Fatalf("ToChildProfile: %v", err)
+	}
+	if _, present := cp.ClinicalFlags["Acute_Diarrhoea"]; present {
+		t.Fatal("an acute condition 48 days past a 14-day window must not still drive a " +
+			"nutrition target; a stale diarrhoea flag pushing NT12 distorts every later generation")
+	}
+	if cp.ClinicalFlags["Coeliac_Status"] != "Confirmed" {
+		t.Fatalf("a chronic condition must persist; ClinicalFlags = %v", cp.ClinicalFlags)
+	}
+	var explained bool
+	for _, n := range notes {
+		if indexOf(n, "Acute_Diarrhoea") >= 0 {
+			explained = true
+		}
+	}
+	if !explained {
+		t.Fatalf("dropping a condition must be explained, not silent; notes = %v", notes)
+	}
+}
+
+func TestToChildProfileKeepsALiveAcuteCondition(t *testing.T) {
+	onset := date("2026-08-15")
+	fourteen := 14
+	s := Stored{
+		ChildID: "T", DateOfBirth: date("2023-08-18"),
+		Conditions: []ClinicalCondition{
+			{TriggerField: "Acute_Diarrhoea", FlagValue: "Yes", Class: "acute",
+				OnsetDate: &onset, ExpiresAfterDays: &fourteen},
+		},
+	}
+	cp, _, err := s.ToChildProfile(date("2026-08-18"))
+	if err != nil {
+		t.Fatalf("ToChildProfile: %v", err)
+	}
+	if cp.ClinicalFlags["Acute_Diarrhoea"] != "Yes" {
+		t.Fatalf("an acute condition 3 days into a 14-day window is live; ClinicalFlags = %v", cp.ClinicalFlags)
+	}
+}
+
+func TestToChildProfileFlagsAnAcuteConditionWithNoWindow(t *testing.T) {
+	onset := date("2026-01-01")
+	s := Stored{
+		ChildID: "T", DateOfBirth: date("2023-08-18"),
+		Conditions: []ClinicalCondition{
+			// No expires_after_days: the clinical window for this class is outstanding to
+			// the provider (question 12), so the code cannot invent one.
+			{TriggerField: "Persistent_Vomiting", FlagValue: "Yes", Class: "acute", OnsetDate: &onset},
+		},
+	}
+	cp, notes, err := s.ToChildProfile(date("2026-08-18"))
+	if err != nil {
+		t.Fatalf("ToChildProfile: %v", err)
+	}
+	// Kept, because dropping it would mean inventing an expiry window nobody has stated,
+	// and because Persistent_Vomiting escalates -- failing to apply it is the dangerous
+	// direction. But the staleness must be visible.
+	if cp.ClinicalFlags["Persistent_Vomiting"] != "Yes" {
+		t.Fatal("an acute condition with no stated window must still apply: inventing an " +
+			"expiry is exactly what the hard rule forbids")
+	}
+	var warned bool
+	for _, n := range notes {
+		if indexOf(n, "230 days") >= 0 || indexOf(n, "no expiry window") >= 0 {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Fatalf("an acute condition with no window must be reported as possibly stale; notes = %v", notes)
+	}
+}
