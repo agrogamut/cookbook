@@ -7,6 +7,10 @@ export interface ChildProfile {
   diet_type?: "Vegetarian" | "Non-vegetarian" | "Eggetarian";
   vegan?: boolean;
   allergens?: string[];
+  /** Ranker input, never a filter: AS-002 marks a suspected allergy hard_block = N, so
+   *  these are ranked down and never excluded. Distinct from `allergens`, which is step
+   *  2's hard filter and is never relaxed. */
+  suspected_allergens?: string[];
   clinical_flags?: Record<string, string>;
   clinical_marker?: string;
   region_culture?: string;

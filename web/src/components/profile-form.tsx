@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { SuspectedAllergenFieldset } from "./suspected-allergen-fieldset";
 import { getAllergens, getClinicalMarkers, getEnums, getRegions, getCuisines } from "@/lib/api";
 import type {
   Allergen, ChildProfile, ClinicalMarker, ClinicalMarkerValue, Cuisine, Region, ReferenceEnums,
@@ -106,6 +107,7 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
   const [dietType, setDietType] = useState("");
   const [vegan, setVegan] = useState(false);
   const [allergens, setAllergens] = useState<string[]>([]);
+  const [suspectedAllergens, setSuspectedAllergens] = useState<string[]>([]);
   const [clinicalMarker, setClinicalMarker] = useState("");
   const [clinicalFlags, setClinicalFlags] = useState<Record<string, string>>({});
   const [mealType, setMealType] = useState("");
@@ -139,6 +141,19 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
     setAllergens((prev) =>
       prev.includes(group) ? prev.filter((g) => g !== group) : [...prev, group]);
   }
+
+  function toggleSuspectedAllergen(group: string) {
+    setSuspectedAllergens((prev) =>
+      prev.includes(group) ? prev.filter((g) => g !== group) : [...prev, group]);
+  }
+
+  // Declaring a group confirmed supersedes any suspicion of it. The fieldset disables a
+  // group that is already declared, but an operator can suspect a group first and confirm
+  // it afterwards, which leaves both set. Sending both would ask the engine to demote
+  // recipes its hard filter has already removed -- harmless, but it makes the step note
+  // claim work that did not happen. Resolved at submit rather than in the toggle, so
+  // unticking the confirmed allergen restores the suspicion instead of silently losing it.
+  const effectiveSuspected = suspectedAllergens.filter((g) => !allergens.includes(g));
 
   // clinical_flags is Record<field, value> -- one value per field, matching what the
   // engine's triggerFires actually compares. Every setter below sources its value from a
@@ -174,6 +189,7 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
       diet_type: dietType ? (dietType as ChildProfile["diet_type"]) : undefined,
       vegan: vegan || undefined,
       allergens: allergens.length ? allergens : undefined,
+      suspected_allergens: effectiveSuspected.length ? effectiveSuspected : undefined,
       clinical_marker: clinicalMarker || undefined,
       clinical_flags: Object.keys(clinicalFlags).length ? clinicalFlags : undefined,
       meal_type: mealType || undefined,
@@ -255,6 +271,13 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
           allergy can be recorded, and every result is labelled unscreened for them.
         </p>
       </fieldset>
+
+      <SuspectedAllergenFieldset
+        options={allergenOptions}
+        selected={suspectedAllergens}
+        declared={allergens}
+        onToggle={toggleSuspectedAllergen}
+      />
 
       <div className="space-y-1">
         <span className={label}>Nutrition target marker</span>
