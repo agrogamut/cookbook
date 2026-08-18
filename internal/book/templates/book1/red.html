@@ -1,0 +1,12 @@
+{{ define "B1-RED-01" }}
+{{/* clinical_warning_visibility: high. One callout, forced to warning severity regardless of
+     what the section data claims, because this template's entire reason to exist is the
+     high-contrast red-flag panel -- B1-012 developmental red flags -- and a callout drawn
+     here at "info" strength would be the wrong visual treatment for that content. */}}
+{{ with .Callout }}
+<div class="callout warning">
+  <h3>Warning: {{ .Heading }}</h3>
+  <p>{{ .Body }}</p>
+</div>
+{{ end }}
+{{ end }}

@@ -1,0 +1,14 @@
+{{ define "B1-COVER-01" }}
+<div class="cover">
+  <div class="brand">MADAMGY</div>
+  <h1>My Child's Growth, Nutrition &amp; Development Companion</h1>
+  <p class="subtitle">A personalized working guide for feeding, growth, vaccination,
+     development and everyday care</p>
+  <div class="name-box">
+    <div class="name">{{ .Child.DisplayName }}</div>
+    <div>Age: {{ .Child.AgeLabel }}</div>
+  </div>
+  <p class="subtitle">Prepared after consultation</p>
+</div>
+<div class="page-break"></div>
+{{ end }}

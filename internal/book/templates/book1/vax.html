@@ -1,0 +1,27 @@
+{{ define "B1-VAX-01" }}
+<table>
+  <thead>
+    <tr>
+      <th>Age / due</th><th>Vaccine</th><th>Given date &amp; time</th>
+      <th>Brand / batch</th><th>Reaction / note</th><th>Next due</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{ range .Rows }}
+    <tr>
+      <td>{{ .Label }}</td>
+      <td>{{ .Reference }}</td>
+      {{/* Four blank columns, always. The schedule comes from the approved IAP master; the
+           administration record is the parent's to write. This template has no branch that
+           can print a date, which is how the prototype's rule is enforced rather than
+           merely followed. */}}
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+    </tr>
+    {{ end }}
+  </tbody>
+</table>
+{{ with .Callout }}{{ template "callout" . }}{{ end }}
+{{ end }}

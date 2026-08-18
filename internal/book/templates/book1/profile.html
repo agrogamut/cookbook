@@ -1,0 +1,23 @@
+{{ define "B1-PROFILE-01" }}
+{{/* Prototype page 2: a two-column table, "Current profile" beside "Personalized summary".
+     Label carries the current-profile fact as recorded (e.g. "Feeding stage: complementary
+     feeding"); Note carries the personalized narrative built from it. Reference and Actual
+     are not part of this shape -- they belong to the comparison tables, not the profile
+     page -- so this template deliberately leaves them unread rather than repurposing them. */}}
+<table>
+  <thead>
+    <tr>
+      <th>Current profile</th><th>Personalized summary</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{ range .Rows }}
+    <tr>
+      <td>{{ .Label }}</td>
+      <td>{{ if .Note }}{{ .Note }}{{ else }}<span class="write-line"></span>{{ end }}</td>
+    </tr>
+    {{ end }}
+  </tbody>
+</table>
+{{ with .Callout }}{{ template "callout" . }}{{ end }}
+{{ end }}

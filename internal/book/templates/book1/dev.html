@@ -1,0 +1,25 @@
+{{ define "B1-DEV-01" }}
+<table>
+  <thead>
+    <tr>
+      <th>Domain</th><th>Age-referenced skill from approved master</th>
+      <th>Actual observation</th><th>Observed date</th><th>Concern / action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{ range .Rows }}
+    <tr>
+      <td>{{ .Label }}</td>
+      <td>{{ .Reference }}</td>
+      {{/* Observation, date and concern are the parent's and clinician's to record, the same
+           reason the vaccination tracker leaves its administration columns blank: a
+           milestone this project did not observe must never appear pre-filled. */}}
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+    </tr>
+    {{ end }}
+  </tbody>
+</table>
+{{ with .Callout }}{{ template "callout" . }}{{ end }}
+{{ end }}

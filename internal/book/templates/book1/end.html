@@ -1,0 +1,15 @@
+{{ define "B1-END-01" }}
+{{/* Dispatched with $b.Metadata rather than the Section: the release fields the contract
+     names live on Book1.Metadata, and the section's own Title/Subtitle are already drawn
+     by the surrounding section-header before this template runs. */}}
+<table>
+  <tbody>
+    <tr><td>Book version</td><td class="mono">{{ .BookVersion }}</td></tr>
+    <tr><td>Release ID</td><td class="mono">{{ if .ReleaseID }}{{ .ReleaseID }}{{ else }}<span class="write-line"></span>{{ end }}</td></tr>
+    <tr><td>Generation date</td><td class="mono">{{ .GenerationDate.Format "2006-01-02" }}</td></tr>
+    {{/* The provider's own review status, carried verbatim -- never overridden, never
+         rendered as an approval this project has not received. */}}
+    <tr><td>Review status</td><td>{{ .ReviewStatus }}</td></tr>
+  </tbody>
+</table>
+{{ end }}

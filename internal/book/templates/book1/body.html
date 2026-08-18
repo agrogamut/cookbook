@@ -1,2 +1,27 @@
-{{/* Placeholder. The Book 1 template task replaces this with the real "body" definition. */}}
-{{ define "body" }}{{ end }}
+{{ define "body" }}
+{{ $b := .Data }}
+{{ template "B1-COVER-01" $b }}
+{{ range $b.Sections }}
+  <section class="page-break">
+    <div class="section-header">
+      <h2>{{ .Title }}</h2>
+      {{ with .Subtitle }}<p>{{ . }}</p>{{ end }}
+    </div>
+    {{/* Dispatch on the provider's own template id. An unknown id renders nothing rather
+         than falling back to a generic table: a fallback would silently give clinical
+         content the wrong visual treatment, which is the failure B1-RED-01 exists to
+         prevent. AssembleBook1 has already reported the block as skipped. */}}
+    {{ if eq .TemplateID "B1-PROFILE-01" }}{{ template "B1-PROFILE-01" . }}
+    {{ else if eq .TemplateID "B1-COMPARE-01" }}{{ template "B1-COMPARE-01" . }}
+    {{ else if eq .TemplateID "B1-VAX-01" }}{{ template "B1-VAX-01" . }}
+    {{ else if eq .TemplateID "B1-DEV-01" }}{{ template "B1-DEV-01" . }}
+    {{ else if eq .TemplateID "B1-RED-01" }}{{ template "B1-RED-01" . }}
+    {{/* B1-END-01 prints the release footer -- book_version, release_id, generation_date,
+         review_status -- which live on Book1.Metadata, not on the Section. The section's
+         own Title/Subtitle are already drawn by the section-header above, so the release
+         panel is handed $b.Metadata directly rather than the Section it has no use for. */}}
+    {{ else if eq .TemplateID "B1-END-01" }}{{ template "B1-END-01" $b.Metadata }}
+    {{ end }}
+  </section>
+{{ end }}
+{{ end }}
