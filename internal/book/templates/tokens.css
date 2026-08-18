@@ -12,7 +12,11 @@
      coloured callout with a text label. */
   --body-size: 10pt;
   --table-size: 9pt;
-  --small-size: 8.5pt;
+  --small-size: 8.5pt;  /* minimum_table_pt: table content only */
+  /* Every run of text that is not table content is bound by the contract's
+     minimum_body_pt of 9.5, and the contract names no caption exemption. This token sits
+     exactly on that floor -- smaller than body, and no smaller than the contract permits. */
+  --caption-size: 9.5pt;
 
   --font-body: "Noto Sans", "Segoe UI", system-ui, sans-serif;
   /* Bengali and Devanagari need a font with the conjuncts; Noto covers both scripts and
@@ -72,7 +76,7 @@ p, li { max-width: var(--body-measure); }
   break-after: avoid;
 }
 .section-header h2 { margin: 0; font-size: 18pt; }
-.section-header p { margin: 3mm 0 0; font-size: var(--small-size); opacity: 0.9; }
+.section-header p { margin: 3mm 0 0; font-size: var(--caption-size); opacity: 0.9; }
 
 /* table_header_repeat: true. thead repeating across pages is native to print CSS, which is
    one of the reasons this renderer is HTML rather than a drawing library. */
@@ -97,7 +101,7 @@ tbody tr:nth-child(even) { background: var(--zebra); }
   padding: 4mm;
 }
 .card h3 { margin: 0 0 2mm; color: var(--brand-deep); font-size: 12pt; }
-.card p { margin: 0; font-size: var(--small-size); }
+.card p { margin: 0; font-size: var(--caption-size); }
 
 /* Three callout severities, drawn in the prototypes. clinical_warning_visibility is "high",
    and avoid_color_only_meaning means the label carries the severity in words too. */
@@ -119,7 +123,7 @@ tbody tr:nth-child(even) { background: var(--zebra); }
   color: var(--warning-strong);
   padding: 4mm;
   margin: 6mm 0;
-  font-size: var(--small-size);
+  font-size: var(--caption-size);
 }
 
 .cover { text-align: center; padding-top: 40mm; }
