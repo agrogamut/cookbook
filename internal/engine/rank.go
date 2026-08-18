@@ -455,8 +455,6 @@ func capToTarget(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile,
 				source = "engine default, no meal_category_target row for this meal type"
 			}
 			// no row found (meal_category_target only covers named categories): keep the 25 default rather than error
-		} else {
-			source = "engine default, no meal category given"
 		}
 	}
 	// The target and what was returned diverge when fewer candidates survived than the

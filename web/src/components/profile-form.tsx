@@ -310,15 +310,18 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
                   </button>
                   {control.mixedCount > 0 && (
                     <span className="text-xs text-muted-foreground">
-                      +{control.mixedCount} recorded value(s) with no loadable rule, not offered
+                      +{control.mixedCount} recorded value(s) not offered: no loadable rule, or a loaded rule the engine cannot classify
                     </span>
                   )}
                 </div>
               );
             }
 
-            // select: several loadable values. Only loadable values are ever listed --
-            // a non-loadable value the provider recorded is never offerable.
+            // select: several offerable values. Only values that are both loadable AND
+            // escalating are listed. Two kinds of value are left off: one the engine's query
+            // never loads, and one it loads but cannot classify -- the latter would make
+            // generation refuse rather than filter, so offering it would promise a screen
+            // that cannot happen.
             const current = clinicalFlags[m.trigger_field] ?? NONE;
             const selected = control.values.find((v) => v.value === current);
             const holds = selected ? selected.escalates : anyEscalates;
@@ -347,7 +350,7 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
                 </Select>
                 {control.mixedCount > 0 && (
                   <span className="text-xs text-muted-foreground">
-                    +{control.mixedCount} recorded value(s) with no loadable rule, not offered
+                    +{control.mixedCount} recorded value(s) not offered: no loadable rule, or a loaded rule the engine cannot classify
                   </span>
                 )}
               </div>
@@ -359,13 +362,14 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
           the engine's own rule query actually loads; outlined in red when the selected (or,
           if nothing is selected, any offerable) value holds generation for specialist
           review rather than filtering it -- no recipe list is returned for those. A dashed,
-          unclickable marker has no rule the engine can act on at all: either its operator
+          unclickable marker has nothing this console can usefully send: either its operator
           has no case in the engine's switch (Age_Months, Texture_Skill, and the one
           substring-matching allergy flag, which belongs in Declared allergens instead), or
           every value the provider recorded for it sits below the tier clinicalFilter loads,
-          so no value of it can change a result. A dropdown may still show a "+N recorded,
-          not offered" note: the provider recorded a value for this marker that carries no
-          loadable rule, and it is left off the list rather than hidden entirely.
+          or the engine loads a rule for it but cannot classify it, in which case setting it
+          would make generation refuse rather than filter. A dropdown may still show a "+N
+          recorded, not offered" note, which covers both of the last two cases: the value is
+          left off the list rather than hidden entirely, because the provider did record it.
         </p>
       </fieldset>
 
