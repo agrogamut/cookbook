@@ -61,6 +61,12 @@ func Run(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (models
 	}
 	steps = append(steps, step5)
 
+	ranked, step2rank, err := applySuspectedAllergenRank(ctx, pool, p, ranked)
+	if err != nil {
+		return models.EngineResult{}, err
+	}
+	steps = append(steps, step2rank)
+
 	ranked, step6, err := applyMealFilter(ctx, pool, p, ranked)
 	if err != nil {
 		return models.EngineResult{}, err

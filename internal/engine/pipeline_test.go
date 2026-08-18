@@ -37,8 +37,8 @@ func TestRunPersonaQueriesNeverCollapse(t *testing.T) {
 			if len(result.Recipes) == 0 {
 				t.Fatalf("persona %q returned zero recipes; ranker steps must never collapse a result set. Steps: %+v", c.name, result.Steps)
 			}
-			if len(result.Steps) != 13 {
-				t.Fatalf("persona %q: expected 13 recorded steps (1-13; step 8 has no data source and step 14 is a human release gate, neither runs in the engine), got %d", c.name, len(result.Steps))
+			if len(result.Steps) != 14 {
+				t.Fatalf("persona %q: expected 14 recorded steps (1-13 plus step 2's ranking half, which is recorded as a second StepResult; step 8 has no data source and step 14 is a human release gate, neither runs in the engine), got %d", c.name, len(result.Steps))
 			}
 		})
 	}

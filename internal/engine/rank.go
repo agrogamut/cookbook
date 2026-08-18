@@ -349,6 +349,125 @@ func dedupeNearDuplicates(ctx context.Context, pool *pgxpool.Pool, recipes []mod
 	}, nil
 }
 
+// applySuspectedAllergenRank is the ranking half of engine step 2.
+//
+// Step 2's hard filter removes confirmed allergens and is never relaxed. This handles the
+// other state the provider's masters distinguish and the flat allergen list cannot:
+// AS-002 marks a suspected allergy hard_block = N, so it must rank down and raise a review
+// flag rather than exclude.
+//
+// That is not the timid choice, it is the correct one. Unnecessary elimination is itself a
+// recognised cause of faltering growth in children, so treating every suspicion as a
+// confirmation trades one risk for a different one rather than removing risk.
+//
+// A group with no corpus tag demotes nothing, for the same reason it screens nothing --
+// there is no tag to match. That is reported so it does not read as a working demotion.
+func applySuspectedAllergenRank(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile, recipes []models.RankedRecipe) ([]models.RankedRecipe, models.StepResult, error) {
+	stepIn := len(recipes)
+	if len(p.SuspectedAllergens) == 0 || stepIn == 0 {
+		return recipes, models.StepResult{
+			Step: 2, Name: "Allergy - suspected, ranker", Kind: "ranker",
+			CandidatesIn: stepIn, CandidatesOut: stepIn,
+			Note: "no suspected allergens declared, step is a no-op",
+		}, nil
+	}
+
+	ids := make([]string, len(recipes))
+	for i, r := range recipes {
+		ids[i] = r.RecipeID
+	}
+
+	rows, err := pool.Query(ctx, `
+		SELECT DISTINCT r.recipe_id
+		FROM recipe_master r
+		JOIN allergen_tag_vocabulary v
+		  ON v.allergen_group = ANY($2) AND v.corpus_tag IS NOT NULL
+		WHERE r.recipe_id = ANY($1)
+		  AND (r.allergen_tags ILIKE '%' || v.corpus_tag || '%'
+		       OR EXISTS (
+		           SELECT 1 FROM recipe_ingredient_mapping m
+		           WHERE m.recipe_id = r.recipe_id
+		             AND m.ingredient_allergen_tag ILIKE '%' || v.corpus_tag || '%'))`,
+		ids, p.SuspectedAllergens)
+	if err != nil {
+		return nil, models.StepResult{}, fmt.Errorf("engine: suspected allergen rank: %w", err)
+	}
+	defer rows.Close()
+
+	demote := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, models.StepResult{}, fmt.Errorf("engine: suspected allergen scan: %w", err)
+		}
+		demote[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, models.StepResult{}, fmt.Errorf("engine: suspected allergen rows: %w", err)
+	}
+
+	// Larger than every other adjustment in this file (culture 0.05, availability 0.05,
+	// budget 0.03, diet 0.04, duplicate -0.02) because a suspected allergen is a safety
+	// signal rather than a preference, and it should push a recipe clearly down the list.
+	// Still bounded, because it must not empty a page or override the nutrition ordering
+	// outright -- that is what the confirmed state is for.
+	const penalty = 0.15
+
+	out := make([]models.RankedRecipe, len(recipes))
+	copy(out, recipes)
+	for i := range out {
+		if demote[out[i].RecipeID] {
+			out[i].RankedScore -= penalty
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].RankedScore > out[j].RankedScore })
+
+	unscreened, err := unscreenedGroups(ctx, pool, p.SuspectedAllergens)
+	if err != nil {
+		return nil, models.StepResult{}, err
+	}
+
+	note := fmt.Sprintf("%d of %d candidates carry a suspected allergen tag and were ranked down by %.2f; none were excluded, because AS-002 marks a suspected allergy hard_block = N",
+		len(demote), stepIn, penalty)
+	if len(unscreened) > 0 {
+		note += fmt.Sprintf(". Suspected group(s) %v have no corpus tag, so they demoted nothing", unscreened)
+	}
+
+	return out, models.StepResult{
+		Step: 2, Name: "Allergy - suspected, ranker", Kind: "ranker",
+		CandidatesIn: stepIn, CandidatesOut: stepIn, Note: note,
+	}, nil
+}
+
+// unscreenedGroups returns the subset of groups with no corpus tag. Shared by the
+// suspected-allergen ranker and step 2's hard filter so the two can never disagree about
+// which groups the corpus cannot screen.
+func unscreenedGroups(ctx context.Context, pool *pgxpool.Pool, groups []string) ([]string, error) {
+	if len(groups) == 0 {
+		return nil, nil
+	}
+	rows, err := pool.Query(ctx, `
+		SELECT allergen_group FROM allergen_tag_vocabulary
+		WHERE allergen_group = ANY($1) AND corpus_tag IS NULL
+		ORDER BY allergen_group`, groups)
+	if err != nil {
+		return nil, fmt.Errorf("engine: unscreened group lookup: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var g string
+		if err := rows.Scan(&g); err != nil {
+			return nil, fmt.Errorf("engine: unscreened group scan: %w", err)
+		}
+		out = append(out, g)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("engine: unscreened group rows: %w", err)
+	}
+	return out, nil
+}
+
 func jaccard(a, b map[string]bool) float64 {
 	if len(a) == 0 || len(b) == 0 {
 		return 0

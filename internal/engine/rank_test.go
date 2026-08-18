@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/madamgy/recipie/internal/models"
 )
 
@@ -101,5 +102,96 @@ func TestDedupeNearDuplicatesDemotesSharedCoreIngredients(t *testing.T) {
 	}
 	if !reordered {
 		t.Fatal("dedupe produced identical order to the input; expected at least one recipe to move after a demotion")
+	}
+}
+
+func TestApplySuspectedAllergenRankDemotesButNeverRemoves(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	ids, _, err := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	if err != nil {
+		t.Fatalf("ageFilter: %v", err)
+	}
+	ranked, _, err := rankByTarget(ctx, pool, "NT00", ids)
+	if err != nil {
+		t.Fatalf("rankByTarget: %v", err)
+	}
+
+	p := models.ChildProfile{AgeMonths: 36, SuspectedAllergens: []string{"Peanut"}}
+	out, step, err := applySuspectedAllergenRank(ctx, pool, p, ranked)
+	if err != nil {
+		t.Fatalf("applySuspectedAllergenRank: %v", err)
+	}
+
+	// AS-002 marks suspected allergy hard_block = N. Unnecessary elimination is itself a
+	// recognised cause of faltering growth, so this must never behave like step 2.
+	if len(out) != len(ranked) {
+		t.Fatalf("a suspected allergen must not remove recipes: in=%d out=%d", len(ranked), len(out))
+	}
+	if step.CandidatesIn != step.CandidatesOut {
+		t.Fatalf("suspected-allergen step must report equal in/out: %+v", step)
+	}
+	if step.Note == "" {
+		t.Fatal("the step must say how many recipes it demoted and that it excluded none")
+	}
+
+	// Peanut-tagged recipes must be denser in the bottom half than the top half.
+	half := len(out) / 2
+	if half < 4 {
+		t.Skip("candidate pool too small to measure")
+	}
+	tagged := taggedRecipeIDs(t, pool, "Peanut")
+	var top, bottom int
+	for i, r := range out {
+		if !tagged[r.RecipeID] {
+			continue
+		}
+		if i < half {
+			top++
+		} else {
+			bottom++
+		}
+	}
+	if top+bottom == 0 {
+		t.Fatal("no peanut-tagged recipes in the pool; the fixture assumption is wrong")
+	}
+	if bottom <= top {
+		t.Fatalf("suspected allergen not demoted: %d tagged in the top half, %d in the bottom", top, bottom)
+	}
+}
+
+func taggedRecipeIDs(t *testing.T, pool *pgxpool.Pool, group string) map[string]bool {
+	t.Helper()
+	rows, err := pool.Query(context.Background(), `
+		SELECT r.recipe_id FROM recipe_master r
+		JOIN allergen_tag_vocabulary v ON v.allergen_group = $1 AND v.corpus_tag IS NOT NULL
+		WHERE r.allergen_tags ILIKE '%' || v.corpus_tag || '%'`, group)
+	if err != nil {
+		t.Fatalf("tagged lookup: %v", err)
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			t.Fatalf("tagged scan: %v", err)
+		}
+		out[id] = true
+	}
+	return out
+}
+
+func TestApplySuspectedAllergenRankIsANoOpWhenNoneDeclared(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	ids, _, _ := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	ranked, _, _ := rankByTarget(ctx, pool, "NT00", ids)
+
+	out, step, err := applySuspectedAllergenRank(ctx, pool, models.ChildProfile{AgeMonths: 36}, ranked)
+	if err != nil {
+		t.Fatalf("applySuspectedAllergenRank: %v", err)
+	}
+	if len(out) != len(ranked) || step.CandidatesIn != step.CandidatesOut {
+		t.Fatalf("no suspected allergens must be a pure no-op: %+v", step)
 	}
 }

@@ -129,27 +129,10 @@ func allergyFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfil
 	// Mollusc, Mustard, Sulphites, Tree nuts as verified live) correctly excludes zero
 	// recipes -- there's genuinely nothing tagged. That is indistinguishable from an
 	// ordinary no-op exclusion unless it's called out explicitly, so name it here.
-	absentRows, err := pool.Query(ctx, `
-		SELECT allergen_group FROM allergen_tag_vocabulary
-		WHERE allergen_group = ANY($1) AND corpus_tag IS NULL
-		ORDER BY allergen_group`, p.Allergens)
+	absent, err := unscreenedGroups(ctx, pool, p.Allergens)
 	if err != nil {
-		return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter absent-tag lookup: %w", err)
+		return nil, models.StepResult{}, err
 	}
-	var absent []string
-	for absentRows.Next() {
-		var g string
-		if err := absentRows.Scan(&g); err != nil {
-			absentRows.Close()
-			return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter absent-tag scan: %w", err)
-		}
-		absent = append(absent, g)
-	}
-	if err := absentRows.Err(); err != nil {
-		absentRows.Close()
-		return nil, models.StepResult{}, fmt.Errorf("engine: allergy filter absent-tag rows: %w", err)
-	}
-	absentRows.Close()
 
 	note := ""
 	if len(absent) > 0 {
