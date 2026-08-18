@@ -26,8 +26,12 @@ type TableSpec struct {
 // reverse, so foreign keys hold at every point without needing CASCADE.
 //
 // Sheets deliberately not imported are recorded in gap_register rather than omitted
-// silently: the Review/Version Control workbook (an empty scaffold), the Page Registry
-// and Book 1/2 content blocks (PDF assembly, not consumed by the web engine).
+// silently: the Review/Version Control workbook (an empty scaffold) and the Page Registry
+// (a PDF pagination concern with no web consumer).
+//
+// Book1_Content_Master was in that list until migration 0013. It is not a PDF-assembly
+// concern: it is the entire general content layer of output Book 1, including the
+// provider's own Book 1 assembly pipeline, and nothing downstream can be built without it.
 var Specs = []TableSpec{
 	{
 		Table: "ingredient_source_register", File: "MadamGY_Ingredient_Super_Master_Complete_V1_Cost_Filled.xlsx",
@@ -137,5 +141,53 @@ var Specs = []TableSpec{
 		Table: "meal_category_target", File: "MadamGY_Book2_Content_Master_V1.xlsx",
 		Sheet: "Meal Category Targets", HeaderRow: 4,
 		PrimaryKey: []string{"meal_category_id"}, FirstCol: "meal_category_id",
+	},
+	// ---- Book 1 content layer, migration 0013 -------------------------------
+	// Header rows are mixed 3 and 4 within this one workbook. Each is declared, never
+	// guessed: xlsx.Load errors if the declared row does not hold the expected FirstCol.
+	{
+		Table: "book1_content_block", File: "MadamGY_Book1_Content_Master_V1_1_DailyLife.xlsx",
+		Sheet: "Book 1 Content Master", HeaderRow: 4,
+		PrimaryKey: []string{"block_id"}, FirstCol: "block_id",
+	},
+	{
+		Table: "book1_vaccine_schedule", File: "MadamGY_Book1_Content_Master_V1_1_DailyLife.xlsx",
+		Sheet: "IAP Vaccination 2025", HeaderRow: 4,
+		PrimaryKey: []string{"schedule_id"}, FirstCol: "schedule_id",
+	},
+	{
+		Table: "book1_development_milestone", File: "MadamGY_Book1_Content_Master_V1_1_DailyLife.xlsx",
+		Sheet: "Development Milestones", HeaderRow: 4,
+		PrimaryKey: []string{"milestone_id"}, FirstCol: "milestone_id",
+	},
+	{
+		Table: "book1_monitoring_template", File: "MadamGY_Book1_Content_Master_V1_1_DailyLife.xlsx",
+		Sheet: "Parent Monitoring Templates", HeaderRow: 3,
+		PrimaryKey: []string{"template_id"}, FirstCol: "template_id",
+	},
+	{
+		Table: "book1_illness_feeding_block", File: "MadamGY_Book1_Content_Master_V1_1_DailyLife.xlsx",
+		Sheet: "Illness Feeding Content", HeaderRow: 3,
+		PrimaryKey: []string{"illness_block_id"}, FirstCol: "illness_block_id",
+	},
+	{
+		Table: "book1_assembly_step", File: "MadamGY_Book1_Content_Master_V1_1_DailyLife.xlsx",
+		Sheet: "Book Assembly Logic", HeaderRow: 3,
+		PrimaryKey: []string{"order"}, FirstCol: "order",
+	},
+	{
+		Table: "book1_evidence_source", File: "MadamGY_Book1_Content_Master_V1_1_DailyLife.xlsx",
+		Sheet: "Evidence Register", HeaderRow: 3,
+		PrimaryKey: []string{"source_id"}, FirstCol: "source_id",
+	},
+	{
+		Table: "book1_release_check", File: "MadamGY_Book1_Content_Master_V1_1_DailyLife.xlsx",
+		Sheet: "Review Release Checklist", HeaderRow: 3,
+		PrimaryKey: []string{"check_id"}, FirstCol: "check_id",
+	},
+	{
+		Table: "book1_daily_life_module", File: "MadamGY_Book1_Content_Master_V1_1_DailyLife.xlsx",
+		Sheet: "Daily Life Development", HeaderRow: 4,
+		PrimaryKey: []string{"dailylife_id"}, FirstCol: "dailylife_id",
 	},
 }
