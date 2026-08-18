@@ -17,17 +17,17 @@ means **no preference** - never "none", never a default.
 |---|---|---|---|---|
 | `age_months` | int | hard filter | `recipe_master.min/max_age_months` | yes |
 | `allergens[]` | string[] | hard filter | `allergen_tag_vocabulary` | yes |
-| `diet_type` | string | hard filter, **nested** | `recipe_master.diet_type` | yes |
+| `diet_type` | string | hard filter, **nested**, plus step 4 preference ranker | `recipe_master.diet_type` | yes |
 | `vegan` | bool | hard filter | 7 animal-derived food groups + Milk allergen tag | yes |
 | `meal_type` | string | ranker | `recipe_master.meal_type` | yes |
 | `clinical_marker` | string | selects nutrition target | `nutrition_target_master` | yes |
 | `budget_band` | string | ranker | `recipe_master.budget_band` | yes |
-| `region_culture` | string | ranker | `region_focus` | **no** |
-| `cuisine_code` | string | ranker | `cuisine_option` | **no** |
-| `clinical_flags{}` | map | rules / escalation | `clinical_rule_master.trigger_field` | **no** |
-| `max_prep_time_min` | int | ranker | 4 distinct values exist | **no** |
-| `max_cook_time_min` | int | ranker | 6 distinct values exist | **no** |
-| `limit` | int | result count | `meal_category_target` default 25 | **no** |
+| `region_culture` | string | ranker | `region_focus` | yes |
+| `cuisine_code` | string | ranker | `cuisine_option` | yes |
+| `clinical_flags{}` | map | rules / escalation | `clinical_rule_master.trigger_field` | yes |
+| `max_prep_time_min` | int | ranker | 4 distinct values exist | yes |
+| `max_cook_time_min` | int | ranker | 6 distinct values exist | yes |
+| `limit` | int | result count | `meal_category_target` default 25 | yes |
 
 Four hard filters. Only **two are a safety boundary**: age and allergens. There is no
 operator override for either, and no "show excluded anyway" toggle. Diet type and vegan are
@@ -35,6 +35,19 @@ also hard filters but enforce a family's declared practice, not a clinical limit
 
 Everything else ranks. A ranker reorders and can never empty a result set, which is what
 solves the original filter-collapse blocker.
+
+`diet_type` is recorded twice in the engine's step accounting: once as its hard filter
+(step 4, `Kind: hard_filter`) and once as a ranker (step 4, `Kind: ranker`, name "Declared
+food practice - preference") that runs after step 5 has scored the pool. Being permitted a
+dish by the nested chain is not the same as wanting it first - a non-vegetarian family is
+correctly permitted all 940 recipes, of which 828 are vegetarian, so without the ranker
+page one of their result list is dal. The ranker applies a fixed +0.04 boost
+(`internal/engine/rank.go`, `applyDietRank`) to every candidate whose `diet_type` matches
+the declared practice exactly, sized between the budget boost (0.03) and the culture boost
+(0.05) so it can reorder within a band of similar nutrition fitness and never override the
+nutrition score. This is why a single `EngineResult.Steps` array carries 14 entries for
+the spec's 13 automated steps (1-13; step 8 has no data source and is recorded as an
+explicit no-op, step 14 is the human release gate and never runs in the engine).
 
 ---
 
@@ -102,8 +115,19 @@ failure.**
 | Mustard | none | **no** |
 | Sulphites | none | **no** |
 
-The last four are accepted and remove nothing. This is the most dangerous known gap - see
-`docs/not-built.md` section 1.1.
+`Wheat` is not a corpus string itself - it resolves through `allergen_tag_vocabulary`
+(migration `0011`) to the literal tag the corpus actually carries, `Gluten-containing
+cereal`. Before that migration a declared `Wheat` allergy silently excluded zero recipes
+even though wheat-containing recipes exist and are tagged; the vocabulary table makes the
+naming match explicit instead of leaving it embedded in `allergyFilter`'s SQL.
+
+The last four are accepted and remove nothing - a genuine absence of any matching corpus
+tag, not a naming mismatch. Every engine result carries this as data rather than a
+document footnote: `EngineResult.unscreened_allergens` lists which of the profile's
+declared allergen groups screened nothing on that call, so a client can render a
+persistent "not screened - no corpus coverage" state next to the field and on the results
+rather than a silent no-op. Tracked as `GAP-017` (blocker severity) in the gap register
+until the provider tags the corpus for these four groups.
 
 ### budget_band - 3 values, ranker
 
@@ -203,6 +227,39 @@ than filter it.
 | `Post_Vaccine_Context` | `CR-VAX-001` | No vaccine-specific therapeutic diet |
 | `Critical_Field_Completeness` | `CR-DATA-001` | Missing critical data stops evaluation |
 | `Multiple_Active_Rules` | `CR-DATA-002` | Highest safety priority wins |
+
+`/api/reference/clinical-markers` offers all 28 trigger fields, one row per field, each
+carrying a singular `trigger_operator` and a `values` array whose elements each carry
+`value`, `rule_id`, `loadable` and `escalates` - escalation is a fact about a value, not
+the field as a whole (`Coeliac_Status` escalates on `Confirmed` but not on
+`Suspected_Not_Confirmed`, which the engine's query never loads at all).
+
+**`Confirmed_or_Highly_Suspected_Allergen` (`CR-ALL-001`) behaves differently from every
+other trigger field.** The rule requires excluding a confirmed allergen - which step 2
+already does, but only for allergens also listed in the profile's `allergens` field.
+Setting this flag alone, without the matching entry in `allergens`, is a half-specified
+profile: the rule fires but is neither at the specialist tier nor in the engine's
+escalation-domain map, so `internal/engine/clinical.go` refuses the whole profile with an
+explicit classification error rather than half-apply a clinical filter. That is still true
+of the engine today. It is not reachable through the console, though: `profile-form.tsx`
+renders this marker inert (`trigger_operator = contains` has no case in the engine's own
+`triggerFires` switch) with a note pointing the operator at the Declared allergens field
+instead. An operator who meets the raw API error directly should read it the same way: list
+the allergen in `allergens`, not in `clinical_flags`.
+
+**14 of the 28 trigger fields are inert - setting them changes no result, because no rule
+the engine's query can load exists behind them:** `Acute_Diarrhoea`, `Age_Months`,
+`Anemia_or_Iron_Risk`, `BMI_for_Age_Classification`, `Bone_Health_Risk`,
+`Constipation_Support`, `Critical_Field_Completeness`, `Diet_Type`,
+`Force_Feeding_or_Cue_Issue`, `Growth_Faltering_Flag`, `Multiple_Active_Rules`,
+`Post_Vaccine_Context`, `Severe_Food_Aversion`, `Texture_Skill`. Each of these carries a
+rule row in `clinical_rule_master`, but every row behind it sits below the tier
+`clinicalFilter`'s WHERE clause loads (neither `hard_exclude_yn = 'Y'` nor
+`human_approval_level = 'Specialist clinical approval'`, or its domain is `Age/Feeding` /
+`Data Quality`, both handled structurally elsewhere in the pipeline). Half of the clinical
+vocabulary the provider recorded is, in that sense, decorative. The console renders these
+inert rather than hiding them, so an operator can still see the field exists and read why
+it does nothing.
 
 ### Time limits - ranker
 

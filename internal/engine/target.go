@@ -40,6 +40,13 @@ var clinicalMarkerToTarget = map[string]string{
 // clinician-entered condition should not be silently overridden by the age default.
 // NT00 is the fallback, matching nt_engine_priority_logic priority 4's default.
 func selectTarget(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (string, string, error) {
+	// Set when an operator chose a marker whose target does not cover this child's age. The
+	// age gate is correct -- NT04 is an under-five target and NT08 starts at 24 months, so
+	// applying either outside its band would rank against a rubric the provider scoped
+	// elsewhere. Its silence was not correct: without this, an operator picking "Overweight
+	// risk under 5" for a ten-year-old got a normal ranked list under a target_reason that
+	// read as though they had chosen nothing at all.
+	var droppedMarker string
 	if p.ClinicalMarker != "" {
 		code, ok := clinicalMarkerToTarget[p.ClinicalMarker]
 		if !ok {
@@ -58,11 +65,21 @@ func selectTarget(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile
 		// Marker doesn't apply at this age (e.g. NT08 high-protein starts at 24mo).
 		// Fall through to the age default rather than erroring, since the marker
 		// itself may still be clinically true; it just can't drive ranking yet.
+		droppedMarker = fmt.Sprintf("operator-selected marker %q was NOT applied: its target %s covers %d-%d months and this child is %d",
+			p.ClinicalMarker, code, ageFrom, ageTo, p.AgeMonths)
 	}
 	if p.AgeMonths >= 6 && p.AgeMonths <= 23 {
-		return "NT01", "age 6-23 months, complementary-feeding target auto-activated", nil
+		reason := "age 6-23 months, complementary-feeding target auto-activated"
+		if droppedMarker != "" {
+			reason = droppedMarker + "; fell back to " + reason
+		}
+		return "NT01", reason, nil
 	}
-	return "NT00", "no applicable clinical marker, routine age-appropriate default", nil
+	reason := "no applicable clinical marker, routine age-appropriate default"
+	if droppedMarker != "" {
+		reason = droppedMarker + "; fell back to the routine age-appropriate default"
+	}
+	return "NT00", reason, nil
 }
 
 // rankByTarget is engine step 5's ranking half, reading the already-built recipe_ranked
@@ -75,7 +92,7 @@ func rankByTarget(ctx context.Context, pool *pgxpool.Pool, targetCode string, ca
 	}
 
 	rows, err := pool.Query(ctx, `
-		SELECT rr.recipe_id, rm.recipe_name, rr.region_culture, rm.meal_type, rm.clinical_tag,
+		SELECT rr.recipe_id, rm.recipe_name, rr.region_culture, rm.meal_type, rm.diet_type, rm.clinical_tag,
 		       rm.age_group, rr.nutrition_score, rr.ranked_score, rr.scored_axes, rr.value_kind
 		FROM recipe_ranked rr
 		JOIN recipe_master rm ON rm.recipe_id = rr.recipe_id
@@ -90,7 +107,7 @@ func rankByTarget(ctx context.Context, pool *pgxpool.Pool, targetCode string, ca
 	var out []models.RankedRecipe
 	for rows.Next() {
 		var r models.RankedRecipe
-		if err := rows.Scan(&r.RecipeID, &r.RecipeName, &r.RegionCulture, &r.MealType, &r.ClinicalTag,
+		if err := rows.Scan(&r.RecipeID, &r.RecipeName, &r.RegionCulture, &r.MealType, &r.DietType, &r.ClinicalTag,
 			&r.AgeGroup, &r.NutritionScore, &r.RankedScore, &r.ScoredAxes, &r.ValueKind); err != nil {
 			return nil, models.StepResult{}, fmt.Errorf("engine: rank by target scan: %w", err)
 		}

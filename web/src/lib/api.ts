@@ -1,6 +1,7 @@
 import type {
   ChildProfile, EngineResult, RecipeDetail, Ingredient, NutritionDiscrepancy,
   Gap, ImportRun, Region, Cuisine, NutritionTarget,
+  Allergen, ClinicalMarker, ReferenceEnums,
 } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -58,6 +59,18 @@ export function getCuisines(): Promise<Cuisine[]> {
 
 export function getNutritionTargets(): Promise<NutritionTarget[]> {
   return request<NutritionTarget[]>("/api/reference/nutrition-targets");
+}
+
+export function getAllergens(): Promise<Allergen[]> {
+  return request<Allergen[]>("/api/reference/allergens");
+}
+
+export function getClinicalMarkers(): Promise<ClinicalMarker[]> {
+  return request<ClinicalMarker[]>("/api/reference/clinical-markers");
+}
+
+export function getEnums(): Promise<ReferenceEnums> {
+  return request<ReferenceEnums>("/api/reference/enums");
 }
 
 export { ApiError };

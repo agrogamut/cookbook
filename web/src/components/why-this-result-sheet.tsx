@@ -29,8 +29,13 @@ export function WhyThisResultSheet({ result }: { result: EngineResult }) {
               Blocked: {result.block_reason}
             </div>
           )}
+          {/* Keyed on step number AND kind, not the number alone: step 4 is recorded twice,
+              once as its hard filter and once as the diet-preference ranker, so step numbers
+              are no longer unique across the array. A bare key={s.step} lets React duplicate
+              or omit one of the two, on the one screen whose job is to account for every
+              step. */}
           {result.steps.map((s) => (
-            <div key={s.step} className="border-b pb-2 font-mono text-xs">
+            <div key={`${s.step}-${s.kind}`} className="border-b pb-2 font-mono text-xs">
               <div className="flex items-center justify-between">
                 <span className="font-semibold">{s.step}. {s.name}</span>
                 <Badge variant="outline">{s.kind}</Badge>

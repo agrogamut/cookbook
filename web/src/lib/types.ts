@@ -39,6 +39,7 @@ export interface RankedRecipe {
   recipe_name: string;
   region_culture: string;
   meal_type: string;
+  diet_type: string;
   clinical_tag: string;
   age_group: string;
   nutrition_score: number;
@@ -54,7 +55,52 @@ export interface EngineResult {
   target_reason: string;
   blocked: boolean;
   block_reason?: string;
+  /** Declared allergen groups with no tag anywhere in the corpus. They screened nothing.
+   *  Rendering a result set without surfacing these implies a screening that did not
+   *  happen, which is the one thing this UI must never do. */
+  unscreened_allergens?: string[];
 }
+
+export interface Allergen {
+  allergen_group: string;
+  corpus_tag: string | null;
+  note: string;
+  screens: boolean;
+}
+
+/** One selectable value for a clinical marker, and the truth the engine actually applies
+ *  to it. loadable says whether internal/engine/clinical.go's clinicalFilter query would
+ *  even see the rule behind this value; escalates says whether firing it holds generation
+ *  for specialist review. escalates implies loadable -- an unloaded rule can never fire. */
+export interface ClinicalMarkerValue {
+  value: string;
+  rule_id: string;
+  loadable: boolean;
+  escalates: boolean;
+}
+
+export interface ClinicalMarker {
+  trigger_field: string;
+  rule_ids: string;
+  domains: string;
+  engine_actions: string;
+  specialist_required: string;
+  /** clinical_rule_master.trigger_operator; every row for a trigger_field shares one
+   *  operator (asserted by TestReferenceClinicalMarkersCoversEveryTriggerField).
+   *  Determines which control renders. */
+  trigger_operator: string;
+  /** Distinct trigger_value(s) for this field, each carrying its own loadable/escalates.
+   *  Escalation is a fact about a value, not the field -- see the handler's comment on
+   *  Coeliac_Status for why a field-level flag would lie. */
+  values: ClinicalMarkerValue[];
+}
+
+export interface EnumValue {
+  value: string;
+  count: number;
+}
+
+export type ReferenceEnums = Record<string, EnumValue[]>;
 
 export interface RecipeMethodCard {
   recipe_id: string;

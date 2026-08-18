@@ -3,13 +3,13 @@ package models
 // StepResult records what one engine step did to the candidate pool, so the "why this
 // result" panel can show every step rather than just the final list.
 type StepResult struct {
-	Step          int                `json:"step"`
-	Name          string             `json:"name"`
-	Kind          string             `json:"kind"` // "hard_filter" | "ranker" | "target" | "escalation"
-	CandidatesIn  int                `json:"candidates_in"`
-	CandidatesOut int                `json:"candidates_out"`
-	Note          string             `json:"note,omitempty"`
-	Excluded      []ExclusionReason  `json:"excluded,omitempty"`
+	Step          int               `json:"step"`
+	Name          string            `json:"name"`
+	Kind          string            `json:"kind"` // "hard_filter" | "ranker" | "target" | "escalation"
+	CandidatesIn  int               `json:"candidates_in"`
+	CandidatesOut int               `json:"candidates_out"`
+	Note          string            `json:"note,omitempty"`
+	Excluded      []ExclusionReason `json:"excluded,omitempty"`
 }
 
 // ExclusionReason names one recipe a step removed and why, capped by the caller (Task 7)
@@ -27,6 +27,7 @@ type RankedRecipe struct {
 	RecipeName     string  `json:"recipe_name"`
 	RegionCulture  string  `json:"region_culture"`
 	MealType       string  `json:"meal_type"`
+	DietType       string  `json:"diet_type"`
 	ClinicalTag    string  `json:"clinical_tag"`
 	AgeGroup       string  `json:"age_group"`
 	NutritionScore float64 `json:"nutrition_score"`
@@ -44,4 +45,12 @@ type EngineResult struct {
 	TargetReason string         `json:"target_reason"`
 	Blocked      bool           `json:"blocked"`
 	BlockReason  string         `json:"block_reason,omitempty"`
+
+	// UnscreenedAllergens names declared allergen groups that have no tag anywhere in
+	// the recipe corpus (allergen_tag_vocabulary.corpus_tag IS NULL). They excluded zero
+	// recipes because nothing carries the tag, not because the filter passed. Any client
+	// rendering a result set MUST render this: a result page that omits it implies a
+	// screening that did not happen, which is the one failure mode this project treats
+	// as dangerous rather than untidy.
+	UnscreenedAllergens []string `json:"unscreened_allergens,omitempty"`
 }

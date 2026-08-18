@@ -37,8 +37,11 @@ func TestRunPersonaQueriesNeverCollapse(t *testing.T) {
 			if len(result.Recipes) == 0 {
 				t.Fatalf("persona %q returned zero recipes; ranker steps must never collapse a result set. Steps: %+v", c.name, result.Steps)
 			}
-			if len(result.Steps) != 13 {
-				t.Fatalf("persona %q: expected 13 recorded steps (1-13; step 8 has no data source and step 14 is a human release gate, neither runs in the engine), got %d", c.name, len(result.Steps))
+			if len(result.Steps) != 14 {
+				t.Fatalf("persona %q: expected 14 recorded steps (1-13, with step 4 recorded "+
+					"twice as a hard filter and a preference ranker; step 8 has no data source "+
+					"and step 14 is a human release gate, neither runs in the engine), got %d",
+					c.name, len(result.Steps))
 			}
 		})
 	}
@@ -88,5 +91,22 @@ func TestRunBlockedResultHasEmptyNotNilRecipes(t *testing.T) {
 	}
 	if len(result.Recipes) != 0 {
 		t.Fatalf("a blocked result must carry zero recipes, got %d", len(result.Recipes))
+	}
+}
+
+func TestRunSurfacesUnscreenedAllergensOnTheResult(t *testing.T) {
+	pool := testPool(t)
+	result, err := Run(context.Background(), pool,
+		models.ChildProfile{AgeMonths: 36, Allergens: []string{"Tree nuts"}})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(result.UnscreenedAllergens) != 1 || result.UnscreenedAllergens[0] != "Tree nuts" {
+		t.Fatalf("UnscreenedAllergens = %v, want [Tree nuts]; a declared allergen that "+
+			"screened nothing must reach the caller as a field, not only as a step note",
+			result.UnscreenedAllergens)
+	}
+	if len(result.Recipes) == 0 {
+		t.Fatal("an unscreened allergen must not empty the result set; it screens nothing")
 	}
 }

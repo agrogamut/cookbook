@@ -15,7 +15,12 @@ data provider, plus two external datasets in `data/external/` used for verificat
 gap-filling. Scope is India and Bangladesh, weighted toward West Bengal.
 
 Phase 1 (make the data usable) is built: schema, importer, ranker, integrity suite and
-external enrichment. No API and no frontend yet.
+external enrichment. Phase 2 is built too: the 14-step engine in `internal/engine/`, the Go
+API in `internal/api/`, and the Next.js operator console in `web/`. Phase 3, the Book
+Engine, is specified and not started - see `docs/phase-3-book-engine.md`.
+
+Nothing in the dataset is approved. The provider's `Review_Status` and `Data_Quality` flags
+stay verbatim and are surfaced, never overridden - see "Nothing is approved" below.
 
 ## Hard rule: never invent data
 
@@ -172,7 +177,7 @@ they are the columns an operator reads to decide whether to trust a row.
 | `/recipe/[id]` | Provider method and external suggestion side by side, ingredients, nutrition provider-vs-corrected | `Tabs`, `Table`, `Badge`, `Alert`, `Separator` |
 | `/ingredients` | 406 ingredients, provider vs IFCT values, verified flag | `DataTable`, `Badge`, `Popover`, faceted filters |
 | `/audit/nutrition` | `nutrition_discrepancy_report` - the provider deliverable | `Table`, `Badge`, sortable columns, CSV export |
-| `/audit/gaps` | Gap register, 16 rows, severity-coloured | `Table`, `Badge`, `Accordion` |
+| `/audit/gaps` | Gap register, 20 rows, severity-coloured | `Table`, `Badge`, `Accordion` |
 | `/runs` | Import and enrichment history, content hashes, rows skipped | `Table`, `Collapsible` |
 | `/reference` | Regions, cuisines, NT00-NT12 weights, engine steps | `Tabs`, `Table` |
 
@@ -212,7 +217,7 @@ pass from an empty database.
 | 5 | NT00-NT12 ranker | done - migration `0003`, weights read from the provider table |
 | 6 | IFCT 2017 nutrition audit | done - `cmd/enrich`, 542 foods loaded |
 | 7 | External prep-text join | done - `cmd/enrich`, 166 of 940 recipes |
-| 8 | Gap register | done - 16 rows, re-counted on every run |
+| 8 | Gap register | done - 20 rows (12 seeded in 0002, 4 upserted by cmd/enrich, 4 added in 0012), re-counted on every run |
 | + | Corrected nutrition layer | done - migrations `0009`-`0010`, 139 ingredients on IFCT values, 410 recipes fully verified |
 
 Exit criteria, checked:
@@ -221,7 +226,7 @@ Exit criteria, checked:
 - [x] Re-running the importer twice produces identical content hashes
 - [x] All five persona queries return non-empty, correctly ordered results
 - [x] Every external value carries a source key, row id, URL and match confidence
-- [x] The gap register accounts for every known hole (16 entries)
+- [x] The gap register accounts for every known hole (20 entries)
 
 **Next: Phase 2.** Go API implementing the 14-step engine, then the Next.js frontend.
 
@@ -861,6 +866,8 @@ internal/db/migrations/
   0008_match_certainty          exact vs probable name match, discrepancy report
   0009_ifct_alias               hand-written food aliases + corrected ingredient view
   0010_recipe_nutrition_recomputed  recipe nutrition rebuilt from corrected ingredients
+  0011_allergen_tag_vocabulary  bridges allergen_mapping groups to the corpus's literal tags
+  0012_gap_register_additions   GAP-017..GAP-020, register goes from 16 rows to 20
 internal/db/integrity_test.go   22 invariants + row counts + idempotency
 internal/db/persona_test.go     5 persona queries + allergy-filter guard
 internal/db/external_test.go    provenance and no-overwrite invariants

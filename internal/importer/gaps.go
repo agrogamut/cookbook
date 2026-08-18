@@ -63,6 +63,25 @@ var gapMeasures = []gapMeasure{
 	                 SELECT 1 FROM culture_region_map m
 	                 JOIN recipe_master r ON r.region_culture = m.region_culture
 	                 WHERE m.culture_code = c.culture_code)`},
+
+	// Allergen groups the provider's vocabulary names but the corpus never tags. Counted
+	// from the vocabulary table rather than from a hardcoded list, so it drops to zero by
+	// itself when the provider tags the corpus.
+	{"GAP-017", `SELECT count(*) FROM allergen_tag_vocabulary WHERE corpus_tag IS NULL`},
+
+	// Clinical rules at the provider's own 'Specialist clinical approval' tier that the
+	// engine's rule query drops before any escalation check can see them. The query
+	// excludes the Age/Feeding and Data Quality domains -- Age/Feeding because step 1's
+	// min_age_months/max_age_months bounds already enforce it structurally, Data Quality
+	// because it is a pipeline concern rather than a child's condition. A specialist-tier
+	// rule filed under either would be invisible no matter what the escalation logic says,
+	// which is why this is the honest measure of the gap rather than a count of domains.
+	//
+	// Reads zero today. Non-zero means the provider filed a new specialist-tier rule under
+	// a domain the engine structurally drops, and someone must classify it.
+	{"GAP-020", `SELECT count(*) FROM clinical_rule_master
+	             WHERE human_approval_level = 'Specialist clinical approval'
+	               AND clinical_domain IN ('Age/Feeding', 'Data Quality')`},
 }
 
 // measureGaps refreshes the counted gaps inside the import transaction.

@@ -156,6 +156,57 @@ func applyAvailabilityRank(ctx context.Context, pool *pgxpool.Pool, p models.Chi
 	}, nil
 }
 
+// applyDietRank is the ranking half of engine step 4. Step 4's hard filter decides what a
+// family may eat; this decides what to show them first.
+//
+// recipe_master.diet_type states what a dish requires of whoever eats it, so the filter is
+// a nested permission chain (vegan subset vegetarian subset eggetarian subset
+// non-vegetarian -- see docs/decisions.md). A family declaring non-vegetarian is correctly
+// permitted all 940 recipes, of which 828 are vegetarian, so without this step page one of
+// their book is dal. Being permitted a dish is not the same as wanting it first.
+//
+// This is a nudge, not a re-sort: the boost sits between the budget boost (0.03) and the
+// culture boost (0.05), so an explicit region choice still outranks a diet preference and
+// neither outranks the nutrition score. Sized so it can reorder within a band of similar
+// nutrition fitness and never across one.
+func applyDietRank(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile, recipes []models.RankedRecipe) ([]models.RankedRecipe, models.StepResult, error) {
+	stepIn := len(recipes)
+	if p.DietType == "" || stepIn == 0 {
+		return recipes, models.StepResult{
+			Step: 4, Name: "Declared food practice - preference", Kind: "ranker",
+			CandidatesIn: stepIn, CandidatesOut: stepIn,
+			Note: "no diet type declared, step is a no-op",
+		}, nil
+	}
+
+	const boost = 0.04
+
+	matched := 0
+	out := make([]models.RankedRecipe, len(recipes))
+	copy(out, recipes)
+	for i := range out {
+		if out[i].DietType == p.DietType {
+			out[i].RankedScore += boost
+			matched++
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].RankedScore > out[j].RankedScore })
+
+	note := fmt.Sprintf("%d of %d candidates match the declared practice %q exactly and were ranked up by %.2f",
+		matched, stepIn, p.DietType, boost)
+	if matched == stepIn {
+		note = fmt.Sprintf("every candidate already matches the declared practice %q, so this step changed no ordering", p.DietType)
+	}
+	if matched == 0 {
+		note = fmt.Sprintf("no candidate carries diet_type %q exactly; all of them are permitted by the nested diet chain but none is that practice's own dish", p.DietType)
+	}
+
+	return out, models.StepResult{
+		Step: 4, Name: "Declared food practice - preference", Kind: "ranker",
+		CandidatesIn: stepIn, CandidatesOut: stepIn, Note: note,
+	}, nil
+}
+
 // regionCountry maps a recipe_master.region_culture value to the country word used in
 // ingredient_master.region_availability free text. Hardcoded, not queried -- region_focus
 // currently scopes to exactly India and Bangladesh (CLAUDE.md, "Region focus"), so a
@@ -380,26 +431,42 @@ func jaccard(a, b map[string]bool) float64 {
 func capToTarget(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile, recipes []models.RankedRecipe) ([]models.RankedRecipe, models.StepResult, error) {
 	stepIn := len(recipes)
 	limit := p.Limit
+	// Where the target came from, so the step note can attribute it honestly. Until the
+	// console started sending `limit`, every target came from the provider's table and the
+	// note said so unconditionally; an operator-entered number reported as a provider value
+	// is a mislabelled source, which this project treats as a defect rather than a wording
+	// nit.
+	source := "operator-supplied limit"
 	if limit <= 0 {
 		limit = 25
+		source = "engine default, no meal category given"
 		if p.MealType != "" {
 			var providedText string
 			err := pool.QueryRow(ctx, `SELECT default_target_recipes FROM meal_category_target WHERE meal_category = $1`, p.MealType).Scan(&providedText)
 			if err == nil {
 				if provided, perr := strconv.Atoi(providedText); perr == nil {
 					limit = provided
+					source = "meal_category_target.default_target_recipes"
+				} else {
+					source = "engine default, meal_category_target value is not numeric"
 				}
 				// non-numeric stored value: keep the 25 default rather than error
+			} else {
+				source = "engine default, no meal_category_target row for this meal type"
 			}
 			// no row found (meal_category_target only covers named categories): keep the 25 default rather than error
 		}
 	}
+	// The target and what was returned diverge when fewer candidates survived than the
+	// target asked for. Report both rather than collapsing them, so an operator can tell a
+	// short list caused by an earlier filter from one caused by the target itself.
+	target := limit
 	if limit > stepIn {
 		limit = stepIn
 	}
 	return recipes[:limit], models.StepResult{
 		Step: 13, Name: "Recipe count target", Kind: "target",
 		CandidatesIn: stepIn, CandidatesOut: limit,
-		Note: fmt.Sprintf("target %d (meal_category_target.default_target_recipes), returned %d", limit, limit),
+		Note: fmt.Sprintf("target %d (%s), returned %d", target, source, limit),
 	}, nil
 }

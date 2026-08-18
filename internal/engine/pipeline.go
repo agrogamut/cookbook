@@ -12,8 +12,9 @@ import (
 // dislikes / sensory) has no data source anywhere in the schema -- CLAUDE.md never
 // claims a questionnaire-preference table exists -- so it is skipped, not faked; step 14
 // (human audit / release gate) is an editorial process, not a query, and does not belong
-// in a request-scoped function. Both absences are visible in the returned step count
-// (13, not 14) rather than silently padded.
+// in a request-scoped function. Step 4 is recorded twice -- once as its hard filter,
+// once as the preference ranker that runs after step 5 scores the pool -- so the
+// returned step count is 14 entries for steps 1-13, not 15 for the full spec.
 func Run(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (models.EngineResult, error) {
 	var steps []models.StepResult
 
@@ -28,7 +29,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (models
 	step1.CandidatesIn = totalInBand
 	steps = append(steps, step1)
 
-	ids, step2, err := allergyFilter(ctx, pool, p, ids)
+	ids, step2, unscreened, err := allergyFilter(ctx, pool, p, ids)
 	if err != nil {
 		return models.EngineResult{}, err
 	}
@@ -42,7 +43,13 @@ func Run(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (models
 	if blocked {
 		// Same nil-vs-empty-array concern as the final return below: an unset Recipes
 		// field is the Go zero value (nil), which marshals to JSON null.
-		return models.EngineResult{Recipes: []models.RankedRecipe{}, Steps: steps, Blocked: true, BlockReason: blockReason}, nil
+		return models.EngineResult{
+			Recipes:             []models.RankedRecipe{},
+			Steps:               steps,
+			Blocked:             true,
+			BlockReason:         blockReason,
+			UnscreenedAllergens: unscreened,
+		}, nil
 	}
 
 	ids, step4, err := dietFilter(ctx, pool, p, ids)
@@ -60,6 +67,16 @@ func Run(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (models
 		return models.EngineResult{}, err
 	}
 	steps = append(steps, step5)
+
+	// Step 4's ranking half runs here rather than beside its hard filter, because it
+	// adjusts a RankedScore that does not exist until step 5 has scored the pool. Both
+	// halves are recorded as step 4 so the why-panel shows the filter and the preference
+	// as one concept with two effects.
+	ranked, step4rank, err := applyDietRank(ctx, pool, p, ranked)
+	if err != nil {
+		return models.EngineResult{}, err
+	}
+	steps = append(steps, step4rank)
 
 	ranked, step6, err := applyMealFilter(ctx, pool, p, ranked)
 	if err != nil {
@@ -125,9 +142,10 @@ func Run(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (models
 	}
 
 	return models.EngineResult{
-		Recipes:      ranked,
-		Steps:        steps,
-		ActiveTarget: targetCode,
-		TargetReason: targetReason,
+		Recipes:             ranked,
+		Steps:               steps,
+		ActiveTarget:        targetCode,
+		TargetReason:        targetReason,
+		UnscreenedAllergens: unscreened,
 	}, nil
 }

@@ -1889,7 +1889,7 @@ pnpm dev
    `provider` chip with the provider figure visible inline.
 4. `/audit/nutrition` — confirm the brinjal-vs-egg-adjacent finding (or whatever the top
    row is post-correction) appears with a real `+`/`-` percentage.
-5. `/audit/gaps` — confirm 16 gaps, grouped by severity, blockers first.
+5. `/audit/gaps` — confirm 20 gaps (12 seeded, 4 from cmd/enrich, 4 from migration 0012), grouped by severity, blockers first.
 6. `/runs` — confirm at least one run with per-table content hashes.
 7. `/reference` — confirm all 3 tabs populate, cuisines tab has zero rows with
    `recipe_count = 0`.

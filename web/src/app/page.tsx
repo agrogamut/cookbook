@@ -6,6 +6,7 @@ import type { ChildProfile, EngineResult } from "@/lib/types";
 import { ProfileForm } from "@/components/profile-form";
 import { ResultsTable } from "@/components/results-table";
 import { WhyThisResultSheet } from "@/components/why-this-result-sheet";
+import { UnscreenedAllergenAlert } from "@/components/unscreened-allergen-alert";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -38,6 +39,10 @@ export default function EngineConsolePage() {
             <AlertTitle>Search failed</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
+        )}
+
+        {!loading && result?.unscreened_allergens && (
+          <UnscreenedAllergenAlert groups={result.unscreened_allergens} />
         )}
 
         {loading && (

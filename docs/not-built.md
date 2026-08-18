@@ -32,13 +32,19 @@ was applied.
 **This is the most dangerous known gap.** It fails in the unsafe direction: the interface
 implies a protection that does not exist.
 
-Options, none chosen:
-- Remove the four from any picker, and say why at the point of entry.
-- Keep them selectable but render an explicit "not screened - no corpus coverage" state
-  next to the field and on every result page.
-- Have the provider tag the corpus, which is the real fix and is their work.
+**Settled.** Migration `0011` bridged `allergen_mapping.allergen_group` to the corpus tag
+vocabulary and fixed a real naming mismatch along the way (`Wheat` corresponds to the
+corpus tag `Gluten-containing cereal`, not an absent tag as first thought). That bridge
+also confirmed the four above are a genuine gap, not a naming bug: nothing in the corpus
+carries an equivalent tag for any of them.
 
-Until one is chosen, the four should not appear in an operator-facing picker.
+The chosen option is to keep the four selectable and render the absence explicitly rather
+than hide it. `EngineResult.UnscreenedAllergens` (added in Task 1 of the Phase 3 plan,
+commit `e8dacec`) carries the unscreened set on every result so a client can show a
+persistent "not screened - no corpus coverage" state next to the field and on the results,
+instead of a picker that silently omits the option or a result page that implies a
+protection that is not there. `GAP-017` tracks this and reaches zero on its own once the
+provider tags the corpus; the fix is on their side.
 
 ### 1.2 317 of 406 ingredients are untagged for allergens
 
