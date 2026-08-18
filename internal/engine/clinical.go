@@ -9,6 +9,18 @@ import (
 	"github.com/madamgy/recipie/internal/models"
 )
 
+// specialistApprovalLevel is the one clinical_rule_master.human_approval_level value that
+// means "a specialist must set the targets before anything is generated". The column takes
+// five values; the other four ('Clinical approval', 'Clinical/editorial approval',
+// 'Clinical/nutrition approval', 'Editorial/clinical workflow approval') describe review of
+// generated output rather than a precondition for generating it.
+//
+// This is the provider's own machine-readable escalation boundary and is preferred to any
+// list written on this side. Note which column it is NOT: specialist_required is free text
+// on all 31 rows ("Pediatric review if concern", "Not applicable"), so branching on its
+// emptiness would escalate every rule in the master, including iron support.
+const specialistApprovalLevel = "Specialist clinical approval"
+
 // escalationOnlyDomains lists clinical_rule_master.clinical_domain values whose
 // hard_exclude_yn='Y' rules have no queryable recipe-side field anywhere in the schema
 // (no renal-safe, gluten-free, dysphagia-texture or FODMAP tag exists on any table).
@@ -21,6 +33,12 @@ import (
 // generation and route to clinical pathway" / "use only entered specialist constraints").
 // Age/Feeding and Food Allergy domains are excluded from this list: they are already
 // hard-enforced structurally by steps 1 and 2.
+//
+// Retained after specialistApprovalLevel was introduced, because the two sets are not
+// identical and the map is broader in one place: CR-GI-002 (Vomiting / Poor Intake) sits
+// at 'Clinical approval' yet holding a routine meal plan until hydration is assessed is
+// the right behaviour. The engine escalates the union of the two. TestEscalationSources-
+// DisagreementIsPinned prints every disagreement so neither source drifts unnoticed.
 var escalationOnlyDomains = map[string]bool{
 	"Coeliac Disease":          true,
 	"Eating Disorder Risk":     true,
@@ -35,12 +53,14 @@ var escalationOnlyDomains = map[string]bool{
 }
 
 type clinicalRule struct {
-	ruleID           string
-	clinicalDomain   string
-	triggerField     string
-	triggerOperator  string
-	triggerValue     string
-	escalationReason string
+	ruleID             string
+	clinicalDomain     string
+	triggerField       string
+	triggerOperator    string
+	triggerValue       string
+	escalationReason   string
+	humanApprovalLevel string
+	specialistRequired string
 }
 
 // clinicalFilter is engine step 3. It is demoted from a pure hard filter to
@@ -94,12 +114,12 @@ func clinicalFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfi
 	}
 
 	rows, err := pool.Query(ctx, `
-		SELECT rule_id, clinical_domain, trigger_field, trigger_operator, trigger_value, escalation_reason
+		SELECT rule_id, clinical_domain, trigger_field, trigger_operator, trigger_value,
+		       escalation_reason, human_approval_level, coalesce(specialist_required, '')
 		FROM clinical_rule_master
-		WHERE hard_exclude_yn = 'Y'
-		  AND clinical_domain != 'Age/Feeding'
-		  AND clinical_domain != 'Food Allergy'
-		  AND clinical_domain != 'Data Quality'`)
+		WHERE (human_approval_level = $1 OR hard_exclude_yn = 'Y')
+		  AND clinical_domain NOT IN ('Age/Feeding', 'Data Quality')`,
+		specialistApprovalLevel)
 	if err != nil {
 		return nil, models.StepResult{}, false, "", fmt.Errorf("engine: clinical rule lookup: %w", err)
 	}
@@ -108,7 +128,8 @@ func clinicalFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfi
 	var rules []clinicalRule
 	for rows.Next() {
 		var r clinicalRule
-		if err := rows.Scan(&r.ruleID, &r.clinicalDomain, &r.triggerField, &r.triggerOperator, &r.triggerValue, &r.escalationReason); err != nil {
+		if err := rows.Scan(&r.ruleID, &r.clinicalDomain, &r.triggerField, &r.triggerOperator,
+			&r.triggerValue, &r.escalationReason, &r.humanApprovalLevel, &r.specialistRequired); err != nil {
 			return nil, models.StepResult{}, false, "", fmt.Errorf("engine: clinical rule scan: %w", err)
 		}
 		rules = append(rules, r)
@@ -125,15 +146,22 @@ func clinicalFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfi
 		if !triggerFires(r.triggerOperator, r.triggerValue, flagValue) {
 			continue
 		}
-		if !escalationOnlyDomains[r.clinicalDomain] {
-			// A hard_exclude rule fired outside the mapped escalation domains -- this
-			// should be unreachable given the WHERE clause above, but fail loudly
-			// rather than silently pass a clinically-flagged profile through.
+		escalates := r.humanApprovalLevel == specialistApprovalLevel || escalationOnlyDomains[r.clinicalDomain]
+		if !escalates {
+			// A hard_exclude rule fired that neither sits at the specialist tier nor has
+			// a mapped domain. Its recipe_filter_action needs a per-recipe clinical
+			// safety tag that does not exist on any table, so passing it through would
+			// half-apply a clinical filter. Fail loudly instead of choosing silently.
 			return nil, models.StepResult{}, false, "",
-				fmt.Errorf("engine: clinical rule %s fired outside escalationOnlyDomains; add its domain to the map or handle it explicitly", r.ruleID)
+				fmt.Errorf("engine: clinical rule %s (domain %s, approval %q) fired but is neither at the specialist tier nor in escalationOnlyDomains; classify it explicitly", r.ruleID, r.clinicalDomain, r.humanApprovalLevel)
 		}
-		reason := fmt.Sprintf("%s requires specialist review (rule %s, domain %s): %s",
-			r.triggerField, r.ruleID, r.clinicalDomain, r.escalationReason)
+
+		reason := fmt.Sprintf("%s requires specialist review (rule %s, domain %s, %s): %s",
+			r.triggerField, r.ruleID, r.clinicalDomain, r.humanApprovalLevel, r.escalationReason)
+		if r.specialistRequired != "" {
+			// Verbatim provider guidance naming which specialist. Never parsed.
+			reason += " Specialist: " + r.specialistRequired + "."
+		}
 		return nil, models.StepResult{
 			Step: 3, Name: "Clinical rules", Kind: "escalation",
 			CandidatesIn: stepIn, CandidatesOut: 0, Note: reason,
