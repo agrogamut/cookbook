@@ -174,6 +174,17 @@ func (s Stored) ToChildProfile(asOf time.Time) (models.ChildProfile, []string, e
 				continue
 			}
 		}
+		// A condition whose trigger field is Special_Care_Condition is not a clinical
+		// rule flag: it is the engine's own stop-gate input (models.ChildProfile.
+		// SpecialCareCondition), read by internal/engine/special_care.go to decide
+		// whether to halt generation entirely rather than rank recipes. Routing it into
+		// ClinicalFlags alongside ordinary trigger fields would leave the engine unable
+		// to see it at all, since specialCareGate reads SpecialCareCondition specifically
+		// and the STOP-REVIEW gate would silently never fire.
+		if c.TriggerField == "Special_Care_Condition" {
+			cp.SpecialCareCondition = c.FlagValue
+			continue
+		}
 		if cp.ClinicalFlags == nil {
 			cp.ClinicalFlags = map[string]string{}
 		}

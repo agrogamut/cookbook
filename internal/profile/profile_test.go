@@ -159,6 +159,31 @@ func TestToChildProfileCarriesConfirmedAllergensAndDropsResolved(t *testing.T) {
 	}
 }
 
+// A Special_Care_Condition trigger field must reach SpecialCareCondition, not
+// ClinicalFlags: internal/engine/special_care.go's stop gate reads SpecialCareCondition
+// specifically, so a condition routed into the flags map would never trip it and a
+// STOP-REVIEW child would be scored like any other child.
+func TestToChildProfileRoutesSpecialCareConditionToItsOwnField(t *testing.T) {
+	s := Stored{
+		ChildID:     "T",
+		DateOfBirth: date("2023-08-18"),
+		Conditions: []ClinicalCondition{
+			{TriggerField: "Special_Care_Condition", FlagValue: "SC-CP", Class: "congenital"},
+		},
+	}
+	cp, _, err := s.ToChildProfile(date("2026-08-18"))
+	if err != nil {
+		t.Fatalf("ToChildProfile: %v", err)
+	}
+	if cp.SpecialCareCondition != "SC-CP" {
+		t.Fatalf("SpecialCareCondition = %q, want SC-CP", cp.SpecialCareCondition)
+	}
+	if _, present := cp.ClinicalFlags["Special_Care_Condition"]; present {
+		t.Fatal("a special-care condition must not also land in ClinicalFlags; the engine's " +
+			"stop gate would never see it there and the STOP-REVIEW block would silently not fire")
+	}
+}
+
 func ptr[T any](v T) *T { return &v }
 
 func TestToChildProfileDropsExpiredAcuteConditions(t *testing.T) {
