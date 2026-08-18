@@ -345,3 +345,55 @@ func TestImportIsIdempotent(t *testing.T) {
 		}
 	}
 }
+
+func TestGapRegisterCountMatchesTheDocumentedCount(t *testing.T) {
+	pool := testPool(t)
+	var n int
+	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM gap_register`).Scan(&n); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	// Twenty after migration 0012. Sixteen exist before it: twelve seeded in migration
+	// 0002 plus four that internal/enrich/gaps.go upserts on every enrichment run. The
+	// enrich four are easy to miss because no migration writes them, which is exactly why
+	// this count is asserted rather than left in prose. If a gap is added or retired,
+	// change this number and the documents that quote it in the same commit.
+	if n != 20 {
+		t.Fatalf("gap_register holds %d rows, want 20", n)
+	}
+}
+
+func TestNewGapsAreMeasuredNotGuessed(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	cases := []struct {
+		gapID string
+		want  int
+	}{
+		// Four allergen groups with no corpus tag, counted from the vocabulary table.
+		{"GAP-017", 4},
+		// Clinical rules at the provider's specialist tier that clinicalFilter's rule
+		// query structurally drops before any escalation check can see them, because the
+		// query excludes the Age/Feeding and Data Quality domains outright. Zero today:
+		// no specialist-tier rule is filed under either domain. A non-zero count means
+		// the provider added one, and the engine would silently never load it regardless
+		// of the escalation logic -- so someone must widen the query or classify it.
+		{"GAP-020", 0},
+	}
+	for _, c := range cases {
+		t.Run(c.gapID, func(t *testing.T) {
+			var got *int
+			err := pool.QueryRow(ctx,
+				`SELECT affected_rows FROM gap_register WHERE gap_id = $1`, c.gapID).Scan(&got)
+			if err != nil {
+				t.Fatalf("lookup %s: %v", c.gapID, err)
+			}
+			if got == nil {
+				t.Fatalf("%s has a NULL count; it is declared measured_by = importer and "+
+					"must carry a number after an import", c.gapID)
+			}
+			if *got != c.want {
+				t.Fatalf("%s affected_rows = %d, want %d", c.gapID, *got, c.want)
+			}
+		})
+	}
+}

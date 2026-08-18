@@ -107,7 +107,7 @@ skipped test naming a gap is a live reminder; a deleted one is not.
 
 **The gap register does not currently record this at all**, which is worth stating plainly
 because the register's entire claim is that it accounts for every known hole. Add
-`GAP-013`, severity `blocker`: four declared allergen groups have no corpus tag, measured
+`GAP-017`, severity `blocker`: four declared allergen groups have no corpus tag, measured
 as `count(*) FROM allergen_tag_vocabulary WHERE corpus_tag IS NULL` so it re-counts on
 every import and reaches zero on its own when the provider tags the corpus.
 
@@ -172,7 +172,7 @@ so the difference is a printed list rather than a silent preference.
 **Surface `specialist_required` verbatim in `BlockReason`.** An operator told "this needs a
 specialist" should see which specialist the provider named. Verbatim, never parsed.
 
-Add `GAP-016`, severity `blocker`: clinical rules at the provider's own specialist tier
+Add `GAP-020`, severity `blocker`: clinical rules at the provider's own specialist tier
 that the engine does not escalate, measured as a live count of the disagreement so it
 reaches zero when the union lands and stays a regression guard afterwards.
 
@@ -182,9 +182,9 @@ disease, cleft lip and palate, autism and intellectual disability have no row in
 covers what the masters name; the list stays outstanding to the provider
 (`not-built.md` §6 question 10).
 
-The register does not carry this either. Add `GAP-015`, severity `blocker`: named
+The register does not carry this either. Add `GAP-019`, severity `blocker`: named
 congenital and neurodevelopmental conditions have no rule row, so a child who has one is
-scored like any other child. Unlike `GAP-013` this one cannot re-count itself - there is no
+scored like any other child. Unlike `GAP-017` this one cannot re-count itself - there is no
 query that measures the absence of conditions nobody has listed - so it is seeded with a
 `NULL` count and a `resolution_path` naming the provider, in the same shape as the existing
 `GAP-010` governance row.
@@ -279,7 +279,7 @@ declares header rows per sheet; this is configuration, not new machinery.
 ordered steps, each with an input, an output, a `Hard_Stop_Condition` and a named reviewer.
 It should be treated as authoritative for Book 1 the way the Book 2 sheet is for the
 engine. **Steps 12, 13 and 14 are absent from the workbook** - the sheet numbers its rows
-1-11, then 17-19, then 15-16, and nothing numbered 12, 13 or 14 exists. Add `GAP-014`,
+1-11, then 17-19, then 15-16, and nothing numbered 12, 13 or 14 exists. Add `GAP-018`,
 severity `major`, and question 11 below.
 
 **b. The link columns are guidance text, not foreign keys.** `Nutrition_Target_Link` holds
@@ -440,19 +440,24 @@ allergy-leak guard and `TestBrinjalIsNotEgg`.
 
 ## A documentation correction this work must make
 
-`CLAUDE.md`, `docs/handover-2026-08-18.md`, `docs/not-built.md` and the Phase 2 frontend
-plan all state the gap register holds **16 rows**. It holds **12**: migration `0002` seeds
-twelve `GAP-0xx` rows and `internal/importer/gaps.go` only ever `UPDATE`s their counts - it
-never inserts. Nothing is missing from the database; the number in the prose is wrong.
+**Corrected during implementation.** This section originally claimed the register held
+**12** and that four documents saying **16** were wrong. The opposite was true, and the
+error was this design's: migration `0002` seeds twelve rows, but
+`internal/enrich/gaps.go` upserts four more (`GAP-013`..`GAP-016`, External coverage and
+Nutrition audit) on every `cmd/enrich` run, and no migration writes them. This design was
+drafted from migration `0002` and `internal/importer/gaps.go` alone and missed that second
+writer entirely. The register held **16**, and the four documents were accurate.
 
-That matters more than an ordinary typo because the register's stated purpose is to account
-for every known hole, so a reader checking "are all 16 there?" gets a wrong answer to the
-one question the register exists to answer. Correct the four documents in the same change
-that adds `GAP-013`, `GAP-014`, `GAP-015` and `GAP-016`, taking the count to sixteen.
+Because those four ids were already taken, the new gaps are `GAP-017`, `GAP-018`, `GAP-019`
+and `GAP-020`, and the register now holds **20**: 7 blocker, 6 major, 5 minor, 2 parked. The
+documents were updated to twenty rather than corrected downward.
 
-That the corrected count lands on sixteen is a coincidence, not a vindication of the prose.
-The four documents were wrong when written and happen to become right afterwards; say so in
-the correction so a later reader does not conclude the number was fine all along.
+The register's stated purpose is to account for every known hole, so a reader checking "are
+they all there?" must get a right answer to the one question it exists to answer - which is
+why the count is now asserted by `TestGapRegisterCountMatchesTheDocumentedCount` rather than
+left in prose. Note the shape of the original mistake: two writers populate one table with
+no shared registry, so the next free id was not derivable from either file alone. The
+database was the only place the truth existed.
 
 `docs/not-built.md` §1.1 needs the same treatment for a different reason - it describes the
 allergen bridge as unbuilt when migration `0011` built it. Both corrections are part of

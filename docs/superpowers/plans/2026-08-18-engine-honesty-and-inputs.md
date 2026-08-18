@@ -61,9 +61,10 @@ escalationOnlyDomains (internal/engine/clinical.go) -- 10 domains, hand-written.
                                    Food Allergy (CR-ALL-003, excluded by the domain filter)
     caught by map, not at tier:    Vomiting / Poor Intake (CR-GI-002, 'Clinical approval')
 
-gap_register -- 12 rows, GAP-001..GAP-012, seeded in migration 0002. internal/importer/
-gaps.go only UPDATEs affected_rows; it never INSERTs. CLAUDE.md, docs/handover-2026-08-18.md,
-docs/not-built.md and the Phase 2 frontend plan all say 16. They are wrong.
+gap_register -- 16 rows. GAP-001..GAP-012 are seeded in migration 0002; GAP-013..GAP-016
+are upserted by internal/enrich/gaps.go on every cmd/enrich run and no migration writes
+them. internal/importer/gaps.go only UPDATEs affected_rows; it never INSERTs. The four
+documents saying 16 are correct. New gaps therefore start at GAP-017 and take it to 20.
 
 models.EngineResult.Steps currently holds 13 entries (steps 1-13; step 8 is an explicit
 no-op, step 14 never appears). internal/engine/pipeline_test.go:40 pins that 13.
@@ -316,7 +317,7 @@ func TestReferenceAllergensReportsWhetherEachGroupScreens(t *testing.T) {
 }
 
 // TestEveryOfferedAllergenScreensSomething fails on four rows today and is meant to.
-// It is the tracking mechanism for GAP-013: it turns green only when the provider tags
+// It is the tracking mechanism for GAP-017: it turns green only when the provider tags
 // the corpus for Tree nuts, Crustacean/Mollusc, Mustard and Sulphites. It skips rather
 // than fails so it does not break CI, because the hole is the provider's to close and a
 // red suite trains people to ignore red suites.
@@ -340,7 +341,7 @@ func TestEveryOfferedAllergenScreensSomething(t *testing.T) {
 		t.Fatalf("rows: %v", err)
 	}
 	if len(unscreened) > 0 {
-		t.Skipf("GAP-013 still open: %d allergen group(s) screen nothing: %v. "+
+		t.Skipf("GAP-017 still open: %d allergen group(s) screen nothing: %v. "+
 			"They remain selectable and are reported in EngineResult.UnscreenedAllergens. "+
 			"This test passes when the provider tags the corpus.", len(unscreened), unscreened)
 	}
@@ -439,8 +440,8 @@ git commit -m "Add the allergen reference endpoint with an explicit screens flag
 
 **Interfaces:**
 - Consumes: `allergen_tag_vocabulary` (migration 0011), `clinical_rule_master`.
-- Produces: `GAP-013`, `GAP-014`, `GAP-015`, `GAP-016` in `gap_register`, two of them
-  re-measured on every import. Task 4 asserts `GAP-016` reaches zero.
+- Produces: `GAP-017`, `GAP-018`, `GAP-019`, `GAP-020` in `gap_register`, two of them
+  re-measured on every import. Task 4 asserts `GAP-020` reaches zero.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -457,8 +458,8 @@ func TestGapRegisterCountMatchesTheDocumentedCount(t *testing.T) {
 	// wrong when written -- the register held twelve -- and this test exists so the
 	// number is asserted rather than asserted-in-prose. If a gap is added or retired,
 	// change this number and the four documents in the same commit.
-	if n != 16 {
-		t.Fatalf("gap_register holds %d rows, want 16", n)
+	if n != 20 {
+		t.Fatalf("gap_register holds %d rows, want 20", n)
 	}
 }
 
@@ -470,10 +471,10 @@ func TestNewGapsAreMeasuredNotGuessed(t *testing.T) {
 		want  int
 	}{
 		// Four allergen groups with no corpus tag, counted from the vocabulary table.
-		{"GAP-013", 4},
+		{"GAP-017", 4},
 		// Clinical rules at the provider's specialist tier that the engine does not
 		// escalate. Zero once Task 4 lands; non-zero here is the finding itself.
-		{"GAP-016", 0},
+		{"GAP-020", 0},
 	}
 	for _, c := range cases {
 		t.Run(c.gapID, func(t *testing.T) {
@@ -499,7 +500,7 @@ func TestNewGapsAreMeasuredNotGuessed(t *testing.T) {
 
 Run: `TEST_DATABASE_URL=(scripts/dev_db.fish url) go test ./internal/db/... -run 'TestGapRegisterCount|TestNewGapsAreMeasured' -v`
 
-Expected: FAIL — `gap_register holds 12 rows, want 16`, and `lookup GAP-013: no rows`.
+Expected: FAIL — `gap_register holds 12 rows, want 16`, and `lookup GAP-017: no rows`.
 
 - [ ] **Step 3: Write `internal/db/migrations/0012_gap_register_additions.up.sql`**
 
@@ -520,25 +521,25 @@ Expected: FAIL — `gap_register holds 12 rows, want 16`, and `lookup GAP-013: n
 INSERT INTO gap_register
     (gap_id, severity, area, source_table, source_column, description, affected_rows, measured_by, ui_behaviour, resolution_path) VALUES
 
-    ('GAP-013', 'blocker', 'Allergen screening', 'allergen_tag_vocabulary', 'corpus_tag',
+    ('GAP-017', 'blocker', 'Allergen screening', 'allergen_tag_vocabulary', 'corpus_tag',
      'Four declared allergen groups (Tree nuts, Crustacean/Mollusc, Mustard, Sulphites) have no matching tag anywhere in the recipe or ingredient corpus. Declaring one is accepted and excludes zero recipes, because nothing carries the tag. This is an absent screen, not a passing filter.',
      NULL, 'importer',
      'The group stays selectable and is returned in EngineResult.unscreened_allergens. Any client rendering a result set must show a persistent "not screened - no corpus coverage" state beside the field and on the results.',
      'Provider tags the ingredient corpus for these four groups. The count reaches zero on its own when they do; no code change is needed to close it.'),
 
-    ('GAP-014', 'major', 'Book 1 assembly', NULL, NULL,
+    ('GAP-018', 'major', 'Book 1 assembly', NULL, NULL,
      'The Book Assembly Logic sheet in MadamGY_Book1_Content_Master_V1_1_DailyLife.xlsx numbers its rows 1-11, then 17-19, then 15-16. Nothing numbered 12, 13 or 14 exists in the workbook. The Book 1 pipeline specification therefore has a three-step hole between generating parent-writable pages and inserting daily-life modules.',
      NULL, 'seed',
      'Not surfaced until a Book 1 assembler exists. Recorded so the hole is not rediscovered as a bug in the assembler.',
      'Ask the provider whether steps 12-14 were dropped, renumbered, or never written. Outstanding question 11.'),
 
-    ('GAP-015', 'blocker', 'Clinical scope', 'clinical_rule_master', 'trigger_field',
+    ('GAP-019', 'blocker', 'Clinical scope', 'clinical_rule_master', 'trigger_field',
      'Down syndrome, cerebral palsy, congenital heart disease, cleft lip and palate, autism and intellectual disability have no rule row. Each changes feeding through texture, energy density, oral-motor ability, mealtime behaviour and sometimes fluid restriction. A child with one of them is currently scored like any other child.',
      NULL, 'seed',
      'No behaviour today: the engine cannot know about a condition with no trigger_field. It holds only for conditions the masters name.',
      'Provider extends clinical_rule_master. The list cannot be written on this side without inventing clinical scope. Outstanding question 10.'),
 
-    ('GAP-016', 'blocker', 'Clinical escalation', 'clinical_rule_master', 'human_approval_level',
+    ('GAP-020', 'blocker', 'Clinical escalation', 'clinical_rule_master', 'human_approval_level',
      'Clinical rules the provider marks Specialist clinical approval that the engine does not escalate. Before the fix this was two rules: Diabetes_Type (CR-DM-001, CR-DM-002) and Multiple_Food_Allergies (CR-ALL-003), all invisible to the engine because the rule query filtered on hard_exclude_yn = Y and excluded the Food Allergy domain.',
      NULL, 'importer',
      'Escalated rules return blocked = true with the rule id, the domain and the provider''s own specialist_required text verbatim. A rule at neither the specialist tier nor in escalationOnlyDomains passes through untouched.',
@@ -548,7 +549,7 @@ INSERT INTO gap_register
 - [ ] **Step 4: Write `internal/db/migrations/0012_gap_register_additions.down.sql`**
 
 ```sql
-DELETE FROM gap_register WHERE gap_id IN ('GAP-013', 'GAP-014', 'GAP-015', 'GAP-016');
+DELETE FROM gap_register WHERE gap_id IN ('GAP-017', 'GAP-018', 'GAP-019', 'GAP-020');
 ```
 
 - [ ] **Step 5: Add the two measures to `internal/importer/gaps.go`**
@@ -559,13 +560,13 @@ Append to the `gapMeasures` slice, after the `GAP-012` entry:
 	// Allergen groups the provider's vocabulary names but the corpus never tags. Counted
 	// from the vocabulary table rather than from a hardcoded list, so it drops to zero by
 	// itself when the provider tags the corpus.
-	{"GAP-013", `SELECT count(*) FROM allergen_tag_vocabulary WHERE corpus_tag IS NULL`},
+	{"GAP-017", `SELECT count(*) FROM allergen_tag_vocabulary WHERE corpus_tag IS NULL`},
 
 	// Clinical rules at the provider's own 'Specialist clinical approval' tier that the
 	// engine would not escalate. The engine escalates the union of that tier and the
 	// hand-written escalationOnlyDomains map, so this counts tier rules whose domain the
 	// map also misses -- zero after the union lands, and a regression guard afterwards.
-	{"GAP-016", `SELECT count(*) FROM clinical_rule_master
+	{"GAP-020", `SELECT count(*) FROM clinical_rule_master
 	             WHERE human_approval_level = 'Specialist clinical approval'
 	               AND clinical_domain NOT IN (
 	                   'Coeliac Disease', 'Eating Disorder Risk', 'Feeding/Swallowing',
@@ -578,7 +579,7 @@ That domain list duplicates `escalationOnlyDomains` in `internal/engine/clinical
 Task 4 adds a test asserting the two stay identical, so the duplication is pinned rather
 than left to drift.
 
-- [ ] **Step 6: Run tests, confirm `GAP-013` passes and `GAP-016` still fails**
+- [ ] **Step 6: Run tests, confirm `GAP-017` passes and `GAP-020` still fails**
 
 ```bash
 scripts/dev_db.fish up
@@ -588,8 +589,8 @@ TEST_DATABASE_URL=$DATABASE_URL go test ./internal/db/... -run 'TestGapRegisterC
 ```
 
 Expected: `TestGapRegisterCountMatchesTheDocumentedCount` PASS.
-`TestNewGapsAreMeasured/GAP-013` PASS with 4.
-`TestNewGapsAreMeasured/GAP-016` FAIL with `affected_rows = 2, want 0` — that is the
+`TestNewGapsAreMeasured/GAP-017` PASS with 4.
+`TestNewGapsAreMeasured/GAP-020` FAIL with `affected_rows = 2, want 0` — that is the
 finding, and Task 4 closes it.
 
 - [ ] **Step 7: Correct the four documents**
@@ -602,12 +603,12 @@ but append `, four of them added in migration 0012`.
 
 In `docs/handover-2026-08-18.md`, section 7, change
 `16 rows, 4 marked blocker` to `16 rows after migration 0012, 6 marked blocker` and add
-`GAP-013`, `GAP-015` and `GAP-016` to the blocker table beneath it.
+`GAP-017`, `GAP-019` and `GAP-020` to the blocker table beneath it.
 
 In `docs/not-built.md`, replace section 1.1's option list with the settled position:
 migration `0011` already bridged the vocabulary and fixed the `Wheat` ->
 `Gluten-containing cereal` mismatch; the four groups stay selectable; the unscreened set
-is reported on `EngineResult`; `GAP-013` tracks it.
+is reported on `EngineResult`; `GAP-017` tracks it.
 
 In `docs/superpowers/plans/2026-08-16-frontend-shadcn-devtool.md`, Task 12 Step 2 item 5,
 change `confirm 16 gaps` to `confirm 16 gaps (12 original plus 4 from migration 0012)`.
@@ -869,14 +870,14 @@ Run: `TEST_DATABASE_URL=(scripts/dev_db.fish url) go test ./internal/engine/... 
 
 Expected: PASS. The five personas set no clinical flags, so none of them start blocking.
 
-- [ ] **Step 5: Re-import and confirm `GAP-016` reaches zero**
+- [ ] **Step 5: Re-import and confirm `GAP-020` reaches zero**
 
 ```bash
 go run ./cmd/import
 TEST_DATABASE_URL=(scripts/dev_db.fish url) go test ./internal/db/... -run TestNewGapsAreMeasured -v
 ```
 
-Expected: `GAP-016` PASS with `affected_rows = 0`.
+Expected: `GAP-020` PASS with `affected_rows = 0`.
 
 - [ ] **Step 6: `go build ./... && go vet ./...`, then commit**
 
@@ -1493,7 +1494,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
  * Sulphites) have no tag anywhere in the corpus, so declaring one is accepted and removes
  * zero recipes. A results page that looks identical to a screened one implies a protection
  * that does not exist, which is the failure mode CLAUDE.md's hard rule exists to prevent.
- * See gap GAP-013.
+ * See gap GAP-017.
  */
 export function UnscreenedAllergenAlert({ groups }: { groups: string[] }) {
   if (groups.length === 0) return null;
@@ -1912,7 +1913,7 @@ TEST_DATABASE_URL=$DATABASE_URL go test ./... -v
 ```
 
 Expected: every package PASS. `TestEveryOfferedAllergenScreensSomething` SKIP naming four
-groups. `TestGapRegisterCountMatchesTheDocumentedCount` PASS at 16.
+groups. `TestGapRegisterCountMatchesTheDocumentedCount` PASS at 20.
 
 - [ ] **Step 2: Confirm the importer is still idempotent**
 
@@ -1939,7 +1940,7 @@ Change the "Exposed in UI" column to `yes` for `region_culture`, `cuisine_code`,
 `clinical_flags`, `max_prep_time_min`, `max_cook_time_min` and `limit`.
 
 In the allergens table, replace the "Filters anything" column footnote with a pointer to
-`EngineResult.unscreened_allergens` and `GAP-013`, and note that `Wheat` resolves through
+`EngineResult.unscreened_allergens` and `GAP-017`, and note that `Wheat` resolves through
 `allergen_tag_vocabulary` to `Gluten-containing cereal`.
 
 Add a row to the field table for the step-4 preference ranker, and change the step count
@@ -1959,14 +1960,14 @@ git commit -m "Document the three new reference endpoints and the wired inputs"
 Checked against the spec, sections 1-5 plus the documentation correction:
 
 - Spec §1 (allergen field, keep selectable, reference endpoint, failing-today test,
-  `GAP-013`): Tasks 1, 2, 3, 7.
+  `GAP-017`): Tasks 1, 2, 3, 7.
 - Spec §2 (specialist tier union, keep the map, verbatim `specialist_required`,
-  disagreement test, `GAP-016`): Task 4.
+  disagreement test, `GAP-020`): Task 4.
 - Spec §3 (six inputs, stop selectors not free entry): Tasks 5, 7.
 - Spec §4 (three endpoints, live counts, zero-count enums kept): Tasks 2, 5.
 - Spec §5 (diet ranker, magnitude beside the existing adjustments, new recorded step):
   Task 6.
-- Spec "documentation correction" (`GAP-014`, `GAP-015`, count of 16, `not-built.md` §1.1):
+- Spec "documentation correction" (`GAP-018`, `GAP-019`, count of 20, `not-built.md` §1.1):
   Task 3.
 
 Type consistency: `allergyFilter` returns four values from Task 1 onward and Task 1 fixes
@@ -1974,6 +1975,6 @@ its only other caller. `models.RankedRecipe.DietType` is added in Task 6 step 3 
 Task 6 step 4 reads it, and mirrored into `web/src/lib/types.ts` in Task 7 step 1.
 `specialistApprovalLevel` is defined in Task 4 step 3 and used by the Task 4 tests written
 in step 1, which is why step 2 expects a compile failure first. The literal
-`'Specialist clinical approval'` appears in three places — the Go constant, the `GAP-016`
+`'Specialist clinical approval'` appears in three places — the Go constant, the `GAP-020`
 measure query and the `clinical-markers` handler — and each is asserted by a test that
 would fail if one changed alone.

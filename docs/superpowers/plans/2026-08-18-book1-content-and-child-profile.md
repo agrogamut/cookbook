@@ -289,7 +289,7 @@ COMMENT ON COLUMN book1_illness_feeding_block.book_engine_limit IS
 -- Logic sheet, and equally authoritative.
 --
 -- The sheet numbers its steps 1-11, then 17-19, then 15-16. Nothing numbered 12, 13 or
--- 14 exists in the workbook. Recorded as GAP-014 rather than renumbered: renumbering
+-- 14 exists in the workbook. Recorded as GAP-018 rather than renumbered: renumbering
 -- would hide a hole in the specification.
 -- ---------------------------------------------------------------------------
 CREATE TABLE book1_assembly_step (
@@ -304,7 +304,7 @@ CREATE TABLE book1_assembly_step (
 COMMENT ON TABLE book1_assembly_step IS
     'The provider-authored Book 1 assembly pipeline. Treat as authoritative the way '
     'Book2_Content_Master''s Recipe Selection Logic sheet is treated for the recipe '
-    'engine. Steps 12, 13 and 14 are absent from the workbook -- see GAP-014.';
+    'engine. Steps 12, 13 and 14 are absent from the workbook -- see GAP-018.';
 
 -- ---------------------------------------------------------------------------
 -- Evidence register. 13 rows. Sources with URLs and their stated limitations.
@@ -707,15 +707,15 @@ func TestAssemblyStepsRecordTheMissingRange(t *testing.T) {
 	}
 	if n != 0 {
 		t.Fatalf("steps 12-14 now exist (%d rows). The provider filled the hole -- update "+
-			"GAP-014 and this test together.", n)
+			"GAP-018 and this test together.", n)
 	}
 	var gap int
 	if err := pool.QueryRow(ctx,
-		`SELECT count(*) FROM gap_register WHERE gap_id = 'GAP-014'`).Scan(&gap); err != nil {
+		`SELECT count(*) FROM gap_register WHERE gap_id = 'GAP-018'`).Scan(&gap); err != nil {
 		t.Fatalf("gap lookup: %v", err)
 	}
 	if gap != 1 {
-		t.Fatal("the missing assembly steps must be recorded in gap_register as GAP-014")
+		t.Fatal("the missing assembly steps must be recorded in gap_register as GAP-018")
 	}
 }
 ```
@@ -1116,7 +1116,7 @@ CREATE TABLE child_allergen (
 COMMENT ON TABLE child_allergen IS
     'confirmed and systemic are hard filters. suspected ranks down and raises a review '
     'flag, never filters. resolved keeps history and excludes nothing. The four allergen '
-    'groups with no corpus tag (GAP-013) are unaffected by any of this and must not be '
+    'groups with no corpus tag (GAP-017) are unaffected by any of this and must not be '
     'obscured by it: an unscreened group is unscreened whatever its status.';
 
 -- ---------------------------------------------------------------------------
@@ -2361,7 +2361,7 @@ profile must never be removed by re-importing a workbook.
 - [ ] **Step 5: Update `docs/not-built.md`**
 
 - §1.3: the congenital hold mechanism is wired; the condition list remains provider work.
-  Point at `GAP-015`.
+  Point at `GAP-019`.
 - §2.1: mark `display_name`, `date_of_birth`, `sex`, `language_id`, dated growth,
   `likes`/`dislikes`/`accepted` and the clinical-condition fields as built in
   `child_profile` and its four child tables. Leave `vaccine_history[]`,
@@ -2391,7 +2391,7 @@ Checked against the spec, sections 6 and 7:
 
 - Spec §6 table of nine sheets, mixed header rows: Task 1 DDL, Task 2 bindings.
 - Spec §6a (Book Assembly Logic authoritative, steps 12-14 missing): Task 1's
-  `book1_assembly_step` plus `TestAssemblyStepsRecordTheMissingRange` in Task 3. `GAP-014`
+  `book1_assembly_step` plus `TestAssemblyStepsRecordTheMissingRange` in Task 3. `GAP-018`
   is seeded by the other plan's Task 3; this plan asserts it exists.
 - Spec §6b (link columns are guidance, no parser): Task 1's column comments,
   `TestGuidanceColumnsAreNotForeignKeys` in Task 3.
@@ -2416,6 +2416,6 @@ and adopted by `steps_hard.go` in step 4, so only one definition ever exists. Th
 count moves 13 -> 14 in the other plan's Task 6 and 14 -> 15 in this plan's Task 7; run
 the plans in that order or reconcile the assertion once.
 
-Cross-plan dependency: this plan's `GAP-014` assertion in Task 3 requires the other plan's
+Cross-plan dependency: this plan's `GAP-018` assertion in Task 3 requires the other plan's
 Task 3 to have run. If these are executed independently, either run that task first or
 temporarily drop the second half of `TestAssemblyStepsRecordTheMissingRange`.
