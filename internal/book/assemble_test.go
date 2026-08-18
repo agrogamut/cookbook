@@ -3,6 +3,7 @@ package book
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,6 +23,17 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	}
 	t.Cleanup(pool.Close)
 	return pool
+}
+
+// storedProfileAged returns a minimal profile.Stored whose derived age is approximately
+// months old as of time.Now(). Tests that only need a particular age band, not a particular
+// child, share this rather than each hand-rolling a DateOfBirth.
+func storedProfileAged(months int) profile.Stored {
+	return profile.Stored{
+		ChildID:     "BOOK-TEST-AGE",
+		DisplayName: "Test",
+		DateOfBirth: time.Now().AddDate(0, -months, 0),
+	}
 }
 
 func TestAgeLabel(t *testing.T) {
@@ -55,12 +67,8 @@ func TestAllergyStatusNamesTheEmptyCase(t *testing.T) {
 // of that contract: the pointer stays nil rather than becoming "0.0 kg".
 func TestMissingGrowthStaysNil(t *testing.T) {
 	pool := testPool(t)
-	s := profile.Stored{
-		ChildID:     "BOOK-TEST-001",
-		DisplayName: "Test",
-		DateOfBirth: time.Date(2022, 5, 1, 0, 0, 0, 0, time.UTC),
-	}
-	b, _, err := AssembleBook1(context.Background(), pool, s, time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC))
+	s := storedProfileAged(51)
+	b, _, err := AssembleBook1(context.Background(), pool, s, time.Now())
 	if err != nil {
 		t.Fatalf("AssembleBook1: %v", err)
 	}
@@ -77,16 +85,48 @@ func TestMissingGrowthStaysNil(t *testing.T) {
 // to know the book is missing sections.
 func TestUnmappedBlocksAreReported(t *testing.T) {
 	pool := testPool(t)
-	s := profile.Stored{
-		ChildID:     "BOOK-TEST-002",
-		DateOfBirth: time.Date(2022, 5, 1, 0, 0, 0, 0, time.UTC),
-	}
-	_, skipped, err := AssembleBook1(context.Background(), pool, s, time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC))
+	s := storedProfileAged(51)
+	_, skipped, err := AssembleBook1(context.Background(), pool, s, time.Now())
 	if err != nil {
 		t.Fatalf("AssembleBook1: %v", err)
 	}
 	// 32 blocks exist and blockTemplate maps 6, so a real database must report skips.
 	if len(skipped) == 0 {
 		t.Fatal("no skipped blocks reported; with 6 of 32 blocks mapped this cannot be right")
+	}
+}
+
+// Every one of the 32 content blocks is either rendered or named in the skip list. This is
+// the honest-gap rule made checkable: a book that quietly contains 30 of 32 blocks looks
+// exactly like a book that contains all of them.
+//
+// Only entries prefixed "block " are counted, because skipped also carries profile-level
+// drops from ToChildProfile, which are not blocks.
+func TestEveryBlockIsEitherRenderedOrReported(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	var total int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM book1_content_block`).Scan(&total); err != nil {
+		t.Fatalf("count blocks: %v", err)
+	}
+
+	// Two ages either side of the corpus, so age exclusion is exercised in both directions.
+	for _, months := range []int{7, 51, 200} {
+		b, skipped, err := AssembleBook1(ctx, pool, storedProfileAged(months), time.Now())
+		if err != nil {
+			t.Fatalf("assemble at %d months: %v", months, err)
+		}
+		blockSkips := 0
+		for _, s := range skipped {
+			if strings.HasPrefix(s, "block ") {
+				blockSkips++
+			}
+		}
+		if got := len(b.Sections) + blockSkips; got != total {
+			t.Fatalf("at %d months: %d rendered + %d reported skips = %d, want %d; "+
+				"a block that is neither rendered nor reported is silently absent",
+				months, len(b.Sections), blockSkips, got, total)
+		}
 	}
 }

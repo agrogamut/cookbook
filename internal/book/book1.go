@@ -71,13 +71,14 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		}
 	}
 
+	// Every block is selected, and age is applied in Go rather than in SQL. An age-excluded
+	// block is a block this child's book deliberately does not contain, which is a fact the
+	// caller needs; a WHERE clause would drop it before anything could record it.
 	rows, err := pool.Query(ctx, `
 		SELECT block_id, book_order, coalesce(section, ''), coalesce(subsection, ''),
-		       coalesce(table_or_format, ''), ai_can_draft
+		       age_from_mo, age_to_mo
 		FROM book1_content_block
-		WHERE (age_from_mo IS NULL OR age_from_mo <= $1)
-		  AND (age_to_mo IS NULL OR age_to_mo >= $1)
-		ORDER BY book_order`, cp.AgeMonths)
+		ORDER BY book_order`)
 	if err != nil {
 		return Book1{}, nil, fmt.Errorf("book: load blocks: %w", err)
 	}
@@ -85,10 +86,17 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 
 	skipped := append([]string{}, dropped...)
 	for rows.Next() {
-		var blockID, section, subsection, format, aiCanDraft string
+		var blockID, section, subsection string
 		var order int
-		if err := rows.Scan(&blockID, &order, &section, &subsection, &format, &aiCanDraft); err != nil {
+		var ageFrom, ageTo *int
+		if err := rows.Scan(&blockID, &order, &section, &subsection, &ageFrom, &ageTo); err != nil {
 			return Book1{}, nil, fmt.Errorf("book: scan block: %w", err)
+		}
+		if (ageFrom != nil && cp.AgeMonths < *ageFrom) || (ageTo != nil && cp.AgeMonths > *ageTo) {
+			skipped = append(skipped, fmt.Sprintf(
+				"block %s (%s) covers %s and does not apply at %d months",
+				blockID, section, ageRangeLabel(ageFrom, ageTo), cp.AgeMonths))
+			continue
 		}
 		tmpl, ok := blockTemplate[blockID]
 		if !ok {
@@ -106,6 +114,21 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 	}
 
 	return b, skipped, nil
+}
+
+// ageRangeLabel renders a block's applicable age window for the skip reason. An open end is
+// printed as open rather than as a number, because a bound nobody set is not a bound of zero.
+func ageRangeLabel(from, to *int) string {
+	switch {
+	case from == nil && to == nil:
+		return "every age"
+	case from == nil:
+		return fmt.Sprintf("up to %d months", *to)
+	case to == nil:
+		return fmt.Sprintf("from %d months", *from)
+	default:
+		return fmt.Sprintf("%d-%d months", *from, *to)
+	}
 }
 
 func ageLabel(months int) string {

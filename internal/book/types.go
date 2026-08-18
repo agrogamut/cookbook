@@ -2,9 +2,9 @@ package book
 
 import "time"
 
-// Metadata is the book_metadata object both provider schemas require, plus the three
-// release footer fields the template contract names (book_version, release_id,
-// generation_date).
+// Metadata carries the three release footer fields the template contract names
+// (book_version, release_id, generation_date). It is not the provider schema's
+// book_metadata object -- see the Book1 doc comment for why.
 type Metadata struct {
 	Title          string    `json:"title"`
 	BookVersion    string    `json:"book_version"`
@@ -70,7 +70,16 @@ type Callout struct {
 	Body     string `json:"body"`
 }
 
-// Book1 mirrors MadamGY_Book1_JSON_Schema_V1.json.
+// Book1 is the render model for Book 1 -- the shape the templates consume, not the
+// provider's wire format.
+//
+// It deliberately does not conform to MadamGY_Book1_JSON_Schema_V1.json. That schema is
+// strict and requires a consultation_summary carrying reviewed_by and a consultation_date,
+// a release object, and a profile_snapshot_id and generation_job_id from a generation
+// pipeline this project does not have. Producing a conformant document today would mean
+// writing a reviewer's name and a consultation date for a review that never happened, which
+// is the one claim this project must never make. Conformance arrives with the generation-job
+// and release layer, not before it.
 type Book1 struct {
 	Metadata            Metadata     `json:"book_metadata"`
 	Child               ChildSummary `json:"child_profile"`
