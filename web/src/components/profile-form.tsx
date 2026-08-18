@@ -68,18 +68,37 @@ function markerControl(m: ClinicalMarker): MarkerControl {
       : `trigger_operator "${op}" has no case in the engine's own switch -- nothing here could fire it, so no control is offered.`;
     return { kind: "inert", note };
   }
-  const loadable = m.values.filter((v) => v.loadable);
-  const mixedCount = m.values.length - loadable.length;
-  if (loadable.length === 0) {
+  // Only escalating values are offerable, and `loadable` alone is not enough to qualify.
+  // For a rule the engine loads and that fires there are exactly two outcomes, never three:
+  // it escalates (blocked = true, with the provider's specialist named), or the engine
+  // refuses the whole profile with an unclassified-rule error. There is no "filters
+  // something" outcome, because no recipe-side column expresses these conditions. So a value
+  // with loadable = true and escalates = false always errors, and offering it as a live
+  // control would promise a screen that cannot happen -- the same false affordance this
+  // control has already been fixed for twice.
+  //
+  // Today exactly one such rule exists (CR-ALL-001) and it is unreachable only because its
+  // operator is `contains`, caught by the whitelist above. That is a coincidence of one
+  // column value, not a guarantee: an `equals` rule at 'Clinical approval' with
+  // hard_exclude_yn = 'Y' outside the ten escalation domains would reinstate the bug.
+  // TestUnclassifiedMarkerValuesArePinned pins the known set so a new one breaks the build.
+  const offerable = m.values.filter((v) => v.loadable && v.escalates);
+  const refusing = m.values.filter((v) => v.loadable && !v.escalates);
+  const mixedCount = m.values.length - offerable.length;
+  if (offerable.length === 0) {
     return {
       kind: "inert",
-      note: "the engine has no rule it can act on for this marker -- every value the provider recorded here sits below the tier clinicalFilter loads.",
+      note: refusing.length > 0
+        ? "the engine loads a rule for this marker but cannot classify it, so setting it " +
+          "would make generation refuse rather than filter. Nothing is offered here."
+        : "the engine has no rule it can act on for this marker -- every value the provider " +
+          "recorded here sits below the tier clinicalFilter loads.",
     };
   }
-  if (loadable.length === 1) {
-    return { kind: "toggle", value: loadable[0], mixedCount };
+  if (offerable.length === 1) {
+    return { kind: "toggle", value: offerable[0], mixedCount };
   }
-  return { kind: "select", values: loadable, mixedCount };
+  return { kind: "select", values: offerable, mixedCount };
 }
 
 export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {

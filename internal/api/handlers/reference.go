@@ -201,10 +201,15 @@ func (h *Handlers) ReferenceAllergens(w http.ResponseWriter, r *http.Request) {
 //	             OR clinical_domain IN <the ten escalationOnlyDomains names>)
 //
 // The ten domain names are inlined below rather than importing engine.escalationOnlyDomains:
-// handlers must not depend on engine internals, so the list is duplicated on purpose and
-// TestEscalationSourcesDisagreementIsPinned (engine side) plus this handler's own test
-// (which pins Coeliac_Status and the eleven-plus inert markers) keep the two from drifting
-// apart silently.
+// handlers must not depend on engine internals, so the list is duplicated on purpose.
+//
+// Be precise about what guards that duplication, because it is less than it looks.
+// TestEscalationSourcesDisagreementIsPinned is engine-side and pins engine data only; it
+// never compares these two lists. This handler's own tests pin specific rows -- Coeliac_Status
+// and the fourteen inert markers -- so a divergence is caught only where it changes one of
+// those rows. Dropping a domain from this list that no pinned row touches would pass. Any
+// edit to escalationOnlyDomains must be mirrored here by hand, and the safe direction is to
+// treat that as a manual invariant rather than a tested one.
 //
 // A trigger_value with operator in_list (only BMI_for_Age_Classification today) is split on
 // ';' into one value per option, since "Overweight;Obesity" is two selectable values sharing
@@ -340,13 +345,22 @@ func (h *Handlers) ReferenceClinicalMarkers(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, out)
 }
 
-// enumColumns are the recipe_master columns a client may offer as a filter or a ranker
-// input. Each is returned with a live count so a control can show how much corpus sits
-// behind each option, and so a zero-count value is visibly zero rather than absent.
+// enumColumns are recipe_master vocabularies returned with live counts, so a control can
+// show how much corpus sits behind each option and a zero-count value is visibly zero
+// rather than absent.
 //
-// prep_time_min and cook_time_min are included as enums on purpose: the corpus holds four
-// and six distinct values respectively, so a free minute entry would imply a precision the
-// data has not got. A client renders them as stop selectors.
+// Only five of the nine are accepted as engine inputs -- diet_type, meal_type, budget_band,
+// prep_time_min and cook_time_min have a matching field on models.ChildProfile. The other
+// four (season, texture, growth_target, post_vaccine_context) are populated on every recipe
+// but the engine takes no input for them; docs/engine-inputs.md lists them under columns the
+// engine does not accept. They are returned anyway because they are real, measurable facts
+// about the corpus that an operator may want to see, and because a client building an
+// exploratory view should not have to query the database directly to get them. A client must
+// not render them as filters: the API would silently ignore the value.
+//
+// prep_time_min and cook_time_min are enums on purpose: the corpus holds four and six
+// distinct values respectively, so a free minute entry would imply a precision the data has
+// not got. A client renders them as stop selectors.
 var enumColumns = []string{
 	"diet_type", "meal_type", "budget_band", "season",
 	"texture", "growth_target", "post_vaccine_context",

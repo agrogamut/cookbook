@@ -170,12 +170,16 @@ func TestReferenceClinicalMarkersCoversEveryTriggerField(t *testing.T) {
 		if m.RuleIDs == "" {
 			t.Fatalf("%s carries no rule id; a marker with no rule cannot be offered", m.TriggerField)
 		}
-		// This is the assertion finding 2 needs: an operator the switch in markerControl
-		// (and the engine's own triggerFires) does not recognize must never reach the
-		// client silently. Every trigger_field's operator must be one of the five the
-		// engine actually implements a case for.
+		// An operator that neither markerControl nor the engine's triggerFires recognizes
+		// must never reach the client silently. Of the five values below, triggerFires
+		// implements a case for exactly three -- equals, contains and in_list. less_than and
+		// incompatible_with fall to its `default: return false`, so they are recognized as
+		// real provider vocabulary but are inert; step 1 enforces those conditions
+		// structurally and clinicalFilter's query excludes their domains. A sixth value
+		// appearing here is unclassified vocabulary and needs a human, not a fallthrough.
 		if !validOperators[m.TriggerOperator] {
-			t.Fatalf("%s: trigger_operator %q is not one of the five the engine's triggerFires handles",
+			t.Fatalf("%s: trigger_operator %q is not one of the five the provider's vocabulary uses; "+
+				"triggerFires acts on three of them and treats the other two as inert",
 				m.TriggerField, m.TriggerOperator)
 		}
 		if len(m.Values) == 0 {
@@ -283,6 +287,84 @@ func TestReferenceClinicalMarkersCoversEveryTriggerField(t *testing.T) {
 	for _, field := range gotNoLoadable {
 		if !wantNoLoadable[field] {
 			t.Fatalf("%s has no loadable value but is not in the expected set -- provider drift, look at it", field)
+		}
+	}
+}
+
+// TestUnclassifiedMarkerValuesArePinned pins the invariant the console's
+// markerControl depends on. For a rule the engine loads and that fires there are exactly two
+// outcomes: it escalates, or clinicalFilter refuses the whole profile with an
+// unclassified-rule error. There is no third "filters something" outcome, because no
+// recipe-side column expresses these conditions.
+//
+// So a marker value with loadable = true and escalates = false always errors, and the
+// console must not offer it as a live control -- doing so promises a screen that cannot
+// happen, which is the false affordance this control has already been fixed for twice.
+//
+// Exactly one such rule exists today, CR-ALL-001, and it is invisible to the console only
+// because its trigger_operator is `contains`, which markerControl renders inert. That is a
+// coincidence of one column value, not a guarantee. If the provider adds an `equals` rule at
+// 'Clinical approval' with hard_exclude_yn = 'Y' in a domain outside escalationOnlyDomains,
+// this test fails -- and the right response is to classify that rule in the engine, not to
+// relax this assertion.
+func TestUnclassifiedMarkerValuesArePinned(t *testing.T) {
+	h := New(testPool(t))
+	req := httptest.NewRequest("GET", "/api/reference/clinical-markers", nil)
+	rec := httptest.NewRecorder()
+
+	h.ReferenceClinicalMarkers(rec, req)
+
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var got []struct {
+		TriggerField    string `json:"trigger_field"`
+		TriggerOperator string `json:"trigger_operator"`
+		Values          []struct {
+			Value     string `json:"value"`
+			RuleID    string `json:"rule_id"`
+			Loadable  bool   `json:"loadable"`
+			Escalates bool   `json:"escalates"`
+		} `json:"values"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	// The known set, pinned. CR-ALL-001 is loadable (hard_exclude_yn = 'Y') but sits at
+	// 'Clinical approval' in the Food Allergy domain, which escalationOnlyDomains does not
+	// name -- so firing it produces the engine's classification error rather than a hold.
+	// It is invisible to the console only because its operator is `contains`, which
+	// markerControl renders inert.
+	//
+	// A NEW entry here is the dangerous case, and an `equals` or `in_list` one especially:
+	// markerControl would offer it as a live control, and setting it would 500 rather than
+	// filter. The fix is to classify the rule in internal/engine/clinical.go -- at the
+	// specialist tier or in escalationOnlyDomains -- not to add it to this list.
+	want := map[string]bool{
+		"Confirmed_or_Highly_Suspected_Allergen=Allergen": true,
+	}
+
+	got2 := map[string]string{}
+	for _, m := range got {
+		for _, v := range m.Values {
+			if v.Loadable && !v.Escalates {
+				got2[m.TriggerField+"="+v.Value] = v.RuleID + ", operator " + m.TriggerOperator
+			}
+		}
+	}
+	for k, detail := range got2 {
+		if !want[k] {
+			t.Fatalf("new unclassified marker value %q (%s): the engine loads its rule and "+
+				"would refuse the profile rather than filter, and markerControl offers any "+
+				"equals/in_list value as a live control. Classify the rule in "+
+				"internal/engine/clinical.go rather than adding it here.", k, detail)
+		}
+	}
+	for k := range want {
+		if _, ok := got2[k]; !ok {
+			t.Fatalf("%q is no longer loadable-without-escalating. If its rule was classified, "+
+				"remove it from want and let markerControl offer it.", k)
 		}
 	}
 }

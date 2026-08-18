@@ -431,26 +431,44 @@ func jaccard(a, b map[string]bool) float64 {
 func capToTarget(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile, recipes []models.RankedRecipe) ([]models.RankedRecipe, models.StepResult, error) {
 	stepIn := len(recipes)
 	limit := p.Limit
+	// Where the target came from, so the step note can attribute it honestly. Until the
+	// console started sending `limit`, every target came from the provider's table and the
+	// note said so unconditionally; an operator-entered number reported as a provider value
+	// is a mislabelled source, which this project treats as a defect rather than a wording
+	// nit.
+	source := "operator-supplied limit"
 	if limit <= 0 {
 		limit = 25
+		source = "engine default, no meal category given"
 		if p.MealType != "" {
 			var providedText string
 			err := pool.QueryRow(ctx, `SELECT default_target_recipes FROM meal_category_target WHERE meal_category = $1`, p.MealType).Scan(&providedText)
 			if err == nil {
 				if provided, perr := strconv.Atoi(providedText); perr == nil {
 					limit = provided
+					source = "meal_category_target.default_target_recipes"
+				} else {
+					source = "engine default, meal_category_target value is not numeric"
 				}
 				// non-numeric stored value: keep the 25 default rather than error
+			} else {
+				source = "engine default, no meal_category_target row for this meal type"
 			}
 			// no row found (meal_category_target only covers named categories): keep the 25 default rather than error
+		} else {
+			source = "engine default, no meal category given"
 		}
 	}
+	// The target and what was returned diverge when fewer candidates survived than the
+	// target asked for. Report both rather than collapsing them, so an operator can tell a
+	// short list caused by an earlier filter from one caused by the target itself.
+	target := limit
 	if limit > stepIn {
 		limit = stepIn
 	}
 	return recipes[:limit], models.StepResult{
 		Step: 13, Name: "Recipe count target", Kind: "target",
 		CandidatesIn: stepIn, CandidatesOut: limit,
-		Note: fmt.Sprintf("target %d (meal_category_target.default_target_recipes), returned %d", limit, limit),
+		Note: fmt.Sprintf("target %d (%s), returned %d", target, source, limit),
 	}, nil
 }

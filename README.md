@@ -11,8 +11,14 @@ Internal tool. Staff use it to serve families; families never use it directly.
 
 ## Status
 
-Phase 1 (make the data usable) is built. There is no API and no frontend yet - see
-`CLAUDE.md` for the plan and the current task list.
+Phase 1 (make the data usable) and Phase 2 (the 14-step engine, the Go API and the operator
+console) are built. Phase 3, the Book Engine, is specified and not started - see
+`docs/phase-3-book-engine.md`, and `CLAUDE.md` for the plan and the current task list.
+
+**Nothing here is approved.** All 940 recipes carry the provider's `Review_Status = Draft`
+and all 406 ingredients `Needs Validation`; the provider's culinary, nutrition and clinical
+sign-off is still outstanding. The tool surfaces that state rather than hiding it, and no
+part of this repository may mark it otherwise.
 
 ## Running it
 

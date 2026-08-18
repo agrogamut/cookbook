@@ -15,7 +15,12 @@ data provider, plus two external datasets in `data/external/` used for verificat
 gap-filling. Scope is India and Bangladesh, weighted toward West Bengal.
 
 Phase 1 (make the data usable) is built: schema, importer, ranker, integrity suite and
-external enrichment. No API and no frontend yet.
+external enrichment. Phase 2 is built too: the 14-step engine in `internal/engine/`, the Go
+API in `internal/api/`, and the Next.js operator console in `web/`. Phase 3, the Book
+Engine, is specified and not started - see `docs/phase-3-book-engine.md`.
+
+Nothing in the dataset is approved. The provider's `Review_Status` and `Data_Quality` flags
+stay verbatim and are surfaced, never overridden - see "Nothing is approved" below.
 
 ## Hard rule: never invent data
 

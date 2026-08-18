@@ -440,19 +440,24 @@ allergy-leak guard and `TestBrinjalIsNotEgg`.
 
 ## A documentation correction this work must make
 
-`CLAUDE.md`, `docs/handover-2026-08-18.md`, `docs/not-built.md` and the Phase 2 frontend
-plan all state the gap register holds **16 rows**. It holds **12**: migration `0002` seeds
-twelve `GAP-0xx` rows and `internal/importer/gaps.go` only ever `UPDATE`s their counts - it
-never inserts. Nothing is missing from the database; the number in the prose is wrong.
+**Corrected during implementation.** This section originally claimed the register held
+**12** and that four documents saying **16** were wrong. The opposite was true, and the
+error was this design's: migration `0002` seeds twelve rows, but
+`internal/enrich/gaps.go` upserts four more (`GAP-013`..`GAP-016`, External coverage and
+Nutrition audit) on every `cmd/enrich` run, and no migration writes them. This design was
+drafted from migration `0002` and `internal/importer/gaps.go` alone and missed that second
+writer entirely. The register held **16**, and the four documents were accurate.
 
-That matters more than an ordinary typo because the register's stated purpose is to account
-for every known hole, so a reader checking "are all 16 there?" gets a wrong answer to the
-one question the register exists to answer. Correct the four documents in the same change
-that adds `GAP-017`, `GAP-018`, `GAP-019` and `GAP-020`, taking the count to sixteen.
+Because those four ids were already taken, the new gaps are `GAP-017`, `GAP-018`, `GAP-019`
+and `GAP-020`, and the register now holds **20**: 7 blocker, 6 major, 5 minor, 2 parked. The
+documents were updated to twenty rather than corrected downward.
 
-That the corrected count lands on sixteen is a coincidence, not a vindication of the prose.
-The four documents were wrong when written and happen to become right afterwards; say so in
-the correction so a later reader does not conclude the number was fine all along.
+The register's stated purpose is to account for every known hole, so a reader checking "are
+they all there?" must get a right answer to the one question it exists to answer - which is
+why the count is now asserted by `TestGapRegisterCountMatchesTheDocumentedCount` rather than
+left in prose. Note the shape of the original mistake: two writers populate one table with
+no shared registry, so the next free id was not derivable from either file alone. The
+database was the only place the truth existed.
 
 `docs/not-built.md` §1.1 needs the same treatment for a different reason - it describes the
 allergen bridge as unbuilt when migration `0011` built it. Both corrections are part of
