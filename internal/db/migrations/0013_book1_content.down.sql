@@ -1,0 +1,9 @@
+DROP TABLE IF EXISTS book1_daily_life_module;
+DROP TABLE IF EXISTS book1_release_check;
+DROP TABLE IF EXISTS book1_evidence_source;
+DROP TABLE IF EXISTS book1_assembly_step;
+DROP TABLE IF EXISTS book1_illness_feeding_block;
+DROP TABLE IF EXISTS book1_monitoring_template;
+DROP TABLE IF EXISTS book1_development_milestone;
+DROP TABLE IF EXISTS book1_vaccine_schedule;
+DROP TABLE IF EXISTS book1_content_block;
