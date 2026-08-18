@@ -1,7 +1,7 @@
 import type {
   ChildProfile, EngineResult, RecipeDetail, Ingredient, NutritionDiscrepancy,
   Gap, ImportRun, Region, Cuisine, NutritionTarget, Book1Block,
-  Allergen, ClinicalMarker, ReferenceEnums,
+  Allergen, ClinicalMarker, ReferenceEnums, StoredProfile, EngineInputResult,
 } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -75,6 +75,26 @@ export function getEnums(): Promise<ReferenceEnums> {
 
 export function getBook1Blocks(): Promise<Book1Block[]> {
   return request<Book1Block[]>("/api/reference/book1-blocks");
+}
+
+export function getProfile(childID: string): Promise<StoredProfile> {
+  return request<StoredProfile>(`/api/profiles/${encodeURIComponent(childID)}`);
+}
+
+export function putProfile(childID: string, body: StoredProfile): Promise<StoredProfile> {
+  return request<StoredProfile>(`/api/profiles/${encodeURIComponent(childID)}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Returns the engine query derived from a stored profile, plus the stored facts the
+ *  conversion dropped. Prefer this over getProfile when populating the search form: the
+ *  form's fields are engine-query fields, and the dropped list is what stops the form
+ *  looking like the whole profile. */
+export function getProfileEngineInput(childID: string): Promise<EngineInputResult> {
+  return request<EngineInputResult>(
+    `/api/profiles/${encodeURIComponent(childID)}/engine-input`);
 }
 
 export { ApiError };

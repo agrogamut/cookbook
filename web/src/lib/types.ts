@@ -277,3 +277,43 @@ export interface Book1Block {
   human_approval: string | null;
   status: string | null;
 }
+
+export interface StoredProfileAllergen {
+  group: string;
+  status: string;
+  severity?: string;
+  source?: string;
+  last_reaction_on?: string;
+  entered_by?: string;
+}
+
+export interface StoredProfile {
+  child_id: string;
+  case_id?: string;
+  display_name?: string;
+  date_of_birth: string;
+  sex?: string;
+  language_id?: string;
+  region_culture?: string;
+  cuisine_code?: string;
+  diet_type?: string;
+  vegan?: boolean;
+  religious_restriction?: string;
+  budget_band?: string;
+  max_prep_time_min?: number;
+  max_cook_time_min?: number;
+  created_by?: string;
+  allergens: StoredProfileAllergen[];
+}
+
+/**
+ * What the engine would receive for this child today, plus every stored fact that did not
+ * survive the conversion. `dropped` is always an array, never null. `as_of` matters
+ * because age is derived from it: the same profile read next month yields a different
+ * query, so a response without it is not reproducible.
+ */
+export interface EngineInputResult {
+  profile: ChildProfile;
+  dropped: string[];
+  as_of: string;
+}

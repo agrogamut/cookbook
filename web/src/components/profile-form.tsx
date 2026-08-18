@@ -8,7 +8,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { SuspectedAllergenFieldset } from "./suspected-allergen-fieldset";
-import { getAllergens, getClinicalMarkers, getEnums, getRegions, getCuisines } from "@/lib/api";
+import {
+  getAllergens, getClinicalMarkers, getEnums, getRegions, getCuisines, getProfileEngineInput,
+} from "@/lib/api";
 import type {
   Allergen, ChildProfile, ClinicalMarker, ClinicalMarkerValue, Cuisine, Region, ReferenceEnums,
 } from "@/lib/types";
@@ -125,6 +127,11 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
   const [cuisines, setCuisines] = useState<Cuisine[]>([]);
   const [refError, setRefError] = useState<string | null>(null);
 
+  const [loadChildID, setLoadChildID] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadDropped, setLoadDropped] = useState<string[]>([]);
+  const [loadedAsOf, setLoadedAsOf] = useState("");
+
   useEffect(() => {
     Promise.all([getAllergens(), getClinicalMarkers(), getEnums(), getRegions(), getCuisines()])
       .then(([a, m, e, r, c]) => {
@@ -136,6 +143,41 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
       })
       .catch((err) => setRefError(err instanceof Error ? err.message : String(err)));
   }, []);
+
+  // Populates the form from a stored profile, reading the engine-input endpoint rather
+  // than the raw profile: that route already applies the stored-to-query conversion, so
+  // what lands in the form is exactly what a search would send. Facts the conversion
+  // dropped -- growth trends, allergen severity, expired acute conditions -- are shown
+  // beneath the control instead of vanishing, so the form is never mistaken for the whole
+  // stored record.
+  async function handleLoadProfile() {
+    const id = loadChildID.trim();
+    if (!id) return;
+    setLoadError(null);
+    try {
+      const res = await getProfileEngineInput(id);
+      const p = res.profile;
+      setAgeMonths(p.age_months);
+      setDietType(p.diet_type ?? "");
+      setVegan(Boolean(p.vegan));
+      setAllergens(p.allergens ?? []);
+      setSuspectedAllergens(p.suspected_allergens ?? []);
+      setClinicalFlags(p.clinical_flags ?? {});
+      setClinicalMarker(p.clinical_marker ?? "");
+      setRegionCulture(p.region_culture ?? "");
+      setCuisineCode(p.cuisine_code ?? "");
+      setMealType(p.meal_type ?? "");
+      setBudgetBand(p.budget_band ?? "");
+      setMaxPrep(p.max_prep_time_min ? String(p.max_prep_time_min) : "");
+      setMaxCook(p.max_cook_time_min ? String(p.max_cook_time_min) : "");
+      setLoadDropped(res.dropped);
+      setLoadedAsOf(res.as_of);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : String(err));
+      setLoadDropped([]);
+      setLoadedAsOf("");
+    }
+  }
 
   function toggleAllergen(group: string) {
     setAllergens((prev) =>
@@ -213,6 +255,32 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
           rather than guessed; confirm the API server is running.
         </p>
       )}
+
+      <div className="space-y-1 border-b pb-3">
+        <label htmlFor="load-child" className={label}>Load stored profile</label>
+        <div className="flex gap-1">
+          <Input
+            id="load-child" type="text" placeholder="child id"
+            value={loadChildID}
+            onChange={(e) => setLoadChildID(e.target.value)}
+          />
+          <Button type="button" variant="outline" onClick={handleLoadProfile}>Load</Button>
+        </div>
+        {loadError && <p className="text-xs text-destructive">{loadError}</p>}
+        {loadedAsOf && (
+          <p className="text-xs text-muted-foreground">
+            Age derived as of <span className="font-mono">{loadedAsOf}</span>.
+          </p>
+        )}
+        {loadDropped.length > 0 && (
+          <div className="text-xs text-muted-foreground">
+            <p>Stored facts that do not reach the engine query:</p>
+            <ul className="list-disc pl-4">
+              {loadDropped.map((d) => <li key={d}>{d}</li>)}
+            </ul>
+          </div>
+        )}
+      </div>
 
       <div className="space-y-1">
         <label htmlFor="age" className={label}>Age (months) *</label>
