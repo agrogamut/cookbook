@@ -31,14 +31,33 @@ const specialistApprovalLevel = "Specialist clinical approval"
 // safety-correct behaviour is to block automated generation and surface the rule's own
 // escalation text, matching clinical_rule_priority_logic priority 1-3 ("stop recipe
 // generation and route to clinical pathway" / "use only entered specialist constraints").
-// Age/Feeding and Food Allergy domains are excluded from this list: they are already
-// hard-enforced structurally by steps 1 and 2.
+// Age/Feeding is excluded from this map because step 1's age bounds already enforce it
+// structurally. Food Allergy is not in this map either, but not for the same reason: two
+// of its three hard_exclude_yn='Y' rules (CR-ALL-002, CR-ALL-003) sit at the specialist
+// tier and escalate through specialistApprovalLevel instead, and the third (CR-ALL-001)
+// deliberately has no domain entry here -- it fails loudly rather than being silently
+// mapped or silently passed through, because step 2 only covers the allergens the
+// operator lists in Allergens, not this flag alone. See
+// TestClinicalFilterRefusesAnUnclassifiedRule.
 //
 // Retained after specialistApprovalLevel was introduced, because the two sets are not
 // identical and the map is broader in one place: CR-GI-002 (Vomiting / Poor Intake) sits
 // at 'Clinical approval' yet holding a routine meal plan until hydration is assessed is
-// the right behaviour. The engine escalates the union of the two. TestEscalationSources-
-// DisagreementIsPinned prints every disagreement so neither source drifts unnoticed.
+// the right behaviour.
+//
+// The engine escalates the union of the two, but only over rules the query in
+// clinicalFilter actually loads (hard_exclude_yn = 'Y' OR at the specialist tier).
+// Domain membership in this map does not by itself mean every rule in that domain
+// escalates: CR-CEL-001 (Coeliac Disease), CR-FEED-003 (Feeding/Swallowing), CR-GROW-001
+// and CR-GROW-003 (Growth) all carry hard_exclude_yn = 'N' and a below-tier approval
+// level, so the query drops them regardless of their domain, and they can never fire.
+// Each of those three domains still escalates through a sibling rule that IS loaded
+// (CR-CEL-002, CR-FEED-002, CR-GROW-002 respectively), which is why the gap does not show
+// up from a domain-level reading of this map -- it only shows up rule by rule.
+// TestEscalationSourcesDisagreementIsPinned pins the tier/map disagreement against the
+// live workbook so neither source drifts unnoticed; it does not cover this
+// loaded/unloaded distinction, which is a property of the WHERE clause below, not of
+// this map.
 var escalationOnlyDomains = map[string]bool{
 	"Coeliac Disease":          true,
 	"Eating Disorder Risk":     true,
@@ -113,12 +132,29 @@ func clinicalFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfi
 		return nil, models.StepResult{}, false, "", fmt.Errorf("engine: clinical filter: unrecognized clinical flag key(s) %v — must match clinical_rule_master.trigger_field exactly: %w", unmatched, ErrInvalidProfile)
 	}
 
+	// ORDER BY makes the outcome deterministic when more than one loaded rule fires for the
+	// same profile (CKD fires both CR-REN-001 and CR-REN-002, for instance): the reason text
+	// always comes from the same rule rather than whichever the heap scan reaches first, and
+	// row order is not otherwise stable across re-imports because an upsert's UPDATE writes a
+	// new heap tuple. rule_priority is text ('Critical', 'High', 'Low', 'Medium'), and a bare
+	// ORDER BY rule_priority would sort alphabetically -- High before Low before Medium --
+	// which is wrong for Low/Medium. The CASE maps it to the real severity order explicitly.
+	// A priority word the provider has not used yet sorts last (ELSE), not first: an unknown
+	// value must not silently outrank Critical. rule_id is the final tie-break for rules that
+	// share both a loaded status and a priority, such as CR-REN-001 and CR-REN-002.
 	rows, err := pool.Query(ctx, `
 		SELECT rule_id, clinical_domain, trigger_field, trigger_operator, trigger_value,
 		       escalation_reason, human_approval_level, coalesce(specialist_required, '')
 		FROM clinical_rule_master
 		WHERE (human_approval_level = $1 OR hard_exclude_yn = 'Y')
-		  AND clinical_domain NOT IN ('Age/Feeding', 'Data Quality')`,
+		  AND clinical_domain NOT IN ('Age/Feeding', 'Data Quality')
+		ORDER BY CASE rule_priority
+		           WHEN 'Critical' THEN 0
+		           WHEN 'High'     THEN 1
+		           WHEN 'Medium'   THEN 2
+		           WHEN 'Low'      THEN 3
+		           ELSE 4
+		         END, rule_id`,
 		specialistApprovalLevel)
 	if err != nil {
 		return nil, models.StepResult{}, false, "", fmt.Errorf("engine: clinical rule lookup: %w", err)
@@ -138,7 +174,16 @@ func clinicalFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfi
 		return nil, models.StepResult{}, false, "", fmt.Errorf("engine: clinical rule rows: %w", err)
 	}
 
-	for _, r := range rules {
+	// Scan every loaded rule rather than returning on the first match. An unclassified rule
+	// (neither at the specialist tier nor in escalationOnlyDomains) must always win over a
+	// block, never depend on which rule the scan reaches first: a profile that sets both an
+	// unclassified flag and a classified, escalating one must always error, regardless of
+	// which rule's row comes first in ORDER BY. So the unclassified check returns
+	// immediately on sight, and an escalating match is only recorded, not returned, until the
+	// whole rule set has been checked for an unclassified one.
+	var firstEscalating *clinicalRule
+	for i := range rules {
+		r := rules[i]
 		flagValue, set := p.ClinicalFlags[r.triggerField]
 		if !set {
 			continue
@@ -151,11 +196,18 @@ func clinicalFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfi
 			// A hard_exclude rule fired that neither sits at the specialist tier nor has
 			// a mapped domain. Its recipe_filter_action needs a per-recipe clinical
 			// safety tag that does not exist on any table, so passing it through would
-			// half-apply a clinical filter. Fail loudly instead of choosing silently.
+			// half-apply a clinical filter. Fail loudly instead of choosing silently,
+			// even if a different rule already qualified as an escalation candidate.
 			return nil, models.StepResult{}, false, "",
 				fmt.Errorf("engine: clinical rule %s (domain %s, approval %q) fired but is neither at the specialist tier nor in escalationOnlyDomains; classify it explicitly", r.ruleID, r.clinicalDomain, r.humanApprovalLevel)
 		}
+		if firstEscalating == nil {
+			firstEscalating = &r
+		}
+	}
 
+	if firstEscalating != nil {
+		r := firstEscalating
 		reason := fmt.Sprintf("%s requires specialist review (rule %s, domain %s, %s): %s",
 			r.triggerField, r.ruleID, r.clinicalDomain, r.humanApprovalLevel, r.escalationReason)
 		if r.specialistRequired != "" {
@@ -171,7 +223,7 @@ func clinicalFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfi
 	return candidateIDs, models.StepResult{
 		Step: 3, Name: "Clinical rules", Kind: "hard_filter",
 		CandidatesIn: stepIn, CandidatesOut: stepIn,
-		Note: "clinical flags set, none matched an escalation-only rule",
+		Note: "clinical flags set, none matched the specialist tier or an escalation-only domain",
 	}, false, "", nil
 }
 

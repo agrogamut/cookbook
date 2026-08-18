@@ -371,11 +371,12 @@ func TestNewGapsAreMeasuredNotGuessed(t *testing.T) {
 	}{
 		// Four allergen groups with no corpus tag, counted from the vocabulary table.
 		{"GAP-017", 4},
-		// Clinical rules at the provider's specialist tier that the engine does not
-		// escalate. Zero because the engine now escalates the union of that tier and the
-		// hand-written domain map; a non-zero count means the provider added a
-		// specialist-tier rule in a domain the measure's list does not name, and someone
-		// must classify it.
+		// Clinical rules at the provider's specialist tier that clinicalFilter's rule
+		// query structurally drops before any escalation check can see them, because the
+		// query excludes the Age/Feeding and Data Quality domains outright. Zero today:
+		// no specialist-tier rule is filed under either domain. A non-zero count means
+		// the provider added one, and the engine would silently never load it regardless
+		// of the escalation logic -- so someone must widen the query or classify it.
 		{"GAP-020", 0},
 	}
 	for _, c := range cases {

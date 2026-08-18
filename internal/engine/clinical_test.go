@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -78,6 +79,14 @@ func TestClinicalFilterBlocksAtTheProviderSpecialistTier(t *testing.T) {
 		{"multiple food allergies", map[string]string{"Multiple_Food_Allergies": "Yes"}},
 		// Already caught by the hand-written domain map; must stay caught.
 		{"kidney disease", map[string]string{"CKD": "Yes"}},
+		// Kidney Disease's mapped rules (CR-REN-001/002) also sit at the specialist tier,
+		// so that case alone never isolates escalationOnlyDomains -- the whole suite would
+		// still pass with `|| escalationOnlyDomains[...]` deleted from the escalates
+		// expression. CR-GI-002 (Vomiting / Poor Intake) is the one loaded rule that is
+		// map-only and not tier: hard_exclude_yn = 'Y' so the query loads it, but its
+		// human_approval_level is 'Clinical approval'. This case is the one that actually
+		// exercises the map half of the union.
+		{"persistent vomiting (map-only, not tier)", map[string]string{"Persistent_Vomiting": "Yes"}},
 	}
 
 	for _, c := range cases {
@@ -138,10 +147,18 @@ func TestClinicalFilterDoesNotBlockANonEscalatingRule(t *testing.T) {
 	}
 }
 
-// TestEscalationSourcesDisagreementIsPinned prints every rule where the provider's
-// specialist tier and the hand-written domain map disagree, in both directions. The
-// engine blocks on the union, so a disagreement is not a bug -- but it must be a visible
-// list rather than a silent preference for one source.
+// TestEscalationSourcesDisagreementIsPinned pins every rule where the provider's
+// specialist tier and the hand-written domain map disagree, in both directions, against
+// the live clinical_rule_master content. The engine escalates the union of the two, but
+// only over rules the rule query in clinicalFilter actually loads -- see the long comment
+// on escalationOnlyDomains for the rules that sit in a mapped domain but are never loaded
+// at all, which is a different distinction from the one this test pins.
+//
+// A prior version of this test only t.Logf'd the two lists and asserted nothing, so
+// deleting a domain from escalationOnlyDomains, or the provider retagging a rule's
+// human_approval_level, passed silently -- go test without -v never prints Logf output
+// from a passing test, so the "visible list" the original comment promised was invisible
+// in CI. This version fails the build on either kind of drift instead.
 func TestEscalationSourcesDisagreementIsPinned(t *testing.T) {
 	pool := testPool(t)
 	rows, err := pool.Query(context.Background(), `
@@ -174,11 +191,28 @@ func TestEscalationSourcesDisagreementIsPinned(t *testing.T) {
 	t.Logf("at the specialist tier but not in escalationOnlyDomains: %v", tierOnly)
 	t.Logf("in escalationOnlyDomains but not at the specialist tier: %v", mapOnly)
 
-	// Both directions are expected and both are escalated, because the engine takes the
-	// union. This assertion exists so that a change to either source is noticed here
-	// rather than discovered by a child getting an unescalated list.
-	if len(tierOnly) == 0 && len(mapOnly) == 0 {
-		t.Log("the two sources now agree exactly; escalationOnlyDomains may be retirable")
+	// Pinned against the live workbook as read on 2026-08-18. If this fails, read the
+	// tierOnly/mapOnly output above (rerun with -v): either the provider moved a rule's
+	// approval level, or someone edited escalationOnlyDomains. Either way a human has to
+	// decide how the change affects the union, not this test.
+	wantTierOnly := []string{
+		"CR-ALL-002 (Food Allergy)",
+		"CR-ALL-003 (Food Allergy)",
+		"CR-DM-001 (Diabetes)",
+		"CR-DM-002 (Diabetes)",
+	}
+	wantMapOnly := []string{
+		"CR-CEL-001 (Coeliac Disease)",
+		"CR-FEED-003 (Feeding/Swallowing)",
+		"CR-GI-002 (Vomiting / Poor Intake)",
+		"CR-GROW-001 (Growth)",
+		"CR-GROW-003 (Growth)",
+	}
+	if !reflect.DeepEqual(tierOnly, wantTierOnly) {
+		t.Fatalf("tier-only rules changed: got %v, want %v", tierOnly, wantTierOnly)
+	}
+	if !reflect.DeepEqual(mapOnly, wantMapOnly) {
+		t.Fatalf("map-only rules changed: got %v, want %v", mapOnly, wantMapOnly)
 	}
 }
 
