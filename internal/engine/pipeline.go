@@ -35,6 +35,26 @@ func Run(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (models
 	}
 	steps = append(steps, step2)
 
+	// The special-care stop gate runs ahead of the clinical rule filter. Both produce a
+	// block, and this one is the broader statement: a STOP-REVIEW diagnosis pauses
+	// generation regardless of what any individual rule says about the child's other flags.
+	// Both are recorded as step 3, so the why-panel shows the two hard filters that share
+	// the clinical step rather than inventing a step number the spec does not have.
+	scStep, scBlocked, scReason, err := specialCareGate(ctx, pool, p)
+	if err != nil {
+		return models.EngineResult{}, err
+	}
+	steps = append(steps, scStep)
+	if scBlocked {
+		return models.EngineResult{
+			Recipes:             []models.RankedRecipe{},
+			Steps:               steps,
+			Blocked:             true,
+			BlockReason:         scReason,
+			UnscreenedAllergens: unscreened,
+		}, nil
+	}
+
 	ids, step3, blocked, blockReason, err := clinicalFilter(ctx, pool, p, ids)
 	if err != nil {
 		return models.EngineResult{}, err

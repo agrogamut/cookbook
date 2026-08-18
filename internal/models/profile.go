@@ -35,6 +35,17 @@ type ChildProfile struct {
 	// this codebase should hardcode as Go struct fields that drift from the workbook.
 	ClinicalFlags map[string]string `json:"clinical_flags,omitempty"`
 
+	// SpecialCareCondition is a special_care_condition_gate.condition_id (SC-DS, SC-CP,
+	// SC-CHD, SC-CLP, SC-ASD, SC-ID). All six are STOP-REVIEW in the provider's
+	// Special-Care master: the engine stops and names the required reviewer rather than
+	// ranking recipes, because the feeding decision for these children turns on swallowing
+	// assessment, feeding route and prescribed texture, none of which this project holds.
+	//
+	// Blocking needs no clinical sign-off because it is the conservative direction: a
+	// block never puts an unsafe recipe in front of an operator. Serving a special-care
+	// recipe would need sign-off, and nothing does that.
+	SpecialCareCondition string `json:"special_care_condition,omitempty"`
+
 	// ClinicalMarker is the operator's explicit nutrition-target choice when one of
 	// NT02-NT12 applies (e.g. "growth_faltering", "iron_deficiency"). Empty means let
 	// step 5 auto-select between NT01 (age 6-23mo) and the NT00 fallback. See Task 5.
