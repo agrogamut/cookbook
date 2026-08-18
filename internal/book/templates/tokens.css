@@ -23,6 +23,10 @@
      keeps one family across the whole book. Verify the faces are installed in the render
      environment before trusting output - a missing face renders tofu, not an error. */
   --font-indic: "Noto Sans Bengali", "Noto Sans Devanagari", var(--font-body);
+  /* Identity and quantity are set in monospace: ids, versions, dates and the provider's
+     review status. A release id read back from proportional type is easy to transcribe
+     wrongly, and the review status is the one string on the page nobody may misread. */
+  --font-mono: "Noto Sans Mono", "DejaVu Sans Mono", ui-monospace, monospace;
 
   --warning-strong: #9b2226;   /* warning_palette: deep red */
   --warning-soft: #fdecea;     /* warning_palette: light warm red */
@@ -114,6 +118,8 @@ tbody tr:nth-child(even) { background: var(--zebra); }
 /* A blank the parent writes on. The prototypes use these throughout rather than leaving a
    cell empty, so the page reads as a form rather than as missing data. */
 .write-line { display: inline-block; min-width: 28mm; border-bottom: 0.3mm solid var(--ink-soft); }
+
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 /* Nothing in the dataset is approved. Every generated book says so on its first page and in
    its running footer; neither is removable by a template. */
