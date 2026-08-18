@@ -1840,14 +1840,41 @@ func TestPrintPDFProducesAPDF(t *testing.T) {
 }
 ```
 
-- [ ] **Step 4: Verify against a real browser and commit**
+- [ ] **Step 4: Verify the artifact, not the exit code**
 
-Print a real book and open it. Check against the prototype specifically: the teal band, the
-zebra table, the cream callout, the writing lines, and the footer's release fields plus page
-number.
+`%PDF-` proves bytes came back. It does not prove the document is a book. Print a real one
+and read it back before committing.
 
 ```bash
-TEST_DATABASE_URL=(scripts/dev_db.fish url) go test ./internal/book/ -run PDF -v
+TEST_DATABASE_URL=$(scripts/dev_db.fish url) go test ./internal/book/ -run PDF -v
+
+# Write a real book to disk. The helper is a throwaway main; delete it afterwards.
+mkdir -p /tmp/madamgy-book
+go run ./cmd/server &            # or use the endpoints once Task 7 lands
+curl -s localhost:8080/api/books/<childID>/book1.pdf -o /tmp/madamgy-book/book1.pdf
+
+pdfinfo /tmp/madamgy-book/book1.pdf          # page count, and page size must read 595 x 842 pt
+pdftotext /tmp/madamgy-book/book1.pdf -      # the provisional banner must appear in the text layer
+pdftoppm -png -r 110 /tmp/madamgy-book/book1.pdf /tmp/madamgy-book/p
+```
+
+Then open each `/tmp/madamgy-book/p-*.png` and compare it, page by page, against
+`data/book-engine-spec/MadamGY_Book1_Visual_Prototype_V1.pdf`. Six checks, each of which
+fails visibly rather than silently:
+
+| Check | What a failure looks like |
+|---|---|
+| Page size 595 x 842 pt | A4 was not applied; margins will be wrong at print |
+| The provisional banner is in the **text layer**, on every page | It rendered as an image, or a section suppressed it |
+| The teal section band, the zebra table, the cream callout | The stylesheet did not load; Chrome printed unstyled HTML |
+| Bengali ingredient names show conjuncts and repositioned matras | The font fell back; the names are subtly wrong, which is the whole reason for this renderer |
+| The footer carries the three release fields and a page number | `DisplayHeaderFooter` did not take |
+| No blank trailing page | A page-break rule is off by one |
+
+Attach the page count and the six verdicts to the task report. "It produced a PDF" is not a
+verification result.
+
+```bash
 git add internal/book/pdf.go internal/book/pdf_test.go go.mod go.sum
 git commit -m "Print books to PDF with headless Chromium
 
@@ -1922,6 +1949,448 @@ second as the first."
 
 ---
 
+## Task 8: Generating a book from the console
+
+Task 7 makes a book reachable by URL. That is not the same as reachable by an operator. This
+task adds the console screen that generates, previews and downloads one, and fixes the two
+integration defects that stand between the browser and those endpoints.
+
+**Both defects are in `internal/api/router.go`'s CORS options and are real today**, not
+hypothetical:
+
+1. `AllowedMethods` is `{"GET", "POST", "OPTIONS"}`. `PUT /api/profiles/{childID}` is
+   registered on the router, and `web/src/lib/api.ts`'s `putProfile` sends it with
+   `Content-Type: application/json`, which forces a preflight. The preflight is rejected, so
+   saving a profile from the browser cannot work. Pre-existing; it lands here because this is
+   the task that verifies the console against the running API.
+2. `ExposedHeaders` is unset. A browser can only read simple response headers, so the
+   `X-Book-Omissions` header Task 7 sets is invisible to `fetch` no matter what the server
+   sends. The omissions list is the honest-gap rule applied to books; a header the frontend
+   cannot read is the same as not sending it.
+
+**Files:**
+- Create: `web/src/app/books/page.tsx`
+- Create: `web/src/components/book-generator.tsx`
+- Create: `web/src/components/book-generator.test.tsx`
+- Modify: `web/src/lib/api.ts` (append)
+- Modify: `web/src/components/app-sidebar.tsx:17-25` (one route entry)
+- Modify: `internal/api/router.go:23-28` (CORS options)
+
+**Interfaces:**
+- Consumes: `GET /api/books/{childID}/{book}/preview` and
+  `GET /api/books/{childID}/{book}.pdf` from Task 7, plus the `X-Book-Omissions` header and
+  the 409 / 503 status codes it defines.
+- Produces: nothing later tasks consume. This is the last task.
+
+- [ ] **Step 1: Fix the CORS options**
+
+In `internal/api/router.go`, replace the `cors.Options` literal with:
+
+```go
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins: []string{"*"}, // internal tool, no browser cookie auth to protect; tighten if this ever leaves a private network
+		AllowedMethods: []string{"GET", "POST", "PUT", "OPTIONS"},
+		AllowedHeaders: []string{"Content-Type"},
+		// A browser hides every non-simple response header unless it is named here. The
+		// omissions list is what a book does not contain, so a frontend that cannot read
+		// it would render a book as though nothing had been left out.
+		ExposedHeaders: []string{"X-Book-Omissions"},
+		MaxAge:         300,
+	}))
+```
+
+- [ ] **Step 2: Write the failing frontend test**
+
+Create `web/src/components/book-generator.test.tsx`. The three properties worth pinning are
+the ones that carry meaning: a clinical stop must not look like a broken renderer, and an
+omission must be visible.
+
+```tsx
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { BookGenerator } from "./book-generator";
+
+function mockFetch(init: { status: number; body?: string; omissions?: string }) {
+  return vi.fn().mockResolvedValue({
+    ok: init.status >= 200 && init.status < 300,
+    status: init.status,
+    headers: { get: (k: string) => (k === "X-Book-Omissions" ? init.omissions ?? null : null) },
+    text: async () => init.body ?? "",
+    json: async () => JSON.parse(init.body ?? "{}"),
+  });
+}
+
+beforeEach(() => { vi.stubGlobal("fetch", mockFetch({ status: 200, body: "<html></html>" })); });
+afterEach(() => { vi.unstubAllGlobals(); });
+
+describe("BookGenerator", () => {
+  it("renders a clinical stop, not an error, when the engine blocks the child", async () => {
+    vi.stubGlobal("fetch", mockFetch({
+      status: 409,
+      body: JSON.stringify({ error: "Down syndrome is a STOP-REVIEW condition", reviewer: "Pediatrician + dietitian" }),
+    }));
+    render(<BookGenerator />);
+    await userEvent.type(screen.getByLabelText(/child id/i), "C-1");
+    await userEvent.click(screen.getByRole("button", { name: /preview/i }));
+
+    expect(await screen.findByText(/STOP-REVIEW/)).toBeInTheDocument();
+    expect(screen.getByText(/Pediatrician \+ dietitian/)).toBeInTheDocument();
+    // A stop is a clinical decision, so the operator is never offered the artifact anyway.
+    expect(screen.queryByRole("button", { name: /download pdf/i })).toBeNull();
+  });
+
+  it("distinguishes an unavailable renderer from a clinical stop", async () => {
+    vi.stubGlobal("fetch", mockFetch({ status: 503, body: JSON.stringify({ error: "headless chromium unavailable" }) }));
+    render(<BookGenerator />);
+    await userEvent.type(screen.getByLabelText(/child id/i), "C-1");
+    await userEvent.click(screen.getByRole("button", { name: /preview/i }));
+
+    expect(await screen.findByText(/renderer unavailable/i)).toBeInTheDocument();
+    expect(screen.queryByText(/STOP-REVIEW/)).toBeNull();
+    expect(screen.queryByText(/clinical/i)).toBeNull();
+  });
+
+  it("lists every omission the API reported", async () => {
+    vi.stubGlobal("fetch", mockFetch({
+      status: 200,
+      body: "<html><body>book</body></html>",
+      omissions: "B1-009 vaccination schedule: no drafted text permitted; B1-014 development by age: no drafted text permitted",
+    }));
+    render(<BookGenerator />);
+    await userEvent.type(screen.getByLabelText(/child id/i), "C-1");
+    await userEvent.click(screen.getByRole("button", { name: /preview/i }));
+
+    expect(await screen.findByText(/B1-009 vaccination schedule/)).toBeInTheDocument();
+    expect(screen.getByText(/B1-014 development by age/)).toBeInTheDocument();
+  });
+});
+```
+
+- [ ] **Step 3: Run the test and watch it fail**
+
+```bash
+cd web && npm test -- book-generator
+```
+
+Expected: FAIL, `Failed to resolve import "./book-generator"`.
+
+- [ ] **Step 4: Add the API client functions**
+
+`request<T>` in `web/src/lib/api.ts` parses JSON and discards headers, so neither book
+endpoint can use it. Append to `web/src/lib/api.ts`:
+
+```ts
+/**
+ * A book preview, plus what the book does not contain. `omissions` comes from the
+ * X-Book-Omissions header rather than the body, because the body is the document itself.
+ * An empty array means the API reported no omissions -- never that none were checked.
+ */
+export interface BookPreview {
+  html: string;
+  omissions: string[];
+}
+
+/** Thrown when the engine stops generation for a clinical reason. Distinct from ApiError
+ *  because an operator must never read a clinical stop as a fault. */
+export class BookBlockedError extends Error {
+  constructor(message: string, public reviewer?: string) {
+    super(message);
+    this.name = "BookBlockedError";
+  }
+}
+
+/** Thrown when the print pipeline has no browser. An operational fault, not a clinical one. */
+export class RendererUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RendererUnavailableError";
+  }
+}
+
+async function bookError(res: Response): Promise<Error> {
+  const body = await res.json().catch(() => ({ error: res.statusText }));
+  if (res.status === 409) return new BookBlockedError(body.error ?? res.statusText, body.reviewer);
+  if (res.status === 503) return new RendererUnavailableError(body.error ?? res.statusText);
+  return new ApiError(res.status, body.error ?? res.statusText);
+}
+
+function omissionsOf(res: Response): string[] {
+  const header = res.headers.get("X-Book-Omissions");
+  if (!header) return [];
+  return header.split(";").map((s) => s.trim()).filter(Boolean);
+}
+
+export async function getBookPreview(childID: string, book: "book1" | "book2"): Promise<BookPreview> {
+  const res = await fetch(`${BASE_URL}/api/books/${encodeURIComponent(childID)}/${book}/preview`);
+  if (!res.ok) throw await bookError(res);
+  return { html: await res.text(), omissions: omissionsOf(res) };
+}
+
+export async function getBookPdf(childID: string, book: "book1" | "book2"): Promise<Blob> {
+  const res = await fetch(`${BASE_URL}/api/books/${encodeURIComponent(childID)}/${book}.pdf`);
+  if (!res.ok) throw await bookError(res);
+  return res.blob();
+}
+```
+
+`ApiError` is currently declared but not exported. Change its declaration to
+`export class ApiError extends Error` so `bookError` can be read by a caller that wants to
+distinguish it; nothing else changes.
+
+- [ ] **Step 5: Write the component**
+
+Create `web/src/components/book-generator.tsx`. The preview goes in a sandboxed `iframe`
+with `srcDoc`, not into the page: the book carries its own stylesheet and print sizing, and
+letting that into the console's DOM would corrupt both. `sandbox=""` with no tokens blocks
+scripts, forms and same-origin access, which is right for a document the operator has not
+reviewed yet.
+
+```tsx
+"use client";
+
+import { useState } from "react";
+import {
+  getBookPreview, getBookPdf, BookBlockedError, RendererUnavailableError,
+} from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+
+type Blocked = { kind: "blocked"; message: string; reviewer?: string };
+type Unavailable = { kind: "unavailable"; message: string };
+type Failed = { kind: "failed"; message: string };
+type Problem = Blocked | Unavailable | Failed;
+
+export function BookGenerator() {
+  const [childID, setChildID] = useState("");
+  const [book, setBook] = useState<"book1" | "book2">("book1");
+  const [html, setHtml] = useState<string | null>(null);
+  const [omissions, setOmissions] = useState<string[]>([]);
+  const [problem, setProblem] = useState<Problem | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  function classify(err: unknown): Problem {
+    if (err instanceof BookBlockedError) {
+      return { kind: "blocked", message: err.message, reviewer: err.reviewer };
+    }
+    if (err instanceof RendererUnavailableError) {
+      return { kind: "unavailable", message: err.message };
+    }
+    return { kind: "failed", message: err instanceof Error ? err.message : String(err) };
+  }
+
+  async function preview() {
+    setBusy(true);
+    setProblem(null);
+    setHtml(null);
+    setOmissions([]);
+    try {
+      const result = await getBookPreview(childID, book);
+      setHtml(result.html);
+      setOmissions(result.omissions);
+    } catch (err) {
+      setProblem(classify(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function download() {
+    setBusy(true);
+    setProblem(null);
+    try {
+      const blob = await getBookPdf(childID, book);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${childID}-${book}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setProblem(classify(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1">
+          <Label htmlFor="child-id" className="text-xs uppercase tracking-wide">Child ID</Label>
+          <Input
+            id="child-id"
+            className="w-56 font-mono"
+            value={childID}
+            onChange={(e) => setChildID(e.target.value)}
+            placeholder="C-0001"
+          />
+        </div>
+        <Tabs value={book} onValueChange={(v) => setBook(v as "book1" | "book2")}>
+          <TabsList>
+            <TabsTrigger value="book1">Book 1 &middot; daily life</TabsTrigger>
+            <TabsTrigger value="book2">Book 2 &middot; recipes</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <Button onClick={preview} disabled={!childID || busy}>Preview</Button>
+        {html !== null && (
+          <Button variant="outline" onClick={download} disabled={busy}>Download PDF</Button>
+        )}
+      </div>
+
+      {problem?.kind === "blocked" && (
+        <Alert className="border-[var(--color-blocked,theme(colors.amber.600))]">
+          <AlertTitle>Generation stopped by a clinical rule</AlertTitle>
+          <AlertDescription className="space-y-1">
+            <p>{problem.message}</p>
+            {problem.reviewer && <p className="font-mono text-xs">Reviewer: {problem.reviewer}</p>}
+            <p className="text-xs text-muted-foreground">
+              This is the provider&apos;s stop gate, not a fault. There is no override.
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {problem?.kind === "unavailable" && (
+        <Alert variant="destructive">
+          <AlertTitle>Renderer unavailable</AlertTitle>
+          <AlertDescription>
+            <p>{problem.message}</p>
+            <p className="text-xs">
+              An operational fault in the print pipeline. Nothing about this child changed.
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {problem?.kind === "failed" && (
+        <Alert variant="destructive">
+          <AlertTitle>Request failed</AlertTitle>
+          <AlertDescription>{problem.message}</AlertDescription>
+        </Alert>
+      )}
+
+      {omissions.length > 0 && (
+        <div className="rounded border p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <Badge variant="outline">{omissions.length} omitted</Badge>
+            <span className="text-xs text-muted-foreground">
+              Facts the book does not contain, reported by the assembler.
+            </span>
+          </div>
+          <ul className="space-y-1 font-mono text-xs">
+            {omissions.map((o) => <li key={o}>{o}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {html !== null && (
+        <iframe
+          title="Book preview"
+          sandbox=""
+          srcDoc={html}
+          className="h-[80vh] w-full rounded border bg-white"
+        />
+      )}
+    </div>
+  );
+}
+```
+
+- [ ] **Step 6: Write the page and register the route**
+
+Create `web/src/app/books/page.tsx`:
+
+```tsx
+import { BookGenerator } from "@/components/book-generator";
+import { PageHeader } from "@/components/page-header";
+
+export default function BooksPage() {
+  return (
+    <div>
+      <PageHeader
+        title="Books"
+        description="Generate, preview and download a child's two books. Every page carries the provider's Draft status; nothing here is approved."
+      />
+      <BookGenerator />
+    </div>
+  );
+}
+```
+
+If `@/components/page-header` does not exist in the tree, use a plain `<h1>` with the same
+two strings rather than creating it -- it belongs to work outside this plan.
+
+In `web/src/components/app-sidebar.tsx`, add `BookMarked` to the `lucide-react` import and
+one entry to `routes`, after the engine console:
+
+```tsx
+  { href: "/books", label: "Books", icon: BookMarked },
+```
+
+- [ ] **Step 7: Run the tests**
+
+```bash
+cd web && npm test
+```
+
+Expected: PASS, including the three new cases.
+
+- [ ] **Step 8: Verify end to end against a running stack**
+
+Unit tests with a stubbed `fetch` prove the component's branches. They do not prove the
+console can reach the API, that CORS lets the header through, or that the PDF the browser
+downloads is the document the preview showed. Do all four by hand:
+
+```bash
+# terminal 1
+DATABASE_URL=$(scripts/dev_db.fish url) go run ./cmd/server
+# terminal 2
+cd web && npm run dev
+```
+
+1. Open `http://localhost:3000/books`, enter a child id that exists, click Preview. The
+   iframe must show a formatted book -- the teal band, the zebra table, the provisional
+   banner -- not raw markup and not a blank frame.
+2. Open the browser devtools network tab and confirm the preview response carries
+   `Access-Control-Expose-Headers: X-Book-Omissions`. Without it the omissions list renders
+   empty while the server is sending one, which is a silent gap.
+3. Click Download PDF. The file must open in a viewer, and its first page must match what
+   the iframe showed.
+4. Enter a child whose profile carries a special-care condition. The clinical stop must
+   render, and the Download PDF button must not be present.
+
+Record what you saw for each of the four in the report. "Ran it and it worked" is not a
+result; name the child id, the page count and the block reason you actually saw.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add web/src/app/books web/src/components/book-generator.tsx \
+        web/src/components/book-generator.test.tsx web/src/lib/api.ts \
+        web/src/components/app-sidebar.tsx internal/api/router.go
+git commit -m "Generate and preview books from the console
+
+The preview renders in a sandboxed iframe rather than in the page: the book
+carries its own stylesheet and print sizing, and letting that into the
+console's DOM would corrupt both documents.
+
+A clinical stop and an unavailable renderer render differently and carry
+different words. An operator who reads a provider stop gate as a broken
+service will retry it, and a stop is not a thing to retry.
+
+Two CORS defects fixed alongside. PUT was missing from AllowedMethods, so
+saving a profile from the browser failed its preflight. X-Book-Omissions was
+not exposed, so the list of facts a book omits was invisible to the frontend
+no matter what the server sent."
+```
+
+---
+
 ## Not in this plan, and why
 
 - **A generation job state machine, release records and review gates.** The SRS's 11-state
@@ -1964,3 +2433,13 @@ consistently after. `RenderHTML(w, kind, meta, data)` has one signature througho
 source column. Task 5 populates it from the import content hash and notes `GAP-024`; that gap
 row is not written by any task in this plan. Whoever implements Task 5 should add it in that
 commit rather than leaving the reference dangling.
+
+**Frontend reach (added after Task 2).** Tasks 1-7 stop at a URL. Task 8 is what makes a
+book reachable by an operator rather than by curl, and it carries the two CORS defects that
+stand between the browser and those endpoints - a missing `PUT` in `AllowedMethods` that
+already breaks profile saving today, and an unexposed `X-Book-Omissions` that would render
+the omissions list empty while the server was sending one. Task 6's verification was
+rewritten at the same time: the original step asserted a `%PDF-` prefix, which proves bytes
+came back and nothing about whether the document is a book. It now reads the printed pages
+back through `pdfinfo`, `pdftotext` and `pdftoppm` and compares them against the provider's
+prototype, with six named checks whose failures are visible.
