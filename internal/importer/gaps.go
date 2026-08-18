@@ -82,6 +82,28 @@ var gapMeasures = []gapMeasure{
 	{"GAP-020", `SELECT count(*) FROM clinical_rule_master
 	             WHERE human_approval_level = 'Specialist clinical approval'
 	               AND clinical_domain IN ('Age/Feeding', 'Data Quality')`},
+
+	// Special-care recipe candidates with no counterpart in the validated Recipe Master.
+	// Measured by name, which is the only join the provider left available: the sheet's
+	// Meal_Category reads "Assign in main Recipe Master" on every row, so the mapping is
+	// explicitly outstanding work rather than a missing column.
+	//
+	// Reads 108 today, the whole table. It falls as the provider maps candidates onto
+	// real recipes, and reaching zero is what would make the table servable -- which is
+	// also why TestSpecialCareCandidatesAreNeverApproved fails on the first mapping
+	// rather than letting it happen quietly.
+	{"GAP-021", `SELECT count(*) FROM special_care_recipe_candidate c
+	             WHERE NOT EXISTS (
+	                 SELECT 1 FROM recipe_master r WHERE r.recipe_name = c.recipe_name)`},
+
+	// Special-care output rules with no engine implementation. Only OR-001, the
+	// condition-detected stop, is implemented; the other 13 need feeding route, prescribed
+	// IDDSI level, cardiology fluid orders, post-operative status, pica or sensory profile,
+	// none of which this project collects.
+	//
+	// Counted from the table rather than hardcoded at 13, so reissuing the workbook with
+	// more rules raises the number instead of leaving it stale.
+	{"GAP-022", `SELECT count(*) FROM special_care_output_rule WHERE rule_id <> 'OR-001'`},
 }
 
 // measureGaps refreshes the counted gaps inside the import transaction.

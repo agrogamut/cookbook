@@ -307,14 +307,27 @@ func upsertOne(ctx context.Context, tx pgx.Tx, xlsxDir string, spec TableSpec, s
 	return res, pks, nil
 }
 
+// deleteMissing removes rows no longer present in the workbook. The caller builds each
+// row's key by joining its primary-key columns with \x1f, so the comparison here rebuilds
+// the same string from the table side rather than comparing column by column.
+//
+// concat_ws is safe for this because every primary-key column is NOT NULL: it skips NULLs,
+// which would otherwise let ('a', NULL) and ('a') collide.
 func deleteMissing(ctx context.Context, tx pgx.Tx, spec TableSpec, pks []string) (int, error) {
-	if len(spec.PrimaryKey) != 1 {
-		return 0, fmt.Errorf("importer: %s: composite primary keys are not supported by the sweep", spec.Table)
+	if len(spec.PrimaryKey) == 0 {
+		return 0, fmt.Errorf("importer: %s: no primary key declared, cannot sweep", spec.Table)
+	}
+	parts := make([]string, len(spec.PrimaryKey))
+	for i, k := range spec.PrimaryKey {
+		parts[i] = pgx.Identifier{k}.Sanitize() + "::text"
+	}
+	key := parts[0]
+	if len(parts) > 1 {
+		key = "concat_ws(E'\\x1f', " + strings.Join(parts, ", ") + ")"
 	}
 	tag, err := tx.Exec(ctx, fmt.Sprintf(
-		"DELETE FROM %s WHERE %s::text <> ALL($1::text[])",
-		pgx.Identifier{spec.Table}.Sanitize(),
-		pgx.Identifier{spec.PrimaryKey[0]}.Sanitize()), pks)
+		"DELETE FROM %s WHERE %s <> ALL($1::text[])",
+		pgx.Identifier{spec.Table}.Sanitize(), key), pks)
 	if err != nil {
 		return 0, fmt.Errorf("importer: %s: sweep removed rows: %w", spec.Table, err)
 	}

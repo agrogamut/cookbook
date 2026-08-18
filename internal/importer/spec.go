@@ -190,4 +190,56 @@ var Specs = []TableSpec{
 		Sheet: "Daily Life Development", HeaderRow: 4,
 		PrimaryKey: []string{"dailylife_id"}, FirstCol: "dailylife_id",
 	},
+
+	// The provider's Special-Care Condition Feeding & Recipe Engine Master, delivered
+	// 18 August 2026. Every sheet's headers are on row 4, verified by reading the file.
+	// "README & Engine Logic" is prose, not a table, and is not imported.
+	//
+	// Parent-first, as the file's opening comment requires: condition gate and food type
+	// come before the feeding-style and candidate tables that reference them.
+	{
+		Table: "special_care_condition_gate", File: "MadamGY_Special_Care_Condition_Feeding_Recipe_Engine_Master_V1.xlsx",
+		Sheet: "Condition Stop Gates", HeaderRow: 4,
+		PrimaryKey: []string{"condition_id"}, FirstCol: "condition_id",
+	},
+	{
+		Table: "special_care_parameter", File: "MadamGY_Special_Care_Condition_Feeding_Recipe_Engine_Master_V1.xlsx",
+		Sheet: "Parameter Input Master", HeaderRow: 4,
+		PrimaryKey: []string{"parameter_id"}, FirstCol: "parameter_id",
+	},
+	{
+		Table: "special_care_food_type", File: "MadamGY_Special_Care_Condition_Feeding_Recipe_Engine_Master_V1.xlsx",
+		Sheet: "Food Type Indications", HeaderRow: 4,
+		PrimaryKey: []string{"food_type_id"}, FirstCol: "food_type_id",
+	},
+	{
+		Table: "special_care_feeding_style", File: "MadamGY_Special_Care_Condition_Feeding_Recipe_Engine_Master_V1.xlsx",
+		Sheet: "Feeding Style Protocol", HeaderRow: 4,
+		PrimaryKey: []string{"condition_id", "phenotype_or_trigger"}, FirstCol: "condition_id",
+	},
+	{
+		Table: "special_care_recipe_candidate", File: "MadamGY_Special_Care_Condition_Feeding_Recipe_Engine_Master_V1.xlsx",
+		Sheet: "Special Recipe Candidates", HeaderRow: 4,
+		PrimaryKey: []string{"candidate_id"}, FirstCol: "candidate_id",
+	},
+	{
+		Table: "special_care_output_rule", File: "MadamGY_Special_Care_Condition_Feeding_Recipe_Engine_Master_V1.xlsx",
+		Sheet: "Output Rule Matrix", HeaderRow: 4,
+		PrimaryKey: []string{"rule_id"}, FirstCol: "rule_id",
+	},
+	{
+		Table: "special_care_evidence_source", File: "MadamGY_Special_Care_Condition_Feeding_Recipe_Engine_Master_V1.xlsx",
+		Sheet: "Evidence Protocol Master", HeaderRow: 4,
+		PrimaryKey: []string{"source_id"}, FirstCol: "source_id",
+	},
+	{
+		Table: "special_care_qa_check", File: "MadamGY_Special_Care_Condition_Feeding_Recipe_Engine_Master_V1.xlsx",
+		Sheet: "Review & QA", HeaderRow: 4,
+		PrimaryKey: []string{"qa_id"}, FirstCol: "qa_id",
+	},
+	{
+		Table: "special_care_coverage_metric", File: "MadamGY_Special_Care_Condition_Feeding_Recipe_Engine_Master_V1.xlsx",
+		Sheet: "Coverage Dashboard", HeaderRow: 4,
+		PrimaryKey: []string{"metric"}, FirstCol: "metric",
+	},
 }
