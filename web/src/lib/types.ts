@@ -75,6 +75,12 @@ export interface ClinicalMarker {
   engine_actions: string;
   specialist_required: string;
   escalates: boolean;
+  /** clinical_rule_master.trigger_operator, comma-joined; every row for a trigger_field
+   *  shares one operator (asserted server-side). Determines which control renders. */
+  trigger_operators: string;
+  /** Distinct trigger_value(s) for this field, joined with "|" -- never "," or ";",
+   *  because in_list values (e.g. "Overweight;Obesity") already use those separators. */
+  trigger_values: string;
 }
 
 export interface EnumValue {

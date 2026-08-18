@@ -21,12 +21,12 @@ func (h *Handlers) ReferenceRegions(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type region struct {
-		RegionCulture    string  `json:"region_culture"`
-		Country          string  `json:"country"`
-		FocusTier        int     `json:"focus_tier"`
-		RankWeight       float64 `json:"rank_weight"`
-		EnrichmentScope  bool    `json:"enrichment_scope"`
-		Rationale        string  `json:"rationale"`
+		RegionCulture   string  `json:"region_culture"`
+		Country         string  `json:"country"`
+		FocusTier       int     `json:"focus_tier"`
+		RankWeight      float64 `json:"rank_weight"`
+		EnrichmentScope bool    `json:"enrichment_scope"`
+		Rationale       string  `json:"rationale"`
 	}
 	// Nil-slice-marshals-to-null would violate the frontend's Region[] contract.
 	out := []region{}
@@ -59,14 +59,14 @@ func (h *Handlers) ReferenceCuisines(w http.ResponseWriter, r *http.Request) {
 	defer rows.Close()
 
 	type cuisine struct {
-		CultureCode     string  `json:"culture_code"`
-		CuisineCluster  string  `json:"cuisine_cluster"`
-		Country         string  `json:"country"`
-		StateProvince   *string `json:"state_province"`
-		RegionCulture   string  `json:"region_culture"`
-		FocusTier       int     `json:"focus_tier"`
-		RankWeight      float64 `json:"rank_weight"`
-		RecipeCount     int     `json:"recipe_count"`
+		CultureCode    string  `json:"culture_code"`
+		CuisineCluster string  `json:"cuisine_cluster"`
+		Country        string  `json:"country"`
+		StateProvince  *string `json:"state_province"`
+		RegionCulture  string  `json:"region_culture"`
+		FocusTier      int     `json:"focus_tier"`
+		RankWeight     float64 `json:"rank_weight"`
+		RecipeCount    int     `json:"recipe_count"`
 	}
 	// Nil-slice-marshals-to-null would violate the frontend's Cuisine[] contract.
 	out := []cuisine{}
@@ -104,22 +104,22 @@ func (h *Handlers) ReferenceNutritionTargets(w http.ResponseWriter, r *http.Requ
 	defer rows.Close()
 
 	type target struct {
-		TargetCode      string  `json:"target_code"`
-		TargetName      string  `json:"target_name"`
-		TargetCategory  *string `json:"target_category"`
-		AgeFromMonths   int     `json:"age_from_months"`
-		AgeToMonths     int     `json:"age_to_months"`
-		TriggerInput    *string `json:"trigger_input"`
-		TriggerLogic    *string `json:"trigger_logic"`
-		ScoreEnergy     int     `json:"recipe_score_energy"`
-		ScoreProtein    int     `json:"recipe_score_protein"`
-		ScoreIron       int     `json:"recipe_score_iron"`
-		ScoreCalcium    int     `json:"recipe_score_calcium"`
-		ScoreFruitVeg   int     `json:"recipe_score_fruitveg"`
-		ScoreDiversity  int     `json:"recipe_score_diversity"`
-		ScoreCost       int     `json:"recipe_score_cost"`
-		HardExclusions  *string `json:"hard_exclusions"`
-		SoftPenalties   *string `json:"soft_penalties"`
+		TargetCode     string  `json:"target_code"`
+		TargetName     string  `json:"target_name"`
+		TargetCategory *string `json:"target_category"`
+		AgeFromMonths  int     `json:"age_from_months"`
+		AgeToMonths    int     `json:"age_to_months"`
+		TriggerInput   *string `json:"trigger_input"`
+		TriggerLogic   *string `json:"trigger_logic"`
+		ScoreEnergy    int     `json:"recipe_score_energy"`
+		ScoreProtein   int     `json:"recipe_score_protein"`
+		ScoreIron      int     `json:"recipe_score_iron"`
+		ScoreCalcium   int     `json:"recipe_score_calcium"`
+		ScoreFruitVeg  int     `json:"recipe_score_fruitveg"`
+		ScoreDiversity int     `json:"recipe_score_diversity"`
+		ScoreCost      int     `json:"recipe_score_cost"`
+		HardExclusions *string `json:"hard_exclusions"`
+		SoftPenalties  *string `json:"soft_penalties"`
 	}
 	// Nil-slice-marshals-to-null would violate the frontend's NutritionTarget[] contract.
 	out := []target{}
@@ -196,7 +196,9 @@ func (h *Handlers) ReferenceClinicalMarkers(w http.ResponseWriter, r *http.Reque
 		       string_agg(DISTINCT clinical_domain, ', ')                   AS domains,
 		       string_agg(DISTINCT engine_action, ' | ')                    AS engine_actions,
 		       string_agg(DISTINCT coalesce(specialist_required, ''), ' | ') AS specialist_required,
-		       bool_or(human_approval_level = 'Specialist clinical approval') AS escalates
+		       bool_or(human_approval_level = 'Specialist clinical approval') AS escalates,
+		       string_agg(DISTINCT trigger_operator, ', ')                  AS trigger_operators,
+		       string_agg(DISTINCT trigger_value, '|' ORDER BY trigger_value) AS trigger_values
 		FROM clinical_rule_master
 		GROUP BY trigger_field
 		ORDER BY trigger_field`)
@@ -213,12 +215,14 @@ func (h *Handlers) ReferenceClinicalMarkers(w http.ResponseWriter, r *http.Reque
 		EngineActions      string `json:"engine_actions"`
 		SpecialistRequired string `json:"specialist_required"`
 		Escalates          bool   `json:"escalates"`
+		TriggerOperators   string `json:"trigger_operators"`
+		TriggerValues      string `json:"trigger_values"`
 	}
 	out := []marker{}
 	for rows.Next() {
 		var m marker
 		if err := rows.Scan(&m.TriggerField, &m.RuleIDs, &m.Domains, &m.EngineActions,
-			&m.SpecialistRequired, &m.Escalates); err != nil {
+			&m.SpecialistRequired, &m.Escalates, &m.TriggerOperators, &m.TriggerValues); err != nil {
 			writeError(w, http.StatusInternalServerError, "clinical marker scan failed: "+err.Error())
 			return
 		}

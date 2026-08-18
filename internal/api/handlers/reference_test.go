@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -141,9 +142,11 @@ func TestReferenceClinicalMarkersCoversEveryTriggerField(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 	var got []struct {
-		TriggerField string `json:"trigger_field"`
-		RuleIDs      string `json:"rule_ids"`
-		Escalates    bool   `json:"escalates"`
+		TriggerField     string `json:"trigger_field"`
+		RuleIDs          string `json:"rule_ids"`
+		Escalates        bool   `json:"escalates"`
+		TriggerOperators string `json:"trigger_operators"`
+		TriggerValues    string `json:"trigger_values"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -152,6 +155,7 @@ func TestReferenceClinicalMarkersCoversEveryTriggerField(t *testing.T) {
 		t.Fatalf("expected 28 distinct trigger_field values across the 31 rules, got %d", len(got))
 	}
 	var escalating int
+	var diabetesValues string
 	for _, m := range got {
 		if m.RuleIDs == "" {
 			t.Fatalf("%s carries no rule id; a marker with no rule cannot be offered", m.TriggerField)
@@ -159,9 +163,24 @@ func TestReferenceClinicalMarkersCoversEveryTriggerField(t *testing.T) {
 		if m.Escalates {
 			escalating++
 		}
+		// trigger_values must never be empty: a marker whose value vocabulary is unknown
+		// must not be offerable, since the client cannot construct a value that fires it.
+		if m.TriggerValues == "" {
+			t.Fatalf("%s reports an empty trigger_values; every marker must carry a value vocabulary", m.TriggerField)
+		}
+		if m.TriggerField == "Diabetes_Type" {
+			diabetesValues = m.TriggerValues
+		}
 	}
 	if escalating == 0 {
 		t.Fatal("no marker reports escalates=true, but the specialist tier is non-empty")
+	}
+	wantValues := map[string]bool{"Type 1": true, "Type 2": true}
+	for _, v := range strings.Split(diabetesValues, "|") {
+		delete(wantValues, v)
+	}
+	if len(wantValues) != 0 {
+		t.Fatalf("Diabetes_Type trigger_values = %q, missing %v", diabetesValues, wantValues)
 	}
 }
 

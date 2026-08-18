@@ -36,6 +36,34 @@ const CLINICAL_MARKERS = [
 
 const NONE = "__none__"; // Radix Select forbids an empty-string item value
 
+// A clinical flag must never be sendable as a value that cannot fire the rule it is named
+// after -- a badge reading "holds" next to a control that cannot actually trigger the hold
+// is a false assurance. clinical_rule_master.trigger_operator determines what a correct
+// control looks like; every trigger_field carries exactly one operator (asserted by
+// TestReferenceClinicalMarkersCoversEveryTriggerField), so this is a pure function of the
+// marker, not a per-row branch.
+type MarkerControl =
+  | { kind: "toggle"; value: string }
+  | { kind: "select"; values: string[] }
+  | { kind: "text"; matches: string }
+  | { kind: "unsupported" };
+
+function markerControl(m: ClinicalMarker): MarkerControl {
+  const op = m.trigger_operators;
+  // Age_Months (less_than) and Texture_Skill (incompatible_with) are enforced
+  // structurally by step 1 and excluded from clinicalFilter's own query by domain -- a
+  // control for either would be inert, so neither is offered as a working control.
+  if (op === "less_than" || op === "incompatible_with") return { kind: "unsupported" };
+  if (op === "contains") return { kind: "text", matches: m.trigger_values };
+  const values = op === "in_list"
+    ? Array.from(new Set(
+        m.trigger_values.split("|").flatMap((v) => v.split(";").map((s) => s.trim()).filter(Boolean)),
+      ))
+    : m.trigger_values.split("|").filter(Boolean);
+  if (values.length <= 1) return { kind: "toggle", value: values[0] ?? "Yes" };
+  return { kind: "select", values };
+}
+
 export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
   const [ageMonths, setAgeMonths] = useState<number | "">("");
   const [dietType, setDietType] = useState("");
@@ -75,11 +103,28 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
       prev.includes(group) ? prev.filter((g) => g !== group) : [...prev, group]);
   }
 
-  function toggleFlag(field: string) {
+  // clinical_flags is Record<field, value> -- one value per field, matching what the
+  // engine's triggerFires actually compares. Every setter below sources its value from
+  // the marker's own trigger_values, never a literal, so a set field is guaranteed to be
+  // a value the rule can match.
+  function setFlag(field: string, value: string) {
+    setClinicalFlags((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function clearFlag(field: string) {
+    setClinicalFlags((prev) => {
+      if (!(field in prev)) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function toggleFlag(field: string, value: string) {
     setClinicalFlags((prev) => {
       const next = { ...prev };
-      if (field in next) delete next[field];
-      else next[field] = "Yes";
+      if (next[field] === value) delete next[field];
+      else next[field] = value;
       return next;
     });
   }
@@ -186,30 +231,101 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
         </Select>
       </div>
 
-      <fieldset className="space-y-1">
+      <fieldset className="space-y-1.5">
         <legend className={label}>Clinical flags</legend>
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-col gap-1.5">
           {markerOptions.map((m) => {
-            const on = m.trigger_field in clinicalFlags;
+            const control = markerControl(m);
+            const escalateClass = m.escalates ? "border-destructive" : "";
+            const title = `${m.rule_ids} - ${m.engine_actions}`;
+
+            if (control.kind === "unsupported") {
+              return (
+                <div key={m.trigger_field} className="flex items-center gap-2 opacity-50" title={title}>
+                  <Badge variant="outline" className="border-dashed">{m.trigger_field}</Badge>
+                  <span className="text-xs text-muted-foreground">
+                    enforced structurally at step 1 -- no control here
+                  </span>
+                </div>
+              );
+            }
+
+            if (control.kind === "toggle") {
+              const on = clinicalFlags[m.trigger_field] === control.value;
+              return (
+                <button
+                  key={m.trigger_field}
+                  type="button"
+                  onClick={() => toggleFlag(m.trigger_field, control.value)}
+                  title={title}
+                  className="focus-visible:ring-ring w-fit rounded focus-visible:outline-none focus-visible:ring-2"
+                >
+                  <Badge variant={on ? "default" : "outline"} className={escalateClass}>
+                    {m.trigger_field}
+                    {m.escalates && " - holds"}
+                  </Badge>
+                </button>
+              );
+            }
+
+            if (control.kind === "select") {
+              const current = clinicalFlags[m.trigger_field] ?? NONE;
+              return (
+                <div key={m.trigger_field} className="flex items-center gap-2" title={title}>
+                  <Badge variant={current !== NONE ? "default" : "outline"} className={escalateClass}>
+                    {m.trigger_field}
+                    {m.escalates && " - holds"}
+                  </Badge>
+                  <Select
+                    value={current}
+                    onValueChange={(v) => (v === NONE ? clearFlag(m.trigger_field) : setFlag(m.trigger_field, v))}
+                  >
+                    <SelectTrigger className="h-7 w-44 text-xs"><SelectValue placeholder="not set" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NONE}>not set</SelectItem>
+                      {control.values.map((v) => (
+                        <SelectItem key={v} value={v}>{v}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              );
+            }
+
+            // text: the one case where free entry is correct, since the rule matches a
+            // substring of whatever is typed rather than an exact vocabulary value.
+            const current = clinicalFlags[m.trigger_field] ?? "";
             return (
-              <button
-                key={m.trigger_field}
-                type="button"
-                onClick={() => toggleFlag(m.trigger_field)}
-                title={`${m.rule_ids} - ${m.engine_actions}`}
-                className="focus-visible:ring-ring rounded focus-visible:outline-none focus-visible:ring-2"
-              >
-                <Badge variant={on ? "default" : "outline"} className={m.escalates ? "border-destructive" : ""}>
+              <div key={m.trigger_field} className="flex items-center gap-2" title={title}>
+                <Badge variant={current ? "default" : "outline"} className={escalateClass}>
                   {m.trigger_field}
                   {m.escalates && " - holds"}
                 </Badge>
-              </button>
+                <Input
+                  className="h-7 w-52 text-xs"
+                  placeholder={`matches text containing "${control.matches}"`}
+                  value={current}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v.trim() === "") clearFlag(m.trigger_field);
+                    else setFlag(m.trigger_field, v);
+                  }}
+                />
+              </div>
             );
           })}
         </div>
         <p className="text-xs text-muted-foreground">
           Flags outlined in red hold generation for specialist review rather than filtering
-          it. No recipe list is returned for those.
+          it; no recipe list is returned for those. Most flags are a toggle badge because
+          the rule fires on the literal value "Yes". A few render as a dropdown instead --
+          Diabetes_Type, Coeliac_Status, BMI_for_Age_Classification and others -- because
+          their rule only fires on a specific value ("Type 1", "Confirmed",
+          "Overweight" ...) that is never "Yes"; picking the wrong shape of control there
+          would let an operator believe a hold is active when it is not. One field is free
+          text because its rule matches a substring rather than an exact value. Two fields
+          render disabled: step 1 already enforces Age_Months and Texture_Skill
+          structurally, so a control for either here would have no effect.
         </p>
       </fieldset>
 
