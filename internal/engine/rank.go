@@ -407,7 +407,7 @@ func applySuspectedAllergenRank(ctx context.Context, pool *pgxpool.Pool, p model
 	}
 
 	// Larger than every other adjustment in this file (culture 0.05, availability 0.05,
-	// budget 0.03, diet 0.04, duplicate -0.02) because a suspected allergen is a safety
+	// budget 0.03, duplicate -0.02) because a suspected allergen is a safety
 	// signal rather than a preference, and it should push a recipe clearly down the list.
 	// Still bounded, because it must not empty a page or override the nutrition ordering
 	// outright -- that is what the confirmed state is for.
@@ -427,16 +427,65 @@ func applySuspectedAllergenRank(ctx context.Context, pool *pgxpool.Pool, p model
 		return nil, models.StepResult{}, err
 	}
 
+	// Unlike allergyFilter, this is a ranker and must never fail the request over an
+	// unrecognized group -- rankers never empty a result set, including via an error path.
+	// So a misspelled or unrecognized group (e.g. "Penut") is surfaced in the note rather
+	// than rejected: without this, unscreenedGroups alone can't distinguish "recognized
+	// group, no corpus tag" from "not a recognized group at all", and the note would read
+	// like a working screen that found nothing.
+	unknown, err := unknownAllergenGroups(ctx, pool, p.SuspectedAllergens)
+	if err != nil {
+		return nil, models.StepResult{}, err
+	}
+
 	note := fmt.Sprintf("%d of %d candidates carry a suspected allergen tag and were ranked down by %.2f; none were excluded, because AS-002 marks a suspected allergy hard_block = N",
 		len(demote), stepIn, penalty)
 	if len(unscreened) > 0 {
 		note += fmt.Sprintf(". Suspected group(s) %v have no corpus tag, so they demoted nothing", unscreened)
+	}
+	if len(unknown) > 0 {
+		note += fmt.Sprintf(". Suspected group(s) %v are not in allergen_mapping and were ignored", unknown)
 	}
 
 	return out, models.StepResult{
 		Step: 2, Name: "Allergy - suspected, ranker", Kind: "ranker",
 		CandidatesIn: stepIn, CandidatesOut: stepIn, Note: note,
 	}, nil
+}
+
+// unknownAllergenGroups returns the subset of groups that do not exist anywhere in
+// allergen_mapping at all -- distinct from unscreenedGroups, which only covers groups that
+// are recognized but have no corpus tag. allergyFilter treats this case as fatal
+// (ErrInvalidProfile) because it is a hard filter; this ranker cannot do the same without
+// violating "rankers never empty a result set" by association with an error path, so it
+// reports the unrecognized group in the step note instead of silently ignoring it.
+func unknownAllergenGroups(ctx context.Context, pool *pgxpool.Pool, groups []string) ([]string, error) {
+	if len(groups) == 0 {
+		return nil, nil
+	}
+	rows, err := pool.Query(ctx, `SELECT DISTINCT allergen_group FROM allergen_mapping WHERE allergen_group = ANY($1)`, groups)
+	if err != nil {
+		return nil, fmt.Errorf("engine: unknown allergen group lookup: %w", err)
+	}
+	defer rows.Close()
+	valid := make(map[string]bool)
+	for rows.Next() {
+		var g string
+		if err := rows.Scan(&g); err != nil {
+			return nil, fmt.Errorf("engine: unknown allergen group scan: %w", err)
+		}
+		valid[g] = true
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("engine: unknown allergen group rows: %w", err)
+	}
+	var out []string
+	for _, g := range groups {
+		if !valid[g] {
+			out = append(out, g)
+		}
+	}
+	return out, nil
 }
 
 // unscreenedGroups returns the subset of groups with no corpus tag. Shared by the

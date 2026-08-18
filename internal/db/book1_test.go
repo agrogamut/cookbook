@@ -153,10 +153,12 @@ func TestReleaseChecklistIsUnrun(t *testing.T) {
 }
 
 // TestAssemblyStepsRecordTheMissingRange confirms steps 12-14 are genuinely absent from
-// the workbook. The plan also asks this test to assert GAP-014 exists in gap_register, but
-// GAP-014 is seeded by a separate, independently-running plan's migration 0012, which does
-// not exist in this worktree. That half is dropped here; restore it once the two branches
-// merge and migration 0012 is present.
+// the workbook. The plan also asks this test to assert a gap_register row exists for this
+// hole, but the hole is not yet tracked under a gap_register id in this branch: GAP-014 is
+// already taken by an unrelated coverage measure (recipes whose suggested method came from
+// a pan-Indian row), seeded before this branch started. Citing GAP-014 here would misroute
+// a reader, so no gap id is asserted. That half is dropped here; restore it once the
+// id-numbering reconciliation with the other in-flight branch lands and a real id exists.
 func TestAssemblyStepsRecordTheMissingRange(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()

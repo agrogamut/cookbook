@@ -179,8 +179,11 @@ COMMENT ON COLUMN book1_illness_feeding_block.book_engine_limit IS
 -- Logic sheet, and equally authoritative.
 --
 -- The sheet numbers its steps 1-11, then 17-19, then 15-16. Nothing numbered 12, 13 or
--- 14 exists in the workbook. Recorded as GAP-014 rather than renumbered: renumbering
--- would hide a hole in the specification.
+-- 14 exists in the workbook. This hole is not yet tracked under a gap_register id in this
+-- branch -- GAP-014 is already taken by an unrelated coverage measure (recipes whose
+-- suggested method came from a pan-Indian row) -- see the ledger for the pending
+-- id-numbering reconciliation with the other in-flight branch. Renumbering the steps
+-- themselves would hide the hole in the specification, so that is not done either.
 -- ---------------------------------------------------------------------------
 CREATE TABLE book1_assembly_step (
     "order"             integer PRIMARY KEY,
@@ -194,7 +197,10 @@ CREATE TABLE book1_assembly_step (
 COMMENT ON TABLE book1_assembly_step IS
     'The provider-authored Book 1 assembly pipeline. Treat as authoritative the way '
     'Book2_Content_Master''s Recipe Selection Logic sheet is treated for the recipe '
-    'engine. Steps 12, 13 and 14 are absent from the workbook -- see GAP-014.';
+    'engine. Steps 12, 13 and 14 are absent from the workbook; this is not yet tracked '
+    'under a gap_register id in this branch, since GAP-014 is already taken by an '
+    'unrelated coverage measure -- see the ledger for the pending id-numbering '
+    'reconciliation with the other in-flight branch.';
 
 -- ---------------------------------------------------------------------------
 -- Evidence register. 13 rows. Sources with URLs and their stated limitations.

@@ -206,7 +206,7 @@ pass from an empty database.
 | # | Task | State |
 |---|------|-------|
 | 1 | Schema + migrations | done - `internal/db/migrations/0001-0010` |
-| 2 | Idempotent xlsx importer | done - `cmd/import`, 21 tables, 4699 rows in scope |
+| 2 | Idempotent xlsx importer | done - `cmd/import`, 30 tables, 4699 rows in scope |
 | 3 | Integrity test suite | done - 4 test files, ~45 invariants |
 | 4 | `culture_region_map` seed | done - 27 rows, migration `0002` |
 | 5 | NT00-NT12 ranker | done - migration `0003`, weights read from the provider table |
@@ -214,7 +214,7 @@ pass from an empty database.
 | 7 | External prep-text join | done - `cmd/enrich`, 166 of 940 recipes |
 | 8 | Gap register | done - 16 rows, re-counted on every run |
 | + | Corrected nutrition layer | done - migrations `0009`-`0010`, 139 ingredients on IFCT values, 410 recipes fully verified |
-| + | `Book1_Content_Master` import | done - migration `0013`, 9 tables, 4 sub-sheets. `internal/importer/spec.go`'s exclusion comment (which had listed it alongside the empty Review/Version Control scaffold and the PDF-pagination Page Registry) is corrected: it is the general content layer of Book 1, not a pagination concern, and is bound to the importer like every other master |
+| + | `Book1_Content_Master` import | done - migration `0013`, 9 tables. `internal/importer/spec.go`'s exclusion comment (which had listed it alongside the empty Review/Version Control scaffold and the PDF-pagination Page Registry) is corrected: it is the general content layer of Book 1, not a pagination concern, and is bound to the importer like every other master |
 
 Exit criteria, checked:
 
@@ -864,7 +864,7 @@ cmd/import/                     xlsx -> Postgres, idempotent, scope-filtered
 cmd/enrich/                     external datasets -> annotation tables, -sample to hand-check
 internal/config/                env loading, fails fast
 internal/xlsx/                  workbook reader, declared header rows
-internal/importer/spec.go       21 sheet -> table bindings
+internal/importer/spec.go       30 sheet -> table bindings
 internal/importer/importer.go   upsert + sweep, content hashing
 internal/importer/gaps.go       gap register re-measurement
 internal/db/db.go               pool + migrate on startup
@@ -880,6 +880,10 @@ internal/db/migrations/
   0008_match_certainty          exact vs probable name match, discrepancy report
   0009_ifct_alias               hand-written food aliases + corrected ingredient view
   0010_recipe_nutrition_recomputed  recipe nutrition rebuilt from corrected ingredients
+  0011_allergen_tag_vocabulary  bridges allergen_mapping's label vocabulary to the corpus's
+                                literal allergen tag strings, marking genuinely absent tags
+  (0012 is reserved by a separate, independently-running branch not present in this checkout -
+   the jump from 0011 to 0013 is that branch's numbering, not a hole in this one)
   0013_book1_content             9 Book 1 tables, ai_can_draft CHECK gate, book_order
   0014_child_profile             child_profile + 4 child tables, dated growth, three-state allergy
 internal/db/integrity_test.go   22 invariants + row counts + idempotency

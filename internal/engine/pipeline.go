@@ -87,7 +87,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (models
 	steps = append(steps, models.StepResult{
 		Step: 8, Name: "Likes / dislikes / sensory", Kind: "ranker",
 		CandidatesIn: len(ranked), CandidatesOut: len(ranked),
-		Note: "no data source: no questionnaire-preference table exists in the schema, so this step cannot run and is recorded as a no-op",
+		Note: "the preference table child_preference exists as of migration 0014 but is not yet wired into the engine's query input, so this step still cannot run and is recorded as a no-op",
 	})
 
 	ranked, step9, err := applyAvailabilityRank(ctx, pool, p, ranked)

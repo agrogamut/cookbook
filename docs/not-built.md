@@ -106,6 +106,12 @@ clinical-condition fields (`child_clinical_condition`: `trigger_field`, `flag_va
 never stored - it is derived from `date_of_birth` at query time, by design, so a book
 read months after generation does not carry a stale age.
 
+Storage for `likes` / `dislikes` / `accepted` is built, but the engine does not consume
+it yet - step 8 (Likes / dislikes / sensory) is still a hardcoded no-op in
+`internal/engine/pipeline.go`, because `child_preference` is not wired into the engine's
+query input. Do not read "built" here as "step 8 is unblocked" - the table exists, the
+ranker does not read it.
+
 Still outstanding, and nothing accepts them yet:
 
 | Input | Needed for | Blocks |

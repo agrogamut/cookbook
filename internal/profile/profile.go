@@ -105,6 +105,14 @@ type Stored struct {
 // newborn, and the engine would happily rank infant purees for a child who does not exist
 // yet.
 func ageMonths(dob, asOf time.Time) int {
+	// dob comes from Postgres date columns via pgx and is always UTC-normalized, but asOf
+	// may be time.Now() from a caller, which is in the local timezone. In IST (UTC+5:30),
+	// a call made in the local evening falls on the next UTC day, so comparing calendar
+	// fields across two different timezones can be off by one day right at a month
+	// boundary -- and NT01's 6-23 month auto-activation window makes that boundary
+	// clinically meaningful. Normalize both to UTC calendar dates before comparing.
+	dob = dob.UTC()
+	asOf = asOf.UTC()
 	if dob.After(asOf) {
 		return -1
 	}

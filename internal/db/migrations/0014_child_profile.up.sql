@@ -157,7 +157,10 @@ CREATE TABLE child_clinical_condition (
 
     -- Matches clinical_rule_master.trigger_field exactly. No FK is declared, for the same
     -- reason culture_region_map declares none: migrations run before cmd/import populates
-    -- the provider tables. Both directions are asserted by the integrity suite instead.
+    -- the provider tables. This invariant is NOT currently asserted by any test --
+    -- child_clinical_condition holds no rows yet in this codebase (no seed data, no
+    -- non-profile writer), so a live-data integrity check would be vacuous. Add one when a
+    -- real writer exists.
     trigger_field text NOT NULL,
     flag_value    text NOT NULL,
 

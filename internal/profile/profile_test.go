@@ -3,6 +3,7 @@ package profile
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -149,29 +150,13 @@ func TestToChildProfileCarriesConfirmedAllergensAndDropsResolved(t *testing.T) {
 	// was never recorded, so the caller is told.
 	var mentionsMilk bool
 	for _, n := range notes {
-		if contains(n, "Milk") {
+		if strings.Contains(n, "Milk") {
 			mentionsMilk = true
 		}
 	}
 	if !mentionsMilk {
 		t.Fatalf("notes must record that a resolved allergen was excluded from filtering; got %v", notes)
 	}
-}
-
-func contains(haystack, needle string) bool {
-	return len(haystack) >= len(needle) &&
-		(haystack == needle || len(needle) == 0 ||
-			// simple substring search, avoiding a strings import in the test
-			indexOf(haystack, needle) >= 0)
-}
-
-func indexOf(h, n string) int {
-	for i := 0; i+len(n) <= len(h); i++ {
-		if h[i:i+len(n)] == n {
-			return i
-		}
-	}
-	return -1
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -204,7 +189,7 @@ func TestToChildProfileDropsExpiredAcuteConditions(t *testing.T) {
 	}
 	var explained bool
 	for _, n := range notes {
-		if indexOf(n, "Acute_Diarrhoea") >= 0 {
+		if strings.Contains(n, "Acute_Diarrhoea") {
 			explained = true
 		}
 	}
@@ -255,7 +240,7 @@ func TestToChildProfileFlagsAnAcuteConditionWithNoWindow(t *testing.T) {
 	}
 	var warned bool
 	for _, n := range notes {
-		if indexOf(n, "230 days") >= 0 || indexOf(n, "no expiry window") >= 0 {
+		if strings.Contains(n, "229 days") || strings.Contains(n, "no expiry window") {
 			warned = true
 		}
 	}

@@ -153,7 +153,7 @@ export default async function ReferencePage() {
                 <TableCell className="text-right font-mono text-xs">{b.book_order}</TableCell>
                 <TableCell className="font-mono text-xs">{b.block_id}</TableCell>
                 <TableCell className="text-xs">
-                  {b.section}
+                  {b.section ?? "not available"}
                   {b.subsection && <span className="text-muted-foreground"> / {b.subsection}</span>}
                 </TableCell>
                 <TableCell className="text-xs">{b.trigger_or_eligibility ?? "not available"}</TableCell>
