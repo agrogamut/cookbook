@@ -68,19 +68,31 @@ export interface Allergen {
   screens: boolean;
 }
 
+/** One selectable value for a clinical marker, and the truth the engine actually applies
+ *  to it. loadable says whether internal/engine/clinical.go's clinicalFilter query would
+ *  even see the rule behind this value; escalates says whether firing it holds generation
+ *  for specialist review. escalates implies loadable -- an unloaded rule can never fire. */
+export interface ClinicalMarkerValue {
+  value: string;
+  rule_id: string;
+  loadable: boolean;
+  escalates: boolean;
+}
+
 export interface ClinicalMarker {
   trigger_field: string;
   rule_ids: string;
   domains: string;
   engine_actions: string;
   specialist_required: string;
-  escalates: boolean;
-  /** clinical_rule_master.trigger_operator, comma-joined; every row for a trigger_field
-   *  shares one operator (asserted server-side). Determines which control renders. */
-  trigger_operators: string;
-  /** Distinct trigger_value(s) for this field, joined with "|" -- never "," or ";",
-   *  because in_list values (e.g. "Overweight;Obesity") already use those separators. */
-  trigger_values: string;
+  /** clinical_rule_master.trigger_operator; every row for a trigger_field shares one
+   *  operator (asserted by TestReferenceClinicalMarkersCoversEveryTriggerField).
+   *  Determines which control renders. */
+  trigger_operator: string;
+  /** Distinct trigger_value(s) for this field, each carrying its own loadable/escalates.
+   *  Escalation is a fact about a value, not the field -- see the handler's comment on
+   *  Coeliac_Status for why a field-level flag would lie. */
+  values: ClinicalMarkerValue[];
 }
 
 export interface EnumValue {

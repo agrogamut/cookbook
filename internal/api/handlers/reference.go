@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -187,43 +188,147 @@ func (h *Handlers) ReferenceAllergens(w http.ResponseWriter, r *http.Request) {
 // keys are guaranteed to resolve. ChildProfile.ClinicalFlags is validated against exactly
 // this vocabulary and an unrecognized key returns 400, so a free-text input is a trap.
 //
-// escalates says whether setting this marker will hold generation rather than filter it.
-// An operator deserves to know that before typing, not after an empty result page.
+// Escalation is a fact about a VALUE, not a field: Coeliac_Status fires CR-CEL-002
+// (specialist tier) on "Confirmed" but CR-CEL-001 (below tier, and not even loaded by the
+// engine's query) on "Suspected_Not_Confirmed". A field-level bool_or over that would tell
+// the operator every Coeliac_Status choice holds generation, which is false for one of the
+// two values. So every distinct trigger_value carries its own loadable and escalates,
+// computed with the same predicates internal/engine/clinical.go's clinicalFilter uses:
+//
+//	loadable  := (human_approval_level = 'Specialist clinical approval' OR hard_exclude_yn = 'Y')
+//	             AND clinical_domain NOT IN ('Age/Feeding', 'Data Quality')
+//	escalates := loadable AND (human_approval_level = 'Specialist clinical approval'
+//	             OR clinical_domain IN <the ten escalationOnlyDomains names>)
+//
+// The ten domain names are inlined below rather than importing engine.escalationOnlyDomains:
+// handlers must not depend on engine internals, so the list is duplicated on purpose and
+// TestEscalationSourcesDisagreementIsPinned (engine side) plus this handler's own test
+// (which pins Coeliac_Status and the eleven-plus inert markers) keep the two from drifting
+// apart silently.
+//
+// A trigger_value with operator in_list (only BMI_for_Age_Classification today) is split on
+// ';' into one value per option, since "Overweight;Obesity" is two selectable values sharing
+// one rule, not one value. Rows that reduce to the same (trigger_field, value) pair after
+// that split -- CKD fires both CR-REN-001 and CR-REN-002 on the literal "Yes" -- are merged
+// into a single value entry rather than shown twice.
 func (h *Handlers) ReferenceClinicalMarkers(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.pool.Query(r.Context(), `
-		SELECT trigger_field,
-		       string_agg(DISTINCT rule_id, ', ' ORDER BY rule_id)          AS rule_ids,
-		       string_agg(DISTINCT clinical_domain, ', ')                   AS domains,
-		       string_agg(DISTINCT engine_action, ' | ')                    AS engine_actions,
-		       string_agg(DISTINCT coalesce(specialist_required, ''), ' | ') AS specialist_required,
-		       bool_or(human_approval_level = 'Specialist clinical approval') AS escalates,
-		       string_agg(DISTINCT trigger_operator, ', ')                  AS trigger_operators,
-		       string_agg(DISTINCT trigger_value, '|' ORDER BY trigger_value) AS trigger_values
-		FROM clinical_rule_master
-		GROUP BY trigger_field
-		ORDER BY trigger_field`)
+		WITH loaded AS (
+			SELECT
+				r.trigger_field,
+				r.rule_id,
+				r.clinical_domain,
+				r.trigger_operator,
+				trim(both from val.value)                                       AS value,
+				(r.human_approval_level = 'Specialist clinical approval' OR r.hard_exclude_yn = 'Y')
+					AND r.clinical_domain NOT IN ('Age/Feeding', 'Data Quality') AS loadable,
+				r.human_approval_level,
+				-- Mirrors internal/engine/clinical.go's escalationOnlyDomains. Duplicated
+				-- deliberately: handlers must not import engine internals, and the two
+				-- lists are each asserted against the live workbook on their own side.
+				r.clinical_domain IN (
+					'Coeliac Disease', 'Eating Disorder Risk', 'Feeding/Swallowing',
+					'Vomiting / Poor Intake', 'Growth', 'GI Chronic Disease', 'Liver Disease',
+					'Metabolic Disease', 'Prematurity/Complex Care', 'Kidney Disease'
+				)                                                                AS in_escalation_domain,
+				coalesce(r.engine_action, '')                                    AS engine_action,
+				coalesce(r.specialist_required, '')                              AS specialist_required
+			FROM clinical_rule_master r
+			CROSS JOIN LATERAL unnest(
+				CASE WHEN r.trigger_operator = 'in_list'
+				     THEN string_to_array(r.trigger_value, ';')
+				     ELSE ARRAY[r.trigger_value]
+				END
+			) AS val(value)
+			WHERE r.trigger_field IS NOT NULL
+			  AND r.trigger_value IS NOT NULL
+			  AND trim(both from val.value) <> ''
+		),
+		scored AS (
+			SELECT *,
+			       (loadable AND (human_approval_level = 'Specialist clinical approval' OR in_escalation_domain)) AS escalates
+			FROM loaded
+		),
+		per_value AS (
+			SELECT trigger_field, value,
+			       string_agg(DISTINCT rule_id, ', ' ORDER BY rule_id) AS rule_id,
+			       bool_or(loadable)  AS loadable,
+			       bool_or(escalates) AS escalates
+			FROM scored
+			GROUP BY trigger_field, value
+		),
+		field_agg AS (
+			SELECT trigger_field,
+			       string_agg(DISTINCT rule_id, ', ' ORDER BY rule_id)      AS rule_ids,
+			       string_agg(DISTINCT clinical_domain, ', ' ORDER BY clinical_domain) AS domains,
+			       string_agg(DISTINCT engine_action, ' | ')                AS engine_actions,
+			       string_agg(DISTINCT specialist_required, ' | ')          AS specialist_required,
+			       array_agg(DISTINCT trigger_operator)                     AS operators,
+			       bool_or(escalates)                                      AS any_escalates
+			FROM scored
+			GROUP BY trigger_field
+		),
+		values_agg AS (
+			SELECT trigger_field,
+			       json_agg(
+			           jsonb_build_object(
+			               'value', value, 'rule_id', rule_id,
+			               'loadable', loadable, 'escalates', escalates
+			           ) ORDER BY escalates DESC, value
+			       ) AS values_json
+			FROM per_value
+			GROUP BY trigger_field
+		)
+		SELECT f.trigger_field, f.rule_ids, f.domains, f.engine_actions, f.specialist_required,
+		       f.operators, v.values_json
+		FROM field_agg f
+		JOIN values_agg v USING (trigger_field)
+		ORDER BY f.any_escalates DESC, f.trigger_field`)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "clinical marker list failed: "+err.Error())
 		return
 	}
 	defer rows.Close()
 
+	type markerValue struct {
+		Value     string `json:"value"`
+		RuleID    string `json:"rule_id"`
+		Loadable  bool   `json:"loadable"`
+		Escalates bool   `json:"escalates"`
+	}
 	type marker struct {
-		TriggerField       string `json:"trigger_field"`
-		RuleIDs            string `json:"rule_ids"`
-		Domains            string `json:"domains"`
-		EngineActions      string `json:"engine_actions"`
-		SpecialistRequired string `json:"specialist_required"`
-		Escalates          bool   `json:"escalates"`
-		TriggerOperators   string `json:"trigger_operators"`
-		TriggerValues      string `json:"trigger_values"`
+		TriggerField       string        `json:"trigger_field"`
+		RuleIDs            string        `json:"rule_ids"`
+		Domains            string        `json:"domains"`
+		EngineActions      string        `json:"engine_actions"`
+		SpecialistRequired string        `json:"specialist_required"`
+		TriggerOperator    string        `json:"trigger_operator"`
+		Values             []markerValue `json:"values"`
 	}
 	out := []marker{}
 	for rows.Next() {
 		var m marker
+		var operators []string
+		var valuesJSON []byte
 		if err := rows.Scan(&m.TriggerField, &m.RuleIDs, &m.Domains, &m.EngineActions,
-			&m.SpecialistRequired, &m.Escalates, &m.TriggerOperators, &m.TriggerValues); err != nil {
+			&m.SpecialistRequired, &operators, &valuesJSON); err != nil {
 			writeError(w, http.StatusInternalServerError, "clinical marker scan failed: "+err.Error())
+			return
+		}
+		// Every trigger_field is expected to carry exactly one trigger_operator (asserted
+		// by TestReferenceClinicalMarkersCoversEveryTriggerField). A field with two would
+		// mean a client control cannot be a pure function of the field, and that is a data
+		// condition nobody has designed a control for -- fail loudly rather than silently
+		// picking one or joining them into a string the client would mis-parse.
+		if len(operators) != 1 {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf(
+				"clinical marker %s carries %d distinct trigger_operator values %v, expected exactly one",
+				m.TriggerField, len(operators), operators))
+			return
+		}
+		m.TriggerOperator = operators[0]
+		if err := json.Unmarshal(valuesJSON, &m.Values); err != nil {
+			writeError(w, http.StatusInternalServerError, "clinical marker value decode failed: "+err.Error())
 			return
 		}
 		out = append(out, m)

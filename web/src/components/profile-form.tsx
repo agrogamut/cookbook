@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/select";
 import { getAllergens, getClinicalMarkers, getEnums, getRegions, getCuisines } from "@/lib/api";
 import type {
-  Allergen, ChildProfile, ClinicalMarker, Cuisine, Region, ReferenceEnums,
+  Allergen, ChildProfile, ClinicalMarker, ClinicalMarkerValue, Cuisine, Region, ReferenceEnums,
 } from "@/lib/types";
 
 interface ProfileFormProps {
@@ -38,30 +38,48 @@ const NONE = "__none__"; // Radix Select forbids an empty-string item value
 
 // A clinical flag must never be sendable as a value that cannot fire the rule it is named
 // after -- a badge reading "holds" next to a control that cannot actually trigger the hold
-// is a false assurance. clinical_rule_master.trigger_operator determines what a correct
-// control looks like; every trigger_field carries exactly one operator (asserted by
-// TestReferenceClinicalMarkersCoversEveryTriggerField), so this is a pure function of the
-// marker, not a per-row branch.
+// is a false assurance. markerControl is a whitelist that mirrors the engine's own
+// triggerFires switch (internal/engine/clinical.go) rather than inverting it: only the two
+// operators that switch actually implements a live case for produce a control here.
+// Everything else -- contains, less_than, incompatible_with, and any operator the provider
+// invents later -- renders inert, because nothing on this console could make it fire.
+//
+// Within a supported operator, only VALUES the engine's own query would load are ever
+// offered. A value with loadable=false (e.g. Coeliac_Status's Suspected_Not_Confirmed) is
+// real data the provider recorded, but clinicalFilter's WHERE clause never reads the rule
+// behind it, so offering it as a live control would promise a hold that cannot happen.
+//
+// trigger_operator is singular and pure per marker (asserted by
+// TestReferenceClinicalMarkersCoversEveryTriggerField), so this is a function of the
+// marker as a whole, not a per-value branch -- except that the value LIST offered is
+// filtered to loadable entries.
 type MarkerControl =
-  | { kind: "toggle"; value: string }
-  | { kind: "select"; values: string[] }
-  | { kind: "text"; matches: string }
-  | { kind: "unsupported" };
+  | { kind: "toggle"; value: ClinicalMarkerValue; mixedCount: number }
+  | { kind: "select"; values: ClinicalMarkerValue[]; mixedCount: number }
+  | { kind: "inert"; note: string };
 
 function markerControl(m: ClinicalMarker): MarkerControl {
-  const op = m.trigger_operators;
-  // Age_Months (less_than) and Texture_Skill (incompatible_with) are enforced
-  // structurally by step 1 and excluded from clinicalFilter's own query by domain -- a
-  // control for either would be inert, so neither is offered as a working control.
-  if (op === "less_than" || op === "incompatible_with") return { kind: "unsupported" };
-  if (op === "contains") return { kind: "text", matches: m.trigger_values };
-  const values = op === "in_list"
-    ? Array.from(new Set(
-        m.trigger_values.split("|").flatMap((v) => v.split(";").map((s) => s.trim()).filter(Boolean)),
-      ))
-    : m.trigger_values.split("|").filter(Boolean);
-  if (values.length <= 1) return { kind: "toggle", value: values[0] ?? "Yes" };
-  return { kind: "select", values };
+  const op = m.trigger_operator;
+  if (op !== "equals" && op !== "in_list") {
+    const note = op === "contains"
+      ? "matches a substring, not an exact value -- firing this rule trips the engine's " +
+        "unclassified-rule error by design. A confirmed allergen belongs in Declared " +
+        "allergens above, not here."
+      : `trigger_operator "${op}" has no case in the engine's own switch -- nothing here could fire it, so no control is offered.`;
+    return { kind: "inert", note };
+  }
+  const loadable = m.values.filter((v) => v.loadable);
+  const mixedCount = m.values.length - loadable.length;
+  if (loadable.length === 0) {
+    return {
+      kind: "inert",
+      note: "the engine has no rule it can act on for this marker -- every value the provider recorded here sits below the tier clinicalFilter loads.",
+    };
+  }
+  if (loadable.length === 1) {
+    return { kind: "toggle", value: loadable[0], mixedCount };
+  }
+  return { kind: "select", values: loadable, mixedCount };
 }
 
 export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
@@ -104,9 +122,9 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
   }
 
   // clinical_flags is Record<field, value> -- one value per field, matching what the
-  // engine's triggerFires actually compares. Every setter below sources its value from
-  // the marker's own trigger_values, never a literal, so a set field is guaranteed to be
-  // a value the rule can match.
+  // engine's triggerFires actually compares. Every setter below sources its value from a
+  // loadable ClinicalMarkerValue, never a literal, so a set field is guaranteed to be a
+  // value the rule can actually match.
   function setFlag(field: string, value: string) {
     setClinicalFlags((prev) => ({ ...prev, [field]: value }));
   }
@@ -199,6 +217,7 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
                 type="button"
                 onClick={() => toggleAllergen(a.allergen_group)}
                 title={a.note}
+                aria-pressed={on}
                 className="focus-visible:ring-ring rounded focus-visible:outline-none focus-visible:ring-2"
               >
                 <Badge
@@ -236,96 +255,98 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
         <div className="flex flex-col gap-1.5">
           {markerOptions.map((m) => {
             const control = markerControl(m);
-            const escalateClass = m.escalates ? "border-destructive" : "";
+            // "holds" is a fact about a VALUE, not the field (finding 1). When something
+            // is selected, show it only if that selected value escalates. When nothing is
+            // selected, show it if any of the marker's values escalate -- a true statement
+            // about the marker that primes the operator before they pick anything.
+            const anyEscalates = m.values.some((v) => v.escalates);
             const title = `${m.rule_ids} - ${m.engine_actions}`;
 
-            if (control.kind === "unsupported") {
+            if (control.kind === "inert") {
               return (
                 <div key={m.trigger_field} className="flex items-center gap-2 opacity-50" title={title}>
                   <Badge variant="outline" className="border-dashed">{m.trigger_field}</Badge>
-                  <span className="text-xs text-muted-foreground">
-                    enforced structurally at step 1 -- no control here
-                  </span>
+                  <span className="text-xs text-muted-foreground">{control.note}</span>
                 </div>
               );
             }
 
             if (control.kind === "toggle") {
-              const on = clinicalFlags[m.trigger_field] === control.value;
+              const on = clinicalFlags[m.trigger_field] === control.value.value;
+              const holds = on ? control.value.escalates : anyEscalates;
               return (
-                <button
-                  key={m.trigger_field}
-                  type="button"
-                  onClick={() => toggleFlag(m.trigger_field, control.value)}
-                  title={title}
-                  className="focus-visible:ring-ring w-fit rounded focus-visible:outline-none focus-visible:ring-2"
-                >
-                  <Badge variant={on ? "default" : "outline"} className={escalateClass}>
-                    {m.trigger_field}
-                    {m.escalates && " - holds"}
-                  </Badge>
-                </button>
-              );
-            }
-
-            if (control.kind === "select") {
-              const current = clinicalFlags[m.trigger_field] ?? NONE;
-              return (
-                <div key={m.trigger_field} className="flex items-center gap-2" title={title}>
-                  <Badge variant={current !== NONE ? "default" : "outline"} className={escalateClass}>
-                    {m.trigger_field}
-                    {m.escalates && " - holds"}
-                  </Badge>
-                  <Select
-                    value={current}
-                    onValueChange={(v) => (v === NONE ? clearFlag(m.trigger_field) : setFlag(m.trigger_field, v))}
+                <div key={m.trigger_field} className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => toggleFlag(m.trigger_field, control.value.value)}
+                    title={title}
+                    aria-pressed={on}
+                    aria-label={m.trigger_field}
+                    className="focus-visible:ring-ring w-fit rounded focus-visible:outline-none focus-visible:ring-2"
                   >
-                    <SelectTrigger className="h-7 w-44 text-xs"><SelectValue placeholder="not set" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={NONE}>not set</SelectItem>
-                      {control.values.map((v) => (
-                        <SelectItem key={v} value={v}>{v}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    <Badge variant={on ? "default" : "outline"} className={holds ? "border-destructive" : ""}>
+                      {m.trigger_field}
+                      {holds && " - holds"}
+                    </Badge>
+                  </button>
+                  {control.mixedCount > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      +{control.mixedCount} recorded value(s) with no loadable rule, not offered
+                    </span>
+                  )}
                 </div>
               );
             }
 
-            // text: the one case where free entry is correct, since the rule matches a
-            // substring of whatever is typed rather than an exact vocabulary value.
-            const current = clinicalFlags[m.trigger_field] ?? "";
+            // select: several loadable values. Only loadable values are ever listed --
+            // a non-loadable value the provider recorded is never offerable.
+            const current = clinicalFlags[m.trigger_field] ?? NONE;
+            const selected = control.values.find((v) => v.value === current);
+            const holds = selected ? selected.escalates : anyEscalates;
             return (
               <div key={m.trigger_field} className="flex items-center gap-2" title={title}>
-                <Badge variant={current ? "default" : "outline"} className={escalateClass}>
+                <Badge variant={current !== NONE ? "default" : "outline"} className={holds ? "border-destructive" : ""}>
                   {m.trigger_field}
-                  {m.escalates && " - holds"}
+                  {holds && " - holds"}
                 </Badge>
-                <Input
-                  className="h-7 w-52 text-xs"
-                  placeholder={`matches text containing "${control.matches}"`}
+                <Select
                   value={current}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (v.trim() === "") clearFlag(m.trigger_field);
-                    else setFlag(m.trigger_field, v);
-                  }}
-                />
+                  onValueChange={(v) => (v === NONE ? clearFlag(m.trigger_field) : setFlag(m.trigger_field, v))}
+                >
+                  <SelectTrigger className="h-7 w-44 text-xs" aria-label={m.trigger_field}>
+                    <SelectValue placeholder="not set" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>not set</SelectItem>
+                    {control.values.map((v) => (
+                      <SelectItem key={v.value} value={v.value}>
+                        {v.value}
+                        {v.escalates && " (holds)"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {control.mixedCount > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    +{control.mixedCount} recorded value(s) with no loadable rule, not offered
+                  </span>
+                )}
               </div>
             );
           })}
         </div>
         <p className="text-xs text-muted-foreground">
-          Flags outlined in red hold generation for specialist review rather than filtering
-          it; no recipe list is returned for those. Most flags are a toggle badge because
-          the rule fires on the literal value "Yes". A few render as a dropdown instead --
-          Diabetes_Type, Coeliac_Status, BMI_for_Age_Classification and others -- because
-          their rule only fires on a specific value ("Type 1", "Confirmed",
-          "Overweight" ...) that is never "Yes"; picking the wrong shape of control there
-          would let an operator believe a hold is active when it is not. One field is free
-          text because its rule matches a substring rather than an exact value. Two fields
-          render disabled: step 1 already enforces Age_Months and Texture_Skill
-          structurally, so a control for either here would have no effect.
+          Three states appear here. A live control (toggle badge or dropdown) sends a value
+          the engine's own rule query actually loads; outlined in red when the selected (or,
+          if nothing is selected, any offerable) value holds generation for specialist
+          review rather than filtering it -- no recipe list is returned for those. A dashed,
+          unclickable marker has no rule the engine can act on at all: either its operator
+          has no case in the engine's switch (Age_Months, Texture_Skill, and the one
+          substring-matching allergy flag, which belongs in Declared allergens instead), or
+          every value the provider recorded for it sits below the tier clinicalFilter loads,
+          so no value of it can change a result. A dropdown may still show a "+N recorded,
+          not offered" note: the provider recorded a value for this marker that carries no
+          loadable rule, and it is left off the list rather than hidden entirely.
         </p>
       </fieldset>
 

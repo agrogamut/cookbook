@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 )
@@ -43,12 +42,12 @@ func TestRunsReturnsImportHistoryWithTimestamptz(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 	var runs []struct {
-		RunID     int64      `json:"run_id"`
-		StartedAt time.Time  `json:"started_at"`
+		RunID      int64      `json:"run_id"`
+		StartedAt  time.Time  `json:"started_at"`
 		FinishedAt *time.Time `json:"finished_at"`
-		SourceDir string     `json:"source_dir"`
-		OK        bool       `json:"ok"`
-		Tables    []struct {
+		SourceDir  string     `json:"source_dir"`
+		OK         bool       `json:"ok"`
+		Tables     []struct {
 			TableName   string `json:"table_name"`
 			RowsRead    int    `json:"rows_read"`
 			RowsWritten int    `json:"rows_written"`
@@ -141,46 +140,150 @@ func TestReferenceClinicalMarkersCoversEveryTriggerField(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
+	type markerValue struct {
+		Value     string `json:"value"`
+		RuleID    string `json:"rule_id"`
+		Loadable  bool   `json:"loadable"`
+		Escalates bool   `json:"escalates"`
+	}
 	var got []struct {
-		TriggerField     string `json:"trigger_field"`
-		RuleIDs          string `json:"rule_ids"`
-		Escalates        bool   `json:"escalates"`
-		TriggerOperators string `json:"trigger_operators"`
-		TriggerValues    string `json:"trigger_values"`
+		TriggerField    string        `json:"trigger_field"`
+		RuleIDs         string        `json:"rule_ids"`
+		TriggerOperator string        `json:"trigger_operator"`
+		Values          []markerValue `json:"values"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if len(got) != 28 {
-		t.Fatalf("expected 28 distinct trigger_field values across the 31 rules, got %d", len(got))
+		t.Fatalf("expected 28 distinct trigger_field values across the 31 rows, got %d", len(got))
 	}
-	var escalating int
-	var diabetesValues string
+
+	validOperators := map[string]bool{
+		"equals": true, "contains": true, "in_list": true,
+		"less_than": true, "incompatible_with": true,
+	}
+
+	var escalatingMarkers int
+	byField := map[string][]markerValue{}
 	for _, m := range got {
 		if m.RuleIDs == "" {
 			t.Fatalf("%s carries no rule id; a marker with no rule cannot be offered", m.TriggerField)
 		}
-		if m.Escalates {
-			escalating++
+		// This is the assertion finding 2 needs: an operator the switch in markerControl
+		// (and the engine's own triggerFires) does not recognize must never reach the
+		// client silently. Every trigger_field's operator must be one of the five the
+		// engine actually implements a case for.
+		if !validOperators[m.TriggerOperator] {
+			t.Fatalf("%s: trigger_operator %q is not one of the five the engine's triggerFires handles",
+				m.TriggerField, m.TriggerOperator)
 		}
-		// trigger_values must never be empty: a marker whose value vocabulary is unknown
-		// must not be offerable, since the client cannot construct a value that fires it.
-		if m.TriggerValues == "" {
-			t.Fatalf("%s reports an empty trigger_values; every marker must carry a value vocabulary", m.TriggerField)
+		if len(m.Values) == 0 {
+			t.Fatalf("%s reports zero values; every marker must carry at least one value", m.TriggerField)
 		}
-		if m.TriggerField == "Diabetes_Type" {
-			diabetesValues = m.TriggerValues
+		var fieldEscalates bool
+		for _, v := range m.Values {
+			if v.Value == "" {
+				t.Fatalf("%s carries a value entry with an empty value string", m.TriggerField)
+			}
+			if v.Escalates && !v.Loadable {
+				t.Fatalf("%s value %q reports escalates=true but loadable=false; an unloaded rule can never fire", m.TriggerField, v.Value)
+			}
+			if v.Escalates {
+				fieldEscalates = true
+			}
+		}
+		if fieldEscalates {
+			escalatingMarkers++
+		}
+		byField[m.TriggerField] = m.Values
+	}
+	if escalatingMarkers == 0 {
+		t.Fatal("no marker reports an escalating value, but the specialist tier is non-empty")
+	}
+
+	// Finding 1, pinned: escalation is a per-value fact. Coeliac_Status must report both of
+	// its two values, with Confirmed escalating (CR-CEL-002, specialist tier) and
+	// Suspected_Not_Confirmed carrying loadable=false (CR-CEL-001 sits below the specialist
+	// tier and is not hard_exclude, so clinicalFilter's own query never loads it) -- a
+	// field-level bool_or would say the whole field holds, which is the bug this test kills.
+	coeliac := byField["Coeliac_Status"]
+	if len(coeliac) != 2 {
+		t.Fatalf("Coeliac_Status: expected exactly 2 values, got %d: %+v", len(coeliac), coeliac)
+	}
+	wantCoeliac := map[string]struct {
+		loadable, escalates bool
+	}{
+		"Confirmed":               {true, true},
+		"Suspected_Not_Confirmed": {false, false},
+	}
+	for _, v := range coeliac {
+		want, ok := wantCoeliac[v.Value]
+		if !ok {
+			t.Fatalf("Coeliac_Status: unexpected value %q", v.Value)
+		}
+		if v.Loadable != want.loadable || v.Escalates != want.escalates {
+			t.Fatalf("Coeliac_Status %q: loadable=%v escalates=%v, want loadable=%v escalates=%v",
+				v.Value, v.Loadable, v.Escalates, want.loadable, want.escalates)
 		}
 	}
-	if escalating == 0 {
-		t.Fatal("no marker reports escalates=true, but the specialist tier is non-empty")
+
+	diabetes := byField["Diabetes_Type"]
+	wantDiabetes := map[string]bool{"Type 1": true, "Type 2": true}
+	for _, v := range diabetes {
+		if wantDiabetes[v.Value] {
+			if !v.Escalates {
+				t.Fatalf("Diabetes_Type %q: expected escalates=true", v.Value)
+			}
+			delete(wantDiabetes, v.Value)
+		}
 	}
-	wantValues := map[string]bool{"Type 1": true, "Type 2": true}
-	for _, v := range strings.Split(diabetesValues, "|") {
-		delete(wantValues, v)
+	if len(wantDiabetes) != 0 {
+		t.Fatalf("Diabetes_Type missing value(s) %v", wantDiabetes)
 	}
-	if len(wantValues) != 0 {
-		t.Fatalf("Diabetes_Type trigger_values = %q, missing %v", diabetesValues, wantValues)
+
+	// Finding 3, pinned, and it is a provider-drift alarm: if the provider makes any of
+	// these loadable, this test fails and someone must look.
+	//
+	// The set actually measured against the live workbook is FOURTEEN markers with no
+	// loadable value, not the eleven finding 3 names. It is the eleven named there, PLUS
+	// Age_Months and Texture_Skill (already known -- the prior commit marked both inert for
+	// an unsupported trigger_operator, and it turns out their rules are also never loaded:
+	// both sit in the Age/Feeding domain, which clinicalFilter's own WHERE clause excludes
+	// outright) AND Critical_Field_Completeness (Data Quality domain, excluded by the same
+	// clause, hard_exclude_yn='Y' but human_approval_level is 'Editorial/clinical workflow
+	// approval' rather than the specialist tier -- finding 3's enumeration missed it). The
+	// true set is pinned here rather than the predicted one.
+	wantNoLoadable := map[string]bool{
+		"Acute_Diarrhoea": true, "Age_Months": true, "Anemia_or_Iron_Risk": true,
+		"BMI_for_Age_Classification": true, "Bone_Health_Risk": true,
+		"Constipation_Support": true, "Critical_Field_Completeness": true,
+		"Diet_Type": true, "Force_Feeding_or_Cue_Issue": true,
+		"Growth_Faltering_Flag": true, "Multiple_Active_Rules": true,
+		"Post_Vaccine_Context": true, "Severe_Food_Aversion": true,
+		"Texture_Skill": true,
+	}
+	var gotNoLoadable []string
+	for field, values := range byField {
+		anyLoadable := false
+		for _, v := range values {
+			if v.Loadable {
+				anyLoadable = true
+				break
+			}
+		}
+		if !anyLoadable {
+			gotNoLoadable = append(gotNoLoadable, field)
+		}
+	}
+	if len(gotNoLoadable) != len(wantNoLoadable) {
+		t.Fatalf("expected %d markers with no loadable value, got %d: %v",
+			len(wantNoLoadable), len(gotNoLoadable), gotNoLoadable)
+	}
+	for _, field := range gotNoLoadable {
+		if !wantNoLoadable[field] {
+			t.Fatalf("%s has no loadable value but is not in the expected set -- provider drift, look at it", field)
+		}
 	}
 }
 
