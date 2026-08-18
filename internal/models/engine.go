@@ -27,6 +27,7 @@ type RankedRecipe struct {
 	RecipeName     string  `json:"recipe_name"`
 	RegionCulture  string  `json:"region_culture"`
 	MealType       string  `json:"meal_type"`
+	DietType       string  `json:"diet_type"`
 	ClinicalTag    string  `json:"clinical_tag"`
 	AgeGroup       string  `json:"age_group"`
 	NutritionScore float64 `json:"nutrition_score"`

@@ -75,7 +75,7 @@ func rankByTarget(ctx context.Context, pool *pgxpool.Pool, targetCode string, ca
 	}
 
 	rows, err := pool.Query(ctx, `
-		SELECT rr.recipe_id, rm.recipe_name, rr.region_culture, rm.meal_type, rm.clinical_tag,
+		SELECT rr.recipe_id, rm.recipe_name, rr.region_culture, rm.meal_type, rm.diet_type, rm.clinical_tag,
 		       rm.age_group, rr.nutrition_score, rr.ranked_score, rr.scored_axes, rr.value_kind
 		FROM recipe_ranked rr
 		JOIN recipe_master rm ON rm.recipe_id = rr.recipe_id
@@ -90,7 +90,7 @@ func rankByTarget(ctx context.Context, pool *pgxpool.Pool, targetCode string, ca
 	var out []models.RankedRecipe
 	for rows.Next() {
 		var r models.RankedRecipe
-		if err := rows.Scan(&r.RecipeID, &r.RecipeName, &r.RegionCulture, &r.MealType, &r.ClinicalTag,
+		if err := rows.Scan(&r.RecipeID, &r.RecipeName, &r.RegionCulture, &r.MealType, &r.DietType, &r.ClinicalTag,
 			&r.AgeGroup, &r.NutritionScore, &r.RankedScore, &r.ScoredAxes, &r.ValueKind); err != nil {
 			return nil, models.StepResult{}, fmt.Errorf("engine: rank by target scan: %w", err)
 		}

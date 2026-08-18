@@ -156,6 +156,57 @@ func applyAvailabilityRank(ctx context.Context, pool *pgxpool.Pool, p models.Chi
 	}, nil
 }
 
+// applyDietRank is the ranking half of engine step 4. Step 4's hard filter decides what a
+// family may eat; this decides what to show them first.
+//
+// recipe_master.diet_type states what a dish requires of whoever eats it, so the filter is
+// a nested permission chain (vegan subset vegetarian subset eggetarian subset
+// non-vegetarian -- see docs/decisions.md). A family declaring non-vegetarian is correctly
+// permitted all 940 recipes, of which 828 are vegetarian, so without this step page one of
+// their book is dal. Being permitted a dish is not the same as wanting it first.
+//
+// This is a nudge, not a re-sort: the boost sits between the budget boost (0.03) and the
+// culture boost (0.05), so an explicit region choice still outranks a diet preference and
+// neither outranks the nutrition score. Sized so it can reorder within a band of similar
+// nutrition fitness and never across one.
+func applyDietRank(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile, recipes []models.RankedRecipe) ([]models.RankedRecipe, models.StepResult, error) {
+	stepIn := len(recipes)
+	if p.DietType == "" || stepIn == 0 {
+		return recipes, models.StepResult{
+			Step: 4, Name: "Declared food practice - preference", Kind: "ranker",
+			CandidatesIn: stepIn, CandidatesOut: stepIn,
+			Note: "no diet type declared, step is a no-op",
+		}, nil
+	}
+
+	const boost = 0.04
+
+	matched := 0
+	out := make([]models.RankedRecipe, len(recipes))
+	copy(out, recipes)
+	for i := range out {
+		if out[i].DietType == p.DietType {
+			out[i].RankedScore += boost
+			matched++
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].RankedScore > out[j].RankedScore })
+
+	note := fmt.Sprintf("%d of %d candidates match the declared practice %q exactly and were ranked up by %.2f",
+		matched, stepIn, p.DietType, boost)
+	if matched == stepIn {
+		note = fmt.Sprintf("every candidate already matches the declared practice %q, so this step changed no ordering", p.DietType)
+	}
+	if matched == 0 {
+		note = fmt.Sprintf("no candidate carries diet_type %q exactly; all of them are permitted by the nested diet chain but none is that practice's own dish", p.DietType)
+	}
+
+	return out, models.StepResult{
+		Step: 4, Name: "Declared food practice - preference", Kind: "ranker",
+		CandidatesIn: stepIn, CandidatesOut: stepIn, Note: note,
+	}, nil
+}
+
 // regionCountry maps a recipe_master.region_culture value to the country word used in
 // ingredient_master.region_availability free text. Hardcoded, not queried -- region_focus
 // currently scopes to exactly India and Bangladesh (CLAUDE.md, "Region focus"), so a
