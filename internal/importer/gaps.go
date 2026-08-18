@@ -104,6 +104,16 @@ var gapMeasures = []gapMeasure{
 	// Counted from the table rather than hardcoded at 13, so reissuing the workbook with
 	// more rules raises the number instead of leaving it stale.
 	{"GAP-022", `SELECT count(*) FROM special_care_output_rule WHERE rule_id <> 'OR-001'`},
+
+	// Recipes that can reach no Book 2 chapter. Counted through the mapping table rather
+	// than by comparing vocabularies, so a provider ruling that adds a mapping drops this
+	// number without anyone editing the query.
+	//
+	// Reads 354 today: Snack 182, School Tiffin 99, Recovery Meal 73.
+	{"GAP-023", `SELECT count(*) FROM recipe_master r
+	             WHERE NOT EXISTS (
+	                 SELECT 1 FROM meal_category_recipe_map m
+	                 WHERE m.meal_type = r.meal_type)`},
 }
 
 // measureGaps refreshes the counted gaps inside the import transaction.
