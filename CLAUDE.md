@@ -935,12 +935,19 @@ go build ./...
 go vet ./...
 scripts/dev_db.fish up
 TEST_DATABASE_URL=(scripts/dev_db.fish url) go test ./...
+cd web && npm test        # vitest, jsdom; needs no database and no API server
 ```
 
 The integrity suite needs a real database because it asserts constraints on imported
 data, not on Go code. Without `TEST_DATABASE_URL` it skips, so `go test ./...` stays
 green on a machine with no docker - but a skipped suite is not a passing suite. Run it
 with the database before calling anything done.
+
+The frontend suite is separate and needs neither a database nor a running API: it renders
+components against jsdom. It is small on purpose - it pins the rendering decisions that
+carry meaning, such as a confidence never rounding up to 100%, and does not attempt to
+cover every component. `npm test` is `vitest run` rather than bare `vitest`, which would
+enter watch mode and never exit.
 
 ### Data ingestion
 
