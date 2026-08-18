@@ -22,6 +22,13 @@ type ChildProfile struct {
 	// e.g. "Peanut", "Milk", "Egg". Hard filter, step 2, never relaxed.
 	Allergens []string `json:"allergens,omitempty"`
 
+	// SuspectedAllergens are allergen groups the family or clinician has raised but not
+	// confirmed. AS-002 marks these hard_block = N, so they are a ranker input, never a
+	// filter: unnecessary elimination is itself a recognised cause of faltering growth,
+	// and treating every suspicion as confirmation is a different risk rather than the
+	// cautious choice. See internal/engine/rank.go, applySuspectedAllergenRank.
+	SuspectedAllergens []string `json:"suspected_allergens,omitempty"`
+
 	// ClinicalFlags keys match clinical_rule_master.trigger_field exactly (e.g.
 	// "Coeliac_Status", "CKD", "Eating_Disorder_Risk"). This is a deliberately open map
 	// rather than a fixed struct: the trigger fields are provider data, not something
