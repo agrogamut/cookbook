@@ -39,7 +39,10 @@ TEST_DATABASE_URL=$DATABASE_URL go test ./...
 The importer is idempotent: running it twice over unchanged workbooks leaves an identical
 database, verified by a content hash per table.
 
-`cmd/import` now loads 30 tables from 11 workbooks.
+`cmd/import` now loads 39 tables from 12 of the 14 provider workbooks. The two it does
+not read are the Review/Version Control master (an empty scaffold) and the Page Registry
+(a PDF pagination concern with no web consumer); both are recorded in the gap register
+rather than silently skipped.
 
 ## Running the API
 
@@ -63,6 +66,10 @@ go run ./cmd/server        # listens on :8080 by default, set PORT to override
 | `/api/reference/clinical-markers` | GET | The 28 clinical trigger fields; each carries a `trigger_operator` and a `values` array, one entry per distinct trigger value, each with `value`, `rule_id`, `loadable` and `escalates` |
 | `/api/reference/enums` | GET | Every offerable `recipe_master` vocabulary with live counts |
 | `/api/reference/book1-blocks` | GET | The 32 Book 1 content blocks in book render order |
+| `/api/reference/special-care-conditions` | GET | The 6 STOP-REVIEW conditions and the reviewer each requires |
+| `/api/profiles/{childID}` | PUT | Create or replace one child's stored profile |
+| `/api/profiles/{childID}` | GET | The stored profile verbatim |
+| `/api/profiles/{childID}/engine-input` | GET | What the engine receives today, plus every stored fact the conversion dropped |
 
 Useful views once loaded:
 
@@ -78,9 +85,16 @@ Useful views once loaded:
 
 ## The data
 
-Thirteen Excel workbooks in `data/provider/`, authored by an external clinical data
+Fourteen Excel workbooks in `data/provider/`, authored by an external clinical data
 provider: 1000 recipes, 406 ingredients, 3317 recipe-ingredient mappings, plus clinical
 rule, allergy/safety, nutrition target, age/feeding stage and culture masters.
+
+The fourteenth, added 18 August 2026, is the Special-Care Condition Feeding & Recipe Engine
+master: six conditions - Down syndrome, cerebral palsy, congenital heart disease, cleft
+lip/palate, autism and intellectual disability - every one of them a **stop gate** rather
+than a filter. Its own rule is that a positive diagnosis pauses generation and routes to a
+clinician, which is what the engine does with it. Its 108 recipe candidates are archetypes
+at `CANDIDATE-REVIEW`, mapped to no validated recipe, and no engine path serves them.
 
 Scope is India and Bangladesh, so 940 of the 1000 recipes are loaded. Scope lives in one
 seed table (`region_focus`); the workbooks are never edited.

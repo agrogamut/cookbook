@@ -1,7 +1,7 @@
 import type {
   ChildProfile, EngineResult, RecipeDetail, Ingredient, NutritionDiscrepancy,
   Gap, ImportRun, Region, Cuisine, NutritionTarget, Book1Block,
-  Allergen, ClinicalMarker, ReferenceEnums, StoredProfile, EngineInputResult,
+  Allergen, ClinicalMarker, ReferenceEnums, StoredProfile, EngineInputResult, SpecialCareCondition,
 } from "./types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -95,6 +95,10 @@ export function putProfile(childID: string, body: StoredProfile): Promise<Stored
 export function getProfileEngineInput(childID: string): Promise<EngineInputResult> {
   return request<EngineInputResult>(
     `/api/profiles/${encodeURIComponent(childID)}/engine-input`);
+}
+
+export function getSpecialCareConditions(): Promise<SpecialCareCondition[]> {
+  return request<SpecialCareCondition[]>("/api/reference/special-care-conditions");
 }
 
 export { ApiError };

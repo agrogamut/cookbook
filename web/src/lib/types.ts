@@ -11,6 +11,9 @@ export interface ChildProfile {
    *  these are ranked down and never excluded. Distinct from `allergens`, which is step
    *  2's hard filter and is never relaxed. */
   suspected_allergens?: string[];
+  /** A special_care_condition_gate.condition_id. All six are STOP-REVIEW: the engine
+   *  blocks and names the required reviewer instead of returning a ranked list. */
+  special_care_condition?: string;
   clinical_flags?: Record<string, string>;
   clinical_marker?: string;
   region_culture?: string;
@@ -316,4 +319,14 @@ export interface EngineInputResult {
   profile: ChildProfile;
   dropped: string[];
   as_of: string;
+}
+
+/** One of the six special-care conditions. All are STOP-REVIEW: selecting one stops
+ *  generation and names the reviewer, rather than filtering or ranking anything. */
+export interface SpecialCareCondition {
+  condition_id: string;
+  condition: string;
+  gate_level: string;
+  mandatory_reviewer: string;
+  automatic_action: string;
 }

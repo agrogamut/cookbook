@@ -1,5 +1,21 @@
 # Next steps
 
+**Status as of 19 August 2026: steps 1 through 6 below are all built.** The four
+safety-misleading allergens now render an explicit unscreened state, the six unwired
+inputs are wired, the three reference endpoints exist, the diet ranker ships, the Book 1
+content master is imported, and the canonical child profile has both storage and HTTP
+endpoints. What remains from this file is Step 0 - decisions only this project's owners and
+the provider can make - and Step 7 onward, the Book Engine.
+
+One thing arrived after this file was written and is not sequenced below: the provider's
+Special-Care Condition master. Its six STOP-REVIEW conditions are imported (migration
+`0015`) and its `OR-001` stop is implemented, so a child with Down syndrome, cerebral
+palsy, congenital heart disease, cleft lip/palate, autism or intellectual disability now
+stops generation instead of being scored like any other child. `OR-002` through `OR-014`
+remain blocked on intake fields that do not exist, recorded as `GAP-022`.
+
+---
+
 What to build, in an order that keeps each step verifiable. Written 18 August 2026.
 
 `docs/not-built.md` lists everything missing. This file is opinionated about sequence.

@@ -10,7 +10,7 @@ consequences for the UI - see "Frontend" below - and it does not soften a single
 "Hard rule: never invent data". An operator reading a wrong number will repeat it to a
 parent, so the data has to be right for exactly the same reasons it always did.
 
-Source data is 13 Excel workbooks in `data/provider/`, authored by an external clinical
+Source data is 14 Excel workbooks in `data/provider/`, authored by an external clinical
 data provider, plus two external datasets in `data/external/` used for verification and
 gap-filling. Scope is India and Bangladesh, weighted toward West Bengal.
 
@@ -574,6 +574,38 @@ adaptability flags (`Vegetarian_Adaptability`, `Halal_Adaptability`, `Jain_Adapt
 `Local_Ingredient_Availability` and `Ingredient_Substitution_Priority`. That is engine
 steps 7 and 9.
 
+### The special-care stop gate
+
+The provider's fourteenth workbook (`MadamGY_Special_Care_Condition_Feeding_Recipe_Engine_Master_V1.xlsx`,
+delivered 18 August 2026) defines six conditions - Down syndrome, cerebral palsy,
+congenital heart disease, cleft lip/palate, autism, intellectual disability - and states
+the rule in one line:
+
+> Condition is a STOP GATE, not a simple recipe filter.
+
+All six are `STOP-REVIEW`. `internal/engine/special_care.go` implements this as part of
+step 3: a declared special-care condition stops the pipeline and returns no recipes,
+quoting the provider's own `automatic_action`, `mandatory_reviewer` and `stop_if` verbatim.
+It runs **before** the clinical rule filter, because it is the broader statement.
+
+**The engine now records 16 steps**, not 14. Steps 2 and 4 are each recorded twice (a hard
+filter plus a ranker half), and step 3 is recorded twice (the special-care stop gate plus
+the clinical rule filter). The why-panel keys its rows on step number, kind and name for
+exactly this reason.
+
+Blocking needed no clinical sign-off, and that asymmetry is the point: a block never puts
+an unsafe recipe in front of an operator, so it is always the safe direction to move in.
+Serving a special-care recipe would need sign-off, and nothing does that - the workbook's
+108 recipe candidates are archetypes at `CANDIDATE-REVIEW` with no Recipe Master
+counterpart, counted by `GAP-021` and pinned unservable by
+`TestSpecialCareCandidatesAreNeverApproved`.
+
+Only `OR-001` of the workbook's 14 output rules is implemented. `OR-002`-`OR-014` need
+feeding route, prescribed IDDSI level, cardiology fluid orders, post-operative status,
+pica and sensory profile - none of which this project collects, so implementing them would
+mean inventing their inputs. `GAP-022` counts them. The stop is what makes their absence
+safe: no ranked list is produced for these children at all.
+
 ### Deviation from the spec, and why
 
 The spec makes steps 1, 2, 3, 4 and 6 hard filters. With the current data that guarantees
@@ -890,6 +922,7 @@ internal/db/migrations/
   0012_gap_register_additions   GAP-017..GAP-020, register goes from 16 rows to 20
   0013_book1_content            9 Book 1 tables, ai_can_draft CHECK gate, book_order
   0014_child_profile            child_profile + 4 child tables, dated growth, three-state allergy
+  0015_special_care             9 special-care tables, 6 STOP-REVIEW condition gates
 ```
 
 **Migrations 0012 and 0013-0014 were authored on separate branches and merged after the
@@ -904,7 +937,7 @@ scripts/dev_db.fish down && scripts/dev_db.fish up
 go run ./cmd/import && go run ./cmd/enrich
 ```
 
-The check that it worked is `SELECT count(*) FROM gap_register` returning 20, not 16.
+The check that it worked is `SELECT count(*) FROM gap_register` returning 22, not 16 or 20.
 
 ```
 internal/db/integrity_test.go   22 invariants + row counts + idempotency
@@ -972,7 +1005,7 @@ WHERE a.run_id = 1 AND b.run_id = 2 AND a.content_hash <> b.content_hash;
 Private repo on GitHub. Standard flow:
 
 - Never commit `.env` or `.env.local`. `.env.example` documents every variable.
-- The 13 provider workbooks ARE committed, in `data/provider/` - they are the source of
+- The 14 provider workbooks ARE committed, in `data/provider/` - they are the source of
   truth and the importer reads them directly. The Book Engine spec deliverables
   (docx/json/pdf) live alongside in `data/book-engine-spec/`.
 - The external datasets are NOT committed. `data/external/*.csv` is gitignored;
@@ -988,6 +1021,6 @@ Copy `.env.example` to `.env` to start.
 | Var | Required | Purpose |
 |-----|----------|---------|
 | `DATABASE_URL` | yes | Postgres connection string |
-| `XLSX_DIR` | no, defaults to `data/provider` | Directory holding the 13 provider workbooks |
+| `XLSX_DIR` | no, defaults to `data/provider` | Directory holding the 14 provider workbooks |
 | `PORT` | no, defaults to 8080 | HTTP listen port. Unused until Phase 2 |
 | `TEST_DATABASE_URL` | no | Throwaway database for the integrity suite. Unset, the suite skips |

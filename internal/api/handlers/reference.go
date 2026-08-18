@@ -478,3 +478,45 @@ func (h *Handlers) ReferenceBook1Blocks(w http.ResponseWriter, r *http.Request) 
 	}
 	writeJSON(w, http.StatusOK, out)
 }
+
+// ReferenceSpecialCareConditions returns the six STOP-REVIEW conditions, so the console's
+// picker is built from the provider's master rather than a hardcoded list that could drift
+// from what the engine actually blocks on.
+//
+// mandatory_reviewer is included because it is the operator's next action once the engine
+// stops, and a picker that hides it makes the block look like a dead end.
+func (h *Handlers) ReferenceSpecialCareConditions(w http.ResponseWriter, r *http.Request) {
+	rows, err := h.pool.Query(r.Context(), `
+		SELECT condition_id, condition, coalesce(gate_level, ''),
+		       coalesce(mandatory_reviewer, ''), coalesce(automatic_action, '')
+		FROM special_care_condition_gate ORDER BY condition_id`)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "special-care condition list failed: "+err.Error())
+		return
+	}
+	defer rows.Close()
+
+	type condition struct {
+		ConditionID       string `json:"condition_id"`
+		Condition         string `json:"condition"`
+		GateLevel         string `json:"gate_level"`
+		MandatoryReviewer string `json:"mandatory_reviewer"`
+		AutomaticAction   string `json:"automatic_action"`
+	}
+	// Nil-slice-marshals-to-null would violate the frontend's SpecialCareCondition[] contract.
+	out := []condition{}
+	for rows.Next() {
+		var c condition
+		if err := rows.Scan(&c.ConditionID, &c.Condition, &c.GateLevel,
+			&c.MandatoryReviewer, &c.AutomaticAction); err != nil {
+			writeError(w, http.StatusInternalServerError, "special-care condition scan failed: "+err.Error())
+			return
+		}
+		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "special-care condition rows failed: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, out)
+}

@@ -10,9 +10,11 @@ import {
 import { SuspectedAllergenFieldset } from "./suspected-allergen-fieldset";
 import {
   getAllergens, getClinicalMarkers, getEnums, getRegions, getCuisines, getProfileEngineInput,
+  getSpecialCareConditions,
 } from "@/lib/api";
 import type {
   Allergen, ChildProfile, ClinicalMarker, ClinicalMarkerValue, Cuisine, Region, ReferenceEnums,
+  SpecialCareCondition,
 } from "@/lib/types";
 
 interface ProfileFormProps {
@@ -110,6 +112,7 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
   const [vegan, setVegan] = useState(false);
   const [allergens, setAllergens] = useState<string[]>([]);
   const [suspectedAllergens, setSuspectedAllergens] = useState<string[]>([]);
+  const [specialCare, setSpecialCare] = useState("");
   const [clinicalMarker, setClinicalMarker] = useState("");
   const [clinicalFlags, setClinicalFlags] = useState<Record<string, string>>({});
   const [mealType, setMealType] = useState("");
@@ -125,6 +128,7 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
   const [enums, setEnums] = useState<ReferenceEnums>({});
   const [regions, setRegions] = useState<Region[]>([]);
   const [cuisines, setCuisines] = useState<Cuisine[]>([]);
+  const [specialCareOptions, setSpecialCareOptions] = useState<SpecialCareCondition[]>([]);
   const [refError, setRefError] = useState<string | null>(null);
 
   const [loadChildID, setLoadChildID] = useState("");
@@ -133,13 +137,15 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
   const [loadedAsOf, setLoadedAsOf] = useState("");
 
   useEffect(() => {
-    Promise.all([getAllergens(), getClinicalMarkers(), getEnums(), getRegions(), getCuisines()])
-      .then(([a, m, e, r, c]) => {
+    Promise.all([getAllergens(), getClinicalMarkers(), getEnums(), getRegions(), getCuisines(),
+                 getSpecialCareConditions()])
+      .then(([a, m, e, r, c, sc]) => {
         setAllergenOptions(a);
         setMarkerOptions(m);
         setEnums(e);
         setRegions(r);
         setCuisines(c);
+        setSpecialCareOptions(sc);
       })
       .catch((err) => setRefError(err instanceof Error ? err.message : String(err)));
   }, []);
@@ -164,6 +170,7 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
       setSuspectedAllergens(p.suspected_allergens ?? []);
       setClinicalFlags(p.clinical_flags ?? {});
       setClinicalMarker(p.clinical_marker ?? "");
+      setSpecialCare(p.special_care_condition ?? "");
       setRegionCulture(p.region_culture ?? "");
       setCuisineCode(p.cuisine_code ?? "");
       setMealType(p.meal_type ?? "");
@@ -232,6 +239,7 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
       vegan: vegan || undefined,
       allergens: allergens.length ? allergens : undefined,
       suspected_allergens: effectiveSuspected.length ? effectiveSuspected : undefined,
+      special_care_condition: specialCare || undefined,
       clinical_marker: clinicalMarker || undefined,
       clinical_flags: Object.keys(clinicalFlags).length ? clinicalFlags : undefined,
       meal_type: mealType || undefined,
@@ -358,6 +366,34 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      {/* Built from special_care_condition_gate, never a hardcoded list, so the picker
+          cannot offer a condition the engine does not block on. Selecting one is not a
+          filter or a ranker: the engine stops and returns no recipes at all. */}
+      <div className="space-y-1">
+        <span className={label}>Special-care condition</span>
+        <Select value={specialCare || NONE} onValueChange={(v) => setSpecialCare(v === NONE ? "" : v)}>
+          <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>None</SelectItem>
+            {specialCareOptions.map((c) => (
+              <SelectItem key={c.condition_id} value={c.condition_id}>
+                {c.condition} ({c.condition_id})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {specialCare ? (
+          <p className="text-xs text-destructive">
+            {specialCareOptions.find((c) => c.condition_id === specialCare)?.mandatory_reviewer}
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            All six are STOP-REVIEW in the provider&apos;s master. Selecting one stops
+            generation and names the required reviewer - it does not filter or rank.
+          </p>
+        )}
       </div>
 
       <fieldset className="space-y-1.5">
