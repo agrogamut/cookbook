@@ -1,0 +1,138 @@
+/* Global tokens from MadamGY_PDF_Template_Contract_V1.json. Values are the contract's,
+   not preferences: safe_margin_mm 12, header_height_mm 12, footer_height_mm 10,
+   body_max_line_length_chars 85, minimum_body_pt 9.5, minimum_table_pt 8.5. */
+:root {
+  --safe-margin: 12mm;
+  --header-height: 12mm;
+  --footer-height: 10mm;
+  --body-measure: 85ch;
+
+  /* The contract's accessibility floors. These are minimums, so the values used are at or
+     above them and never below. avoid_color_only_meaning is honoured by pairing every
+     coloured callout with a text label. */
+  --body-size: 10pt;
+  --table-size: 9pt;
+  --small-size: 8.5pt;
+
+  --font-body: "Noto Sans", "Segoe UI", system-ui, sans-serif;
+  /* Bengali and Devanagari need a font with the conjuncts; Noto covers both scripts and
+     keeps one family across the whole book. Verify the faces are installed in the render
+     environment before trusting output - a missing face renders tofu, not an error. */
+  --font-indic: "Noto Sans Bengali", "Noto Sans Devanagari", var(--font-body);
+
+  --warning-strong: #9b2226;   /* warning_palette: deep red */
+  --warning-soft: #fdecea;     /* warning_palette: light warm red */
+  --rule: #d9d9d9;
+  --ink: #1f2933;
+  --ink-soft: #52606d;
+  --zebra: #fafafa;
+}
+
+/* book1_palette: deep navy, teal, warm cream, muted gold */
+.book1 {
+  --brand: #0f6466;
+  --brand-deep: #123a5f;
+  --surface: #fdf6e6;
+  --accent: #c9922b;
+  --card-fill: #eef6f6;
+}
+
+/* book2_palette: deep plum, warm rose, cream, muted gold */
+.book2 {
+  --brand: #b0688a;
+  --brand-deep: #6b2d5c;
+  --surface: #fdf6e6;
+  --accent: #c9922b;
+  --card-fill: #fbeaf1;
+}
+
+@page {
+  size: A4 portrait;
+  margin: calc(var(--safe-margin) + var(--header-height))
+          var(--safe-margin)
+          calc(var(--safe-margin) + var(--footer-height));
+}
+
+body {
+  font-family: var(--font-body);
+  font-size: var(--body-size);
+  color: var(--ink);
+  margin: 0;
+}
+
+p, li { max-width: var(--body-measure); }
+
+/* section_title_style: "large editorial heading + short supportive subtitle", drawn in both
+   prototypes as a full-bleed band in the book's brand colour. */
+.section-header {
+  background: var(--brand-deep);
+  color: #fff;
+  padding: 6mm 6mm 5mm;
+  margin: 0 0 6mm;
+  break-after: avoid;
+}
+.section-header h2 { margin: 0; font-size: 18pt; }
+.section-header p { margin: 3mm 0 0; font-size: var(--small-size); opacity: 0.9; }
+
+/* table_header_repeat: true. thead repeating across pages is native to print CSS, which is
+   one of the reasons this renderer is HTML rather than a drawing library. */
+table { width: 100%; border-collapse: collapse; font-size: var(--table-size); }
+thead { display: table-header-group; }
+tr { break-inside: avoid; }
+th {
+  background: var(--brand-deep);
+  color: #fff;
+  text-align: left;
+  padding: 2.5mm 3mm;
+  font-size: var(--small-size);
+}
+td { padding: 2.5mm 3mm; border-bottom: 0.3mm solid var(--rule); vertical-align: top; }
+tbody tr:nth-child(even) { background: var(--zebra); }
+
+.card-row { display: flex; gap: 4mm; margin: 5mm 0; break-inside: avoid; }
+.card {
+  flex: 1;
+  border: 0.3mm solid var(--brand);
+  background: var(--card-fill);
+  padding: 4mm;
+}
+.card h3 { margin: 0 0 2mm; color: var(--brand-deep); font-size: 12pt; }
+.card p { margin: 0; font-size: var(--small-size); }
+
+/* Three callout severities, drawn in the prototypes. clinical_warning_visibility is "high",
+   and avoid_color_only_meaning means the label carries the severity in words too. */
+.callout { border: 0.3mm solid var(--accent); background: var(--surface); padding: 4mm;
+           margin: 5mm 0; break-inside: avoid; }
+.callout h3 { margin: 0 0 2mm; color: var(--accent); font-size: 11pt; }
+.callout.warning { border-color: var(--warning-strong); background: var(--warning-soft); }
+.callout.warning h3 { color: var(--warning-strong); }
+
+/* A blank the parent writes on. The prototypes use these throughout rather than leaving a
+   cell empty, so the page reads as a form rather than as missing data. */
+.write-line { display: inline-block; min-width: 28mm; border-bottom: 0.3mm solid var(--ink-soft); }
+
+/* Nothing in the dataset is approved. Every generated book says so on its first page and in
+   its running footer; neither is removable by a template. */
+.provisional {
+  border: 0.4mm solid var(--warning-strong);
+  background: var(--warning-soft);
+  color: var(--warning-strong);
+  padding: 4mm;
+  margin: 6mm 0;
+  font-size: var(--small-size);
+}
+
+.cover { text-align: center; padding-top: 40mm; }
+.cover .brand { color: var(--brand); font-weight: 700; letter-spacing: 0.1em; }
+.cover h1 { color: var(--brand-deep); font-size: 26pt; margin: 4mm 0 2mm; }
+.cover .subtitle { color: var(--ink-soft); font-size: 11pt; margin: 0 auto; max-width: 120mm; }
+.cover .name-box {
+  border: 0.3mm solid var(--accent);
+  background: var(--surface);
+  padding: 8mm;
+  margin: 12mm auto;
+  max-width: 110mm;
+}
+.cover .name-box .name { color: var(--brand-deep); font-size: 20pt; font-weight: 700; }
+
+.page-break { break-after: page; }

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="{{ .Metadata.Language }}">
+<head>
+<meta charset="utf-8">
+<title>{{ .Metadata.Title }}</title>
+<style>{{ .CSS }}</style>
+</head>
+<body class="{{ .BookClass }}">
+
+{{/* Nothing in the dataset is approved: every recipe is Review_Status = Draft and every
+     ingredient Needs Validation. The banner is emitted by the base template rather than by
+     a section, so no template can produce a book without it. */}}
+<div class="provisional">
+  <strong>Provisional - not clinically approved.</strong>
+  This book was generated from provider data marked
+  <span class="mono">{{ .Metadata.ReviewStatus }}</span>.
+  It has not completed culinary, nutrition or clinical review and must not be used as a
+  clinical prescription.
+</div>
+
+{{ template "body" . }}
+
+</body>
+</html>
