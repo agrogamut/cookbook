@@ -882,8 +882,9 @@ package book
 
 import "time"
 
-// Metadata is the book_metadata object both schemas require, plus the three release footer
-// fields the template contract names (book_version, release_id, generation_date).
+// Metadata carries the three release footer fields the template contract names --
+// book_version, release_id, generation_date -- plus the title, language and the provider's
+// own review status. It is not the provider schema's book_metadata object; see Book1 below.
 type Metadata struct {
 	Title          string    `json:"title"`
 	BookVersion    string    `json:"book_version"`
@@ -949,7 +950,16 @@ type Callout struct {
 	Body     string `json:"body"`
 }
 
-// Book1 mirrors MadamGY_Book1_JSON_Schema_V1.json.
+// Book1 is the render model for Book 1 -- the shape the templates consume, not the
+// provider's wire format.
+//
+// It deliberately does not conform to MadamGY_Book1_JSON_Schema_V1.json. That schema is
+// strict and requires a consultation_summary carrying reviewed_by and a consultation_date,
+// a release object, and a profile_snapshot_id and generation_job_id from a generation
+// pipeline this project does not have. Producing a conformant document today would mean
+// writing a reviewer's name and a consultation date for a review that never happened, which
+// is the one claim this project must never make. Conformance arrives with the generation-job
+// and release layer, not before it.
 type Book1 struct {
 	Metadata            Metadata     `json:"book_metadata"`
 	Child               ChildSummary `json:"child_profile"`
@@ -1036,13 +1046,14 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		}
 	}
 
+	// Every block is selected, and age is applied in Go rather than in SQL. An age-excluded
+	// block is a block this child's book deliberately does not contain, which is a fact the
+	// caller needs; a WHERE clause would drop it before anything could record it.
 	rows, err := pool.Query(ctx, `
 		SELECT block_id, book_order, coalesce(section, ''), coalesce(subsection, ''),
-		       coalesce(table_or_format, ''), ai_can_draft
+		       age_from_mo, age_to_mo
 		FROM book1_content_block
-		WHERE (age_from_mo IS NULL OR age_from_mo <= $1)
-		  AND (age_to_mo IS NULL OR age_to_mo >= $1)
-		ORDER BY book_order`, cp.AgeMonths)
+		ORDER BY book_order`)
 	if err != nil {
 		return Book1{}, nil, fmt.Errorf("book: load blocks: %w", err)
 	}
@@ -1050,10 +1061,17 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 
 	skipped := append([]string{}, dropped...)
 	for rows.Next() {
-		var blockID, section, subsection, format, aiCanDraft string
+		var blockID, section, subsection string
 		var order int
-		if err := rows.Scan(&blockID, &order, &section, &subsection, &format, &aiCanDraft); err != nil {
+		var ageFrom, ageTo *int
+		if err := rows.Scan(&blockID, &order, &section, &subsection, &ageFrom, &ageTo); err != nil {
 			return Book1{}, nil, fmt.Errorf("book: scan block: %w", err)
+		}
+		if (ageFrom != nil && cp.AgeMonths < *ageFrom) || (ageTo != nil && cp.AgeMonths > *ageTo) {
+			skipped = append(skipped, fmt.Sprintf(
+				"block %s (%s) covers %s and does not apply at %d months",
+				blockID, section, ageRangeLabel(ageFrom, ageTo), cp.AgeMonths))
+			continue
 		}
 		tmpl, ok := blockTemplate[blockID]
 		if !ok {
