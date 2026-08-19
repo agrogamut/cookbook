@@ -54,9 +54,17 @@
   --card-fill: #fbeaf1;
 }
 
+/* The banner's own rendered height (3 lines of --caption-size text, 4mm padding top and
+   bottom, plus its border), with a small margin of safety. @page reserves this much extra
+   top margin so the banner has somewhere to sit; @media print below pulls it back up into
+   that reservation by the same amount, so reservation and offset can never drift apart. */
+:root {
+  --banner-reserve: 26mm;
+}
+
 @page {
   size: A4 portrait;
-  margin: calc(var(--safe-margin) + var(--header-height) + 26mm)
+  margin: calc(var(--safe-margin) + var(--header-height) + var(--banner-reserve))
           var(--safe-margin)
           calc(var(--safe-margin) + var(--footer-height));
 }
@@ -71,13 +79,28 @@ body {
 p, li { max-width: var(--body-measure); }
 
 /* section_title_style: "large editorial heading + short supportive subtitle", drawn in both
-   prototypes as a full-bleed band in the book's brand colour. */
+   prototypes as a full-bleed band in the book's brand colour.
+
+   break-inside: avoid, not break-after: avoid. The earlier break-after: avoid asked the
+   print engine to never place a page break directly after this band -- meant to stop the
+   title being orphaned from its content -- but on a Book 2 meal section the next sibling
+   is a whole recipe card carrying its own break-inside: avoid (one to two cards per page,
+   per the contract), which is large enough that it never fits in whatever space is left
+   under the band. Chromium's fragmenter, unable to honour "never break right after me"
+   against a block it also cannot split, resolved the conflict by stretching the band's own
+   fragment to consume the rest of the page -- a solid-colour "Breakfast" page with no card
+   on it, confirmed by rendering to PDF and reading the page image, not by inspecting CSS.
+   break-inside: avoid only protects the title and subtitle from splitting from each other,
+   which is all this band actually needs; it no longer fights the card that follows it, so
+   the first card of a meal now prints on the same page as the band whenever it fits, and
+   the meal-divider page count matches the number of meals, not one extra blank-looking page
+   per meal. */
 .section-header {
   background: var(--brand);
   color: #fff;
   padding: 6mm 6mm 5mm;
   margin: 0 0 6mm;
-  break-after: avoid;
+  break-inside: avoid;
 }
 .section-header h2 { margin: 0; font-size: 18pt; }
 .section-header p { margin: 3mm 0 0; font-size: var(--caption-size); opacity: 0.9; }
@@ -136,28 +159,31 @@ tbody tr:nth-child(even) { background: var(--zebra); }
   font-size: var(--caption-size);
 }
 
-/* In print, Chromium repeats a position: fixed element on every page of the paginated
-   output -- the mechanism this rule relies on to put the disclosure on all seven pages
-   instead of just the first. Screen preview keeps the banner in normal flow, which is why
-   this lives in @media print rather than replacing the rule above: preview and print are
-   one document, but pagination only exists at print time.
-   Reserving the room the fixed banner occupies has to happen on @page itself, not as a
-   body padding-top: a body padding only renders on the first fragment of a box that spans
-   several pages (the spec default, box-decoration-break: slice), so it protected the top
-   of a forced section break but not a table or a card list that overflowed naturally onto
-   the next page -- confirmed by printing a 44-row vaccination tracker and finding row text
-   sitting under the banner on every page after the first. @page margin is a true per-page
-   reservation instead, so it holds on every page regardless of why the break happened. The
-   extra 26mm is the banner's own rendered height (3 lines of --caption-size text, 4mm
-   padding top and bottom, plus its border) with a small margin of safety. */
+/* Two things were tried here and only one survived looking at the rendered PDF.
+
+   Attempt 1 (rejected): position: fixed with a negative top, to pull the in-flow banner up
+   into the --banner-reserve band that @page sets aside above the content area. The theory
+   was sound -- fixed in paged media resolves against the page area, so top: 0 painted the
+   banner over the first slice of content instead of above it, and top: -26mm should have
+   moved it into the reserved band. Rendering it and reading the page images showed the
+   opposite: Chromium's headless print engine repeats a fixed element on every page by
+   tiling the element's position at the page-height interval, and a negative top wraps
+   around that tiling rather than extending above page 1 -- the banner reappeared pinned to
+   the BOTTOM of every content page, overlapping the last table row instead of the first.
+   Confirmed by rendering and opening the page images, not by counting; pdftotext would have
+   reported this as a correct 13-of-13 banner count too.
+
+   Attempt 2 (kept): stop asking CSS to repeat the banner at all and use the print engine's
+   own repeating header instead. PrintPDF in internal/book/pdf.go sets headerTemplate to the
+   same disclosure markup, and Chromium draws that once per physical page, natively, with no
+   coordinate math to get wrong. That header renders inside the page's own marginTop band --
+   the same --banner-reserve space @page above already carves out -- so nothing here needs
+   to fight the content box for room. The in-flow .provisional div in base.html stays in the
+   document (still visible in the screen/HTML preview, so a viewer never sees a book with no
+   disclosure) but is suppressed at print time so the page doesn't carry two banners. */
 @media print {
   .provisional {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    margin: 0;
-    z-index: 10;
+    display: none;
   }
 }
 
