@@ -1,12 +1,32 @@
 {{ define "body" }}
 {{ $b := .Data }}
 {{ template "B1-COVER-01" $b }}
+{{ template "B1-TOC-01" $b }}
 {{ range $b.Sections }}
+  {{/* break-before on every section but the first, never break-after.
+
+       break-after: page on every section emits a break after the last one too, and Chromium
+       honours it as a physical page -- so the book ended on an empty sheet, every time.
+       Moving the break to the front of each section says the same thing about every
+       boundary between two sections and says nothing at all after the final one. */}}
+  {{/* Every section, including the first: the contents page always precedes it, and the
+       conditional version left Child Profile sharing a page with the contents whenever the
+       contents happened to be short. */}}
   <section class="page-break">
     <div class="section-header">
       <h2>{{ .Title }}</h2>
       {{ with .Subtitle }}<p>{{ . }}</p>{{ end }}
     </div>
+
+    {{/* The block's own content_purpose and parent_facing_output, printed before the content.
+         They are the provider's sentences about why the page exists and what it covers; this
+         book writes no introduction of its own and these are the nearest thing it may have. */}}
+    {{ with .Purpose }}<p class="block-purpose">{{ . }}</p>{{ end }}
+    {{ with .Covers }}
+      <p class="block-covers"><strong>This page covers:</strong>
+        {{ range $j, $c := . }}{{ if $j }}; {{ end }}{{ $c }}{{ end }}</p>
+    {{ end }}
+
     {{/* Dispatch on the provider's own template id. An unknown id renders nothing rather
          than falling back to a generic table: a fallback would silently give clinical
          content the wrong visual treatment, which is the failure B1-RED-01 exists to
@@ -16,6 +36,12 @@
     {{ else if eq .TemplateID "B1-VAX-01" }}{{ template "B1-VAX-01" . }}
     {{ else if eq .TemplateID "B1-DEV-01" }}{{ template "B1-DEV-01" . }}
     {{ else if eq .TemplateID "B1-RED-01" }}{{ template "B1-RED-01" . }}
+    {{ else if eq .TemplateID "B1-DAILY-01" }}{{ template "B1-DAILY-01" . }}
+    {{ else if eq .TemplateID "B1-ILLNESS-01" }}{{ template "B1-ILLNESS-01" . }}
+    {{ else if eq .TemplateID "B1-STAGE-01" }}{{ template "B1-STAGE-01" . }}
+    {{ else if eq .TemplateID "B1-SAFETY-01" }}{{ template "B1-SAFETY-01" . }}
+    {{ else if eq .TemplateID "B1-TRACKER-01" }}{{ template "B1-TRACKER-01" . }}
+    {{ else if eq .TemplateID "B1-REFS-01" }}{{ template "B1-REFS-01" . }}
     {{/* B1-END-01 prints the release footer -- book_version, release_id, generation_date,
          review_status -- which live on Book1.Metadata, not on the Section. The section's
          own Title/Subtitle are already drawn by the section-header above, so the release

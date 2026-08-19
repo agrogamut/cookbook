@@ -146,8 +146,13 @@ func TestSpecialCareGapsAreRegistered(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM gap_register`).Scan(&total); err != nil {
 		t.Fatalf("gap count: %v", err)
 	}
-	if total != 24 {
-		t.Fatalf("expected 24 gap register rows after migration 0017, got %d", total)
+	// The count lives in TestGapRegisterIsComplete in integrity_test.go, with the build-up
+	// written out. Asserting it a second time here meant every migration that adds a gap
+	// broke a special-care test that has nothing to do with the change -- which is noise
+	// that trains a reader to update numbers without reading them. What this test is
+	// actually for is the two rows below.
+	if total < 2 {
+		t.Fatalf("gap register holds %d rows; the special-care gaps cannot be among them", total)
 	}
 
 	for _, id := range []string{"GAP-021", "GAP-022"} {

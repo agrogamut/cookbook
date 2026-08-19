@@ -68,6 +68,45 @@ export function BookGenerator() {
     URL.revokeObjectURL(url);
   }
 
+  // Open a printed PDF in a new tab rather than putting it in the downloads folder.
+  //
+  // The browser's own viewer gives print, save, zoom and search for nothing, and an operator
+  // checking a book before handing it over should not accumulate a file per attempt. The zip
+  // still downloads: an archive has nothing to view.
+  //
+  // The tab is opened synchronously, before the fetch, and pointed at the blob when it
+  // arrives. window.open after an await is not attributable to the click that caused it and
+  // every popup blocker eats it -- which presents as a button that does nothing at all.
+  function openInTab(book: Which) {
+    if (!submitted) return;
+    const tab = window.open("", "_blank");
+    if (tab === null) {
+      // Blocked anyway, or opened in a context that cannot. Fall back to downloading rather
+      // than leaving the button silently dead.
+      void downloadOne(book);
+      return;
+    }
+    tab.document.write(
+      `<title>${fileStem()}-${book}.pdf</title>` +
+        `<p style="font:14px system-ui;padding:2rem">Printing ${book === "book1" ? "Book 1" : "Book 2"}...</p>`,
+    );
+
+    setBusy(true);
+    setProblem(null);
+    generateBookPdf(submitted, book)
+      .then((blob) => {
+        // The object URL is deliberately not revoked. It belongs to the new tab now, and
+        // revoking it -- on a timer or on unmount -- blanks a document the operator is
+        // reading. The browser releases it when that tab closes.
+        tab.location.href = URL.createObjectURL(blob);
+      })
+      .catch((err) => {
+        tab.close();
+        setProblem(classify(err));
+      })
+      .finally(() => setBusy(false));
+  }
+
   function fileStem() {
     const name = (submitted?.display_name ?? "").toLowerCase()
       .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -114,19 +153,20 @@ export function BookGenerator() {
       {set !== null && (
         <div className="flex flex-wrap items-center gap-3 border-t pt-4">
           <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Download
+            Print
           </span>
+          {/* Both books are always offered, not only the one whose tab happens to be open:
+              the run produced both, so reaching one should not require switching tabs first.
+              These open the PDF; the zip below downloads, because an archive has nothing to
+              view. */}
+          <Button variant="outline" onClick={() => openInTab("book1")} disabled={busy}>
+            Open Book 1 PDF
+          </Button>
+          <Button variant="outline" onClick={() => openInTab("book2")} disabled={busy}>
+            Open Book 2 PDF
+          </Button>
           <Button variant="outline" onClick={downloadBoth} disabled={busy}>
-            Both books (.zip)
-          </Button>
-          {/* Both single downloads are always offered, not only the tab that happens to be
-              open: the run produced both books, so reaching one should not require switching
-              tabs first. */}
-          <Button variant="outline" onClick={() => downloadOne("book1")} disabled={busy}>
-            Book 1 PDF
-          </Button>
-          <Button variant="outline" onClick={() => downloadOne("book2")} disabled={busy}>
-            Book 2 PDF
+            Download both (.zip)
           </Button>
         </div>
       )}

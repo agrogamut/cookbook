@@ -303,9 +303,13 @@ func TestRenderedSectionsAreNotEmpty(t *testing.T) {
 			if sec.TemplateID == "B1-END-01" {
 				continue
 			}
-			if len(sec.Rows) == 0 && len(sec.Growth) == 0 && sec.Callout == nil {
-				t.Fatalf("at %d months: block %s (%s) was rendered with no rows, no growth "+
-					"table and no callout -- a heading over an empty table, not a book",
+			// SectionHasContent rather than a hand-written list of the shapes a section
+			// can carry. The hand-written version listed rows, growth and callout, and went
+			// on passing when four more content kinds were added -- a test that checks a
+			// subset of the ways a page can be empty is a test that stops noticing.
+			if !SectionHasContent(sec) {
+				t.Fatalf("at %d months: block %s (%s) was rendered carrying nothing -- "+
+					"a heading over an empty area, not a book",
 					months, sec.BlockID, sec.TemplateID)
 			}
 		}
@@ -474,5 +478,125 @@ func TestLoadRecipeCardsReportsAJoinMiss(t *testing.T) {
 	if !found {
 		t.Fatalf("recipe id %s has no method card row; it must be named in the skip list, got %v",
 			missingID, skipped)
+	}
+}
+
+// TestOnlyTheZScoreBlockIsUnmapped is the assertion conservation accounting cannot make.
+//
+// "Rendered plus reported equals total" held at seven-plus-twenty-five exactly as well as it
+// holds at twenty-nine-plus-three, which is how this book shipped nearly empty with a green
+// suite: twenty-four blocks reported "no template mapping" while the provider's content for
+// them sat in four tables nothing queried. Counting cannot tell those two states apart. This
+// names which block may be missing, and B1-004 is the only answer.
+//
+// B1-004 is growth trend interpretation. Its declared input is a z-score/percentile engine,
+// which means computing against the WHO reference tables this project does not carry, and a
+// trend stated without them is a clinical finding with no source. If it ever appears in a
+// book, that happened here and not in a clinic.
+func TestOnlyTheZScoreBlockIsUnmapped(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	// Fifty-one months: inside the declared age range of every block except the adolescent
+	// one, and the prototype's own child.
+	_, omissions, err := AssembleBook1(ctx, pool, storedProfileAged(51), time.Now())
+	if err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+
+	var unmapped []string
+	for _, o := range omissions {
+		if strings.Contains(o, "no template mapping") {
+			unmapped = append(unmapped, o)
+		}
+	}
+	if len(unmapped) != 1 {
+		t.Fatalf("want exactly one unmapped block, got %d:\n  %s",
+			len(unmapped), strings.Join(unmapped, "\n  "))
+	}
+	if !strings.Contains(unmapped[0], "B1-004") {
+		t.Errorf("the unmapped block is not B1-004: %s", unmapped[0])
+	}
+}
+
+// TestBookOneIsNotThin holds the floor this whole change exists to raise.
+//
+// A count, and a weak assertion on its own -- twenty-five sections carrying one row each
+// would pass it. It is paired with TestRenderedSectionsAreNotEmpty, which holds every one of
+// those sections to carrying something, and with reading the printed pages, which is the only
+// check that sees a page whose content is present, correct and useless.
+func TestBookOneIsNotThin(t *testing.T) {
+	pool := testPool(t)
+	b, _, err := AssembleBook1(context.Background(), pool, storedProfileAged(51), time.Now())
+	if err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+	if len(b.Sections) < 25 {
+		t.Errorf("a four-year-old's Book 1 has %d sections; the provider supplies content "+
+			"for at least 25 at this age", len(b.Sections))
+	}
+}
+
+// TestTheFourFeedingBlocksDoNotPrintTheSamePage: B1-005 to B1-008 share one template, and the
+// first version of that template ignored which block it was rendering -- so a book carried the
+// same twenty-row feeding table four times in a row. Every row was the provider's own text and
+// every test passed; it still read as padding, which is what a reader calls filler regardless
+// of where the sentences came from.
+func TestTheFourFeedingBlocksDoNotPrintTheSamePage(t *testing.T) {
+	pool := testPool(t)
+	// Thirty months, not the prototype's four-year-old: B1-008 declares 6-36 months, so at
+	// fifty-one it is correctly age-excluded and only three of the four render.
+	b, _, err := AssembleBook1(context.Background(), pool, storedProfileAged(30), time.Now())
+	if err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+
+	facets := map[string]string{}
+	for _, sec := range b.Sections {
+		if sec.TemplateID != "B1-STAGE-01" {
+			continue
+		}
+		if sec.Stage == nil || sec.Stage.Facet == "" {
+			t.Fatalf("%s renders B1-STAGE-01 with no facet, so it prints the whole stage "+
+				"table like its three neighbours", sec.BlockID)
+		}
+		if other, dup := facets[sec.Stage.Facet]; dup {
+			t.Errorf("%s and %s both render the %q facet", other, sec.BlockID, sec.Stage.Facet)
+		}
+		facets[sec.Stage.Facet] = sec.BlockID
+	}
+	if len(facets) != 4 {
+		t.Errorf("want four distinct feeding facets, got %d: %v", len(facets), facets)
+	}
+}
+
+// TestTheTwoMilestoneBlocksDoNotPrintTheSamePage is the same defect on the other shared
+// template. B1-011 (surveillance, 0-72 months) and B1-014 (detailed comparison, 0-216) both
+// map to B1-DEV-01 and both called milestoneRows, so one book printed the identical
+// forty-row table twice.
+func TestTheTwoMilestoneBlocksDoNotPrintTheSamePage(t *testing.T) {
+	pool := testPool(t)
+	b, _, err := AssembleBook1(context.Background(), pool, storedProfileAged(51), time.Now())
+	if err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+
+	var surveillance, detailed []Row
+	for _, sec := range b.Sections {
+		switch sec.BlockID {
+		case "B1-011":
+			surveillance = sec.Rows
+		case "B1-014":
+			detailed = sec.Rows
+		}
+	}
+	if len(surveillance) == 0 || len(detailed) == 0 {
+		t.Fatalf("want both milestone blocks rendered, got B1-011=%d rows B1-014=%d rows",
+			len(surveillance), len(detailed))
+	}
+	if len(surveillance) >= len(detailed) {
+		t.Errorf("B1-011 (current checkpoint) has %d rows and B1-014 (every checkpoint to "+
+			"date) has %d. Surveillance is the checkpoint the child is at, not the whole "+
+			"history, so it must be the shorter of the two.", len(surveillance), len(detailed))
 	}
 }

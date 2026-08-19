@@ -22,6 +22,27 @@ const (
 // ErrUnknownKind is returned for a Kind that is neither book.
 var ErrUnknownKind = fmt.Errorf("book: unknown kind")
 
+// templateFuncs is deliberately one function long.
+//
+// html/template has no numeric range, and the tracker templates need to emit N blank rows.
+// The alternative -- building a slice of N empty structs in Go and handing it to the template
+// -- puts presentation padding into the render model, where a later reader has to work out
+// whether those empty rows mean "no data" or "a form". Keeping it here says plainly that the
+// blanks are a form.
+//
+// Nothing else belongs in this map. A template function that formatted, rounded or defaulted
+// a value would put a data decision somewhere no test looks.
+var templateFuncs = template.FuncMap{
+	// rows returns a slice of length n purely so a template can iterate it. The values are
+	// never read.
+	"rows": func(n int) []struct{} {
+		if n < 0 {
+			return nil
+		}
+		return make([]struct{}, n)
+	},
+}
+
 type renderContext struct {
 	Metadata  Metadata
 	BookClass string
@@ -42,7 +63,7 @@ func RenderHTML(w io.Writer, kind Kind, meta Metadata, data any) error {
 		return fmt.Errorf("book: read tokens: %w", err)
 	}
 
-	t, err := template.ParseFS(templateFS,
+	t, err := template.New("base.html").Funcs(templateFuncs).ParseFS(templateFS,
 		"templates/base.html",
 		fmt.Sprintf("templates/%s/*.html", kind))
 	if err != nil {

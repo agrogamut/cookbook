@@ -20,5 +20,8 @@
   </div>
   <p class="subtitle">Prepared after consultation</p>
 </div>
-<div class="page-break"></div>
+{{/* No spacer div here. There used to be an empty <div class="page-break"> after the cover,
+     which was harmless while .page-break meant break-after and became a blank page the moment
+     it meant break-before: the empty div took a break before itself, and the contents page
+     that follows took another. Whatever follows the cover carries its own break. */}}
 {{ end }}

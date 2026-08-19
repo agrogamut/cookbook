@@ -1,0 +1,150 @@
+{{/* B1-STAGE-01: the provider's feeding guidance for this child's age band.
+
+     Every row is one column of age_feeding_stage_master, printed as written. This table is
+     the answer to "what should a parent know about feeding a child this age", the provider
+     wrote all of it, and the engine has been reading it since Phase 2 while the book was not.
+
+     Four blocks share this template and each takes a different slice of it -- see stageFacet
+     in book1.go. The first version ignored that and printed the whole table four times
+     consecutively, which reads as padding however sound each individual row is.
+
+     Breastfed and non-breastfed meal frequency stay separate rows because they are separate
+     provider columns and they genuinely differ. Collapsing them to one number would be a
+     value the workbook does not contain. */}}
+{{ define "B1-STAGE-01" }}
+{{ with .Stage }}
+{{ $facet := .Facet }}
+{{ with .Current }}
+  <p class="stage-band"><strong>{{ .StageName }}</strong> &middot; {{ .DisplayAge }}
+    &middot; <span class="mono">{{ .StageCode }}</span></p>
+
+  {{ if eq $facet "target" }}
+    <table>
+      <tbody>
+        {{ with .Phase }}<tr><td class="domain-label">Feeding phase</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .MilkContext }}<tr><td class="domain-label">Milk / breastfeeding</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .ComplementaryFood }}<tr><td class="domain-label">Complementary food</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .QuantityRule }}<tr><td class="domain-label">How much</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .VarietyRule }}<tr><td class="domain-label">Variety</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .AnimalSourceRule }}<tr><td class="domain-label">Animal-source foods</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .FruitVegRule }}<tr><td class="domain-label">Fruit and vegetables</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .HoneyRule }}<tr><td class="domain-label">Honey</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .SaltSugar }}<tr><td class="domain-label">Salt and sugar</td><td>{{ . }}</td></tr>{{ end }}
+      </tbody>
+    </table>
+
+    {{/* The safety callouts print here and on no other feeding page. Repeating a warning on
+         four consecutive pages is how a warning stops being read. */}}
+    {{ if or .ChokingControl .ChokingRisk }}
+      <div class="callout warning">
+        <h3>Warning: choking safety at this age</h3>
+        <p>{{ with .ChokingRisk }}Risk level: {{ . }}. {{ end }}{{ .ChokingControl }}</p>
+      </div>
+    {{ end }}
+    {{ with .HardExclusion }}
+      <div class="callout warning">
+        <h3>Warning: this cannot be relaxed</h3>
+        <p>{{ . }}</p>
+      </div>
+    {{ end }}
+    {{ with .EscalationTriggers }}
+      <div class="callout">
+        <h3>Note: when to contact the clinician</h3>
+        <p>{{ . }}</p>
+      </div>
+    {{ end }}
+
+  {{ else if eq $facet "schedule" }}
+    <table>
+      <tbody>
+        {{ with .BreastfedMeals }}<tr><td class="domain-label">Meals, if breastfed</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .BreastfedSnacks }}<tr><td class="domain-label">Snacks, if breastfed</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .NonBreastfedMeals }}<tr><td class="domain-label">Meals, if not breastfed</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .TextureMinimum }}<tr><td class="domain-label">Texture, minimum</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .TextureProgression }}<tr><td class="domain-label">Texture, next step</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .ConsistencyRule }}<tr><td class="domain-label">Meal consistency</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .HygieneRule }}<tr><td class="domain-label">Utensils and hygiene</td><td>{{ . }}</td></tr>{{ end }}
+      </tbody>
+    </table>
+
+    {{/* The block's own declared output is "only food/dish name + quantity/frequency; detailed
+         recipe stays in Book 2", so this is a blank plan the family fills in from Book 2 --
+         never a menu written here, which would be inventing meals nobody prescribed. */}}
+    <h3>This week's plan</h3>
+    <table>
+      <thead>
+        <tr><th>Meal</th><th>Usual time</th><th>Dish (from Book 2)</th><th>Amount</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        {{ range $i, $_ := rows 8 }}
+          <tr>
+            <td><span class="write-line"></span></td><td><span class="write-line"></span></td>
+            <td><span class="write-line"></span></td><td><span class="write-line"></span></td>
+            <td><span class="write-line"></span></td>
+          </tr>
+        {{ end }}
+      </tbody>
+    </table>
+
+  {{ else if eq $facet "approach" }}
+    <table>
+      <tbody>
+        {{ with .ResponsiveFeeding }}<tr><td class="domain-label">Responsive feeding</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .CaregiverMode }}<tr><td class="domain-label">Caregiver's role</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .SelfFeeding }}<tr><td class="domain-label">Self-feeding</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .FingerFood }}<tr><td class="domain-label">Finger food</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .FamilyFood }}<tr><td class="domain-label">Family food</td><td>{{ . }}</td></tr>{{ end }}
+      </tbody>
+    </table>
+
+    {{/* The block declares writable fields "What worked; refused food; behaviour". Recording
+         what happened is the checklist; nothing here scores or interprets it. */}}
+    <h3>What happened at meals</h3>
+    <table>
+      <thead>
+        <tr><th>Date</th><th>What worked</th><th>Food refused</th><th>Behaviour at the meal</th></tr>
+      </thead>
+      <tbody>
+        {{ range $i, $_ := rows 10 }}
+          <tr>
+            <td><span class="write-line"></span></td><td><span class="write-line"></span></td>
+            <td><span class="write-line"></span></td><td><span class="write-line"></span></td>
+          </tr>
+        {{ end }}
+      </tbody>
+    </table>
+  {{ end }}
+{{ end }}
+
+{{/* The comparison block, and only it. A parent seeing the neighbouring stages is B1-008's
+     declared purpose; both rows are the provider's own, never extrapolated from the current
+     stage. */}}
+{{ if eq $facet "comparison" }}
+  <table>
+    <thead>
+      <tr><th>Stage</th><th>Age</th><th>Meals</th><th>Texture</th><th>Self-feeding</th><th>Variety</th></tr>
+    </thead>
+    <tbody>
+      {{ with .Prev }}
+        <tr><td class="mono">{{ .StageCode }}</td><td>{{ .DisplayAge }}</td>
+            <td>{{ .NonBreastfedMeals }}</td><td>{{ .TextureMinimum }}</td>
+            <td>{{ .SelfFeeding }}</td><td>{{ .VarietyRule }}</td></tr>
+      {{ end }}
+      {{ with .Current }}
+        <tr class="stage-now"><td class="mono">{{ .StageCode }}</td><td>{{ .DisplayAge }} (now)</td>
+            <td>{{ .NonBreastfedMeals }}</td><td>{{ .TextureMinimum }}</td>
+            <td>{{ .SelfFeeding }}</td><td>{{ .VarietyRule }}</td></tr>
+      {{ end }}
+      {{ with .Next }}
+        <tr><td class="mono">{{ .StageCode }}</td><td>{{ .DisplayAge }}</td>
+            <td>{{ .NonBreastfedMeals }}</td><td>{{ .TextureMinimum }}</td>
+            <td>{{ .SelfFeeding }}</td><td>{{ .VarietyRule }}</td></tr>
+      {{ end }}
+    </tbody>
+  </table>
+  {{ if not .Next }}
+    <p class="domain-limit">This is the last stage the provider's feeding master defines.</p>
+  {{ end }}
+{{ end }}
+{{ end }}
+{{ end }}

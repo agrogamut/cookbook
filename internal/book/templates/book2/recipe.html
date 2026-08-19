@@ -75,6 +75,14 @@
   <p class="mono">{{ range $i, $t := .NutritionTags }}{{ if $i }} &middot; {{ end }}{{ $t }}{{ end }}</p>
   {{ end }}
 
+  {{/* The serving table and the parent tracker are wrapped as one unbreakable tail.
+
+       Separately, the opener card -- the first in a meal section, which is deliberately
+       splittable so it can start under its own band -- broke immediately before the tracker
+       and left a page carrying nothing but four empty column headings. Three of Book 2's
+       twenty-one pages were that. The two belong together in any case: the tracker records
+       what happened when the serving described directly above it was tried. */}}
+  <div style="break-inside: avoid;">
   <table>
     <thead>
       <tr><th>Texture &amp; serving</th><th>Safety</th><th>Approved swap</th></tr>
@@ -99,6 +107,7 @@
   </table>
 
   {{ template "B2-TRACK-01" . }}
+  </div>
 {{ end }}
 
 {{ define "B2-TRACK-01" }}

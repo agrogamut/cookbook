@@ -1,0 +1,71 @@
+{{/* B1-GRID: one blank form. The single place a tracker grid is drawn.
+
+     Four templates render trackers -- B1-TRACKER-01, B1-DAILY-01, B1-ILLNESS-01 and
+     B1-SAFETY-01 -- and the first version drew the grid inline in each. B1-ILLNESS-01's copy
+     was missing, so B1-016 populated a tracker in the model, passed the has-content guard, and
+     printed a section band over an empty page. One definition means a block that carries a
+     grid renders one. */}}
+{{ define "B1-GRID" }}
+{{/* A prefilled grid is one row per provider row -- eighteen on the two dashboards -- which is
+     taller than a page, so it takes the "tall" modifier and is allowed to split. Blank grids
+     are capped at ten rows and move whole; see .tracker in tokens.css for why the two need
+     opposite treatment. */}}
+<div class="tracker{{ if .Prefilled }} tall{{ end }}">
+  {{ with .Title }}<h3>{{ . }}</h3>{{ end }}
+  {{ if or .Reference .Frequency }}
+    <p class="tracker-meta">
+      {{ with .Reference }}<strong>Reference:</strong> {{ . }}{{ end }}
+      {{ if and .Reference .Frequency }} &middot; {{ end }}
+      {{ with .Frequency }}<strong>Record:</strong> {{ . }}{{ end }}
+    </p>
+  {{ end }}
+  {{/* The threshold prints above the grid, not below it.
+
+       Below, it was the only unbreakable block after a table that routinely runs past a page
+       boundary, so it kept landing alone on the next sheet -- six of Book 1's fifty pages were
+       a single warning box on an otherwise empty page. Above, the grid is the only thing left
+       to cross a boundary and it splits cleanly, repeating its own header.
+
+       It reads better there too: what makes an entry concerning is what a parent needs before
+       they start recording, not after. */}}
+  {{ with .Alarm }}
+    <div class="callout warning">
+      <h3>Warning: when this needs attention</h3>
+      <p>{{ . }}</p>
+    </div>
+  {{ end }}
+  {{ with .Review }}<p class="tracker-meta"><strong>Who reviews this:</strong> {{ . }}</p>{{ end }}
+  <table>
+    <thead><tr>{{ range .Columns }}<th>{{ . }}</th>{{ end }}</tr></thead>
+    <tbody>
+      {{ $cols := .Columns }}
+      {{ if .Prefilled }}
+        {{/* Rows whose leading cells the provider supplies. The remaining columns are the
+             parent's to fill, so they get writing lines -- a labelled blank, not a blank. */}}
+        {{ range $row := .Prefilled }}
+          <tr>
+            {{ range $c, $_ := $cols }}
+              {{ if lt $c (len $row) }}<td>{{ index $row $c }}</td>
+              {{ else }}<td><span class="write-line"></span></td>{{ end }}
+            {{ end }}
+          </tr>
+        {{ end }}
+      {{ else }}
+        {{ range $i, $_ := rows .Rows }}
+          <tr>{{ range $cols }}<td><span class="write-line"></span></td>{{ end }}</tr>
+        {{ end }}
+      {{ end }}
+    </tbody>
+  </table>
+  {{/* The alarm is a line of text, never a column. A parent comparing a filled row against a
+       threshold needs to read the threshold; an empty box headed "Chest pain/syncope" is a
+       box to tick, which is the wrong shape entirely. */}}
+</div>
+{{ end }}
+
+{{/* B1-TRACKER-01: the blocks whose whole content is one or more forms -- consultation goals,
+     the vaccine reaction log, age-specific monitoring, the food and bowel trackers, the weekly
+     and daily-life dashboards, the follow-up page. */}}
+{{ define "B1-TRACKER-01" }}
+{{ range .Trackers }}{{ template "B1-GRID" . }}{{ end }}
+{{ end }}

@@ -1,0 +1,29 @@
+{{/* B1-ILLNESS-01: feeding through the five illness situations the provider defines.
+
+     book_engine_limit prints on every situation, not once at the foot of the page. It is the
+     sentence that keeps this a feeding page rather than a treatment page, and a reader who
+     turns straight to "Vomiting" must see it there rather than three situations earlier. */}}
+{{ define "B1-ILLNESS-01" }}
+{{ range .Illness }}
+  <div class="illness">
+    <h3>{{ .Situation }}</h3>
+    <table>
+      <tbody>
+        {{ with .SupportiveMessage }}<tr><td class="domain-label">Feeding approach</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .WhatToMonitor }}<tr><td class="domain-label">What to watch</td><td>{{ . }}</td></tr>{{ end }}
+      </tbody>
+    </table>
+    {{ with .RedFlags }}
+      <div class="callout warning">
+        <h3>Warning: seek medical care</h3>
+        <p>{{ . }}</p>
+      </div>
+    {{ end }}
+    {{ with .EngineLimit }}<p class="domain-limit">{{ . }}</p>{{ end }}
+  </div>
+{{ end }}
+{{/* B1-016 seeds a monitoring template rather than illness rows -- it is the "supportive
+     table" beside the situations. Omitting this dispatch is what printed it as a section band
+     over an empty page. */}}
+{{ range .Trackers }}{{ template "B1-GRID" . }}{{ end }}
+{{ end }}
