@@ -62,8 +62,9 @@
         </td>
         <td>{{ .Safety }}</td>
         {{/* No substitute-ingredient data is joined into the recipe card in this
-             generation (see internal/book/templates/book2/swap.html), so this column
-             states the gap rather than guessing a swap. */}}
+             generation, so this column states the gap rather than guessing a swap.
+             Substitute_Ingredient_IDs exists on the ingredient master and is clean; it
+             is the join onto the card that has not been built. */}}
         <td>not available for this recipe</td>
       </tr>
     </tbody>
