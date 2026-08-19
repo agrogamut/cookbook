@@ -1839,10 +1839,12 @@ import (
 // with no Chromium -- the same contract the integrity suite has with TEST_DATABASE_URL. A
 // skipped test is not a passing test; run it with a browser before calling this done.
 func TestPrintPDFProducesAPDF(t *testing.T) {
-	if _, err := exec.LookPath("chromium"); err != nil {
-		if _, err := exec.LookPath("google-chrome"); err != nil {
-			t.Skip("no chromium on PATH")
-		}
+	// Every name a Chromium build ships under, because a probe that misses the one name
+	// installed here would skip silently and a skipped test is not a passing test. Arch
+	// packages the browser as google-chrome-stable, Debian as google-chrome, and the
+	// open-source builds as chromium or chromium-browser.
+	if !browserOnPath() {
+		t.Skip("no chromium on PATH")
 	}
 
 	var doc bytes.Buffer
@@ -1864,6 +1866,20 @@ func TestPrintPDFProducesAPDF(t *testing.T) {
 	if !bytes.HasPrefix(out, []byte("%PDF-")) {
 		t.Fatalf("output is not a PDF, first bytes: %q", out[:min(8, len(out))])
 	}
+}
+
+// browserOnPath reports whether any Chromium build is installed under any of the names the
+// common distributions use. chromedp finds the browser itself; this only decides whether to
+// skip, and getting it wrong in the conservative direction hides a broken print pipeline.
+func browserOnPath() bool {
+	for _, name := range []string{
+		"google-chrome-stable", "google-chrome", "chromium", "chromium-browser",
+	} {
+		if _, err := exec.LookPath(name); err == nil {
+			return true
+		}
+	}
+	return false
 }
 ```
 
