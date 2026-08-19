@@ -48,6 +48,8 @@ func NewRouter(pool *pgxpool.Pool) http.Handler {
 	r.Put("/api/profiles/{childID}", h.PutProfile)
 	r.Get("/api/profiles/{childID}", h.GetProfile)
 	r.Get("/api/profiles/{childID}/engine-input", h.GetProfileEngineInput)
+	r.Get("/api/books/{childID}/{book}/preview", h.BookPreview)
+	r.Get("/api/books/{childID}/{book}.pdf", h.BookDownload)
 
 	return r
 }
