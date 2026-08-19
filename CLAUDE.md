@@ -738,6 +738,51 @@ roles but no names.
 
 Do not ship pediatric feeding guidance on provisional data.
 
+### 6. Bulk book generation is blocked on one real Google Form export
+
+**Waiting on: a single exported sheet from a real doctor-facing form.** Not a sample anyone
+constructs here - the actual export, with whatever the questions are currently worded as.
+
+The requirement: doctors enter children into a Google Form, the responses are exported, and
+one upload generates a book set per child. The mechanism is straightforward. The mapping is
+not, and it is the whole blocker.
+
+Google Forms exports its column headers as the **question text**, not as field names - "What
+is the child's date of birth?" rather than `date_of_birth` - and that text changes whenever
+anyone edits the form. So the header row has to be mapped to profile fields, and the mapping
+has to come from a real export rather than from a guess about how the questions are phrased.
+Guessing is how a column silently lands in the wrong field, which in this dataset means a
+book generated against the wrong age band.
+
+Two options once the export exists, and the first needs the file either way:
+
+1. **Hand-written mapping**, checked in like `culture_region_map` and
+   `book1_block_source`. Auditable, and it breaks loudly when the form changes.
+2. **Mapping UI**, where an operator pairs columns to fields once per form version and the
+   pairing is saved. Survives form edits without a code change, at the cost of a screen and a
+   table.
+
+Three decisions already settled, so they do not need re-litigating when the file arrives:
+
+- **No row is skipped silently.** Every row either produces books or appears in a rejection
+  report naming the row number, the column and the reason. Good rows process; bad rows are
+  reported. That is the hard rule applied to a batch: an unexplained absence is the failure
+  mode, not a shorter output.
+- **A special-care stop is not an error.** Rows carrying a STOP-REVIEW condition produce no
+  books and are reported *separately* from failures, with the provider's mandatory reviewer
+  named. An operator who reads a clinical stop as a data problem will try to fix it.
+- **Books come back as one archive** - `<child>-book1.pdf` and `<child>-book2.pdf` per child
+  plus a `report.csv` covering all three outcomes.
+
+Two things to know before scoping it:
+
+- **No cover photographs.** A spreadsheet cannot carry one. A column of image URLs would mean
+  this service fetching arbitrary remote files, which is a different security question and
+  needs its own decision.
+- **It needs a job queue, not a request.** Each print is roughly 19 seconds on the current
+  free instance, so 200 children is over an hour - far past any HTTP timeout. That is real
+  work and the largest part of the estimate.
+
 ## Non-blocking issues
 
 - 304 of 406 ingredients (75%) appear in zero recipes.
@@ -760,6 +805,7 @@ None of these need the provider, and none are fixed by inventing values.
 | 3. Boilerplate prep text | Done, partially. Dish-format + ingredient join into `recipe_method_external` with source, row id, URL and confidence. Covers 166 of 940; the rest have no valid external analogue and get no suggestion. Provider column untouched. |
 | 4. Culture unlinked | Done. The `culture_region_map` seed, 29 hand-written rows, migration `0002`. Both join directions asserted by the integrity suite. |
 | 5. Nothing approved | Keep `Review_Status` verbatim, surface as a provisional-data banner. Never mark anything approved locally. |
+| 6. Bulk input mapping | Not a Phase 1 item. Blocked on one real Google Form export; nothing to build until the header row is known. |
 
 Blocker 2 is the one to resist. There is no verified source for a 6-11 month iron-support
 recipe that the provider did not supply, so the honest output is the gap itself. Writing
