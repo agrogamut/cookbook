@@ -87,31 +87,46 @@ type Book1 struct {
 	Sections            []Section    `json:"sections"`
 }
 
+// IngredientLine is one ingredient on a recipe card. Bengali is separate from Name rather
+// than concatenated into one string so the template can wrap it in a --font-indic span
+// without parsing text back out of it. It is empty whenever ingredient_master carries no
+// Bengali name for that ingredient_id -- never a transliteration, which this project has no
+// verified source for and would be an invented value.
+type IngredientLine struct {
+	Name     string `json:"name"`
+	Bengali  string `json:"bengali_name,omitempty"`
+	Quantity string `json:"quantity,omitempty"`
+}
+
 // RecipeCard mirrors the recipe_card definition in MadamGY_Book2_JSON_Schema_V1.json. Its
 // required fields are recipe_id, recipe_version, title, meal_category_id, age_stage_ids,
 // selection_reasons, ingredients, method_steps, serving, safety and review_status.
+// Ingredients is a simplified shape next to the schema's object (ingredient_id, display_name,
+// quantity, unit, household_measure...): this project has no household-measure or unit data
+// to put in the missing fields, so it renders what it actually has rather than a
+// schema-conformant object with invented fields.
 //
 // RecipeVersion has no source column: recipe_master carries no version. It is populated from
 // the import run's content hash for that table, which is a real, traceable version of the
 // row as loaded rather than an invented number, and GAP-024 records that the provider does
 // not version recipes.
 type RecipeCard struct {
-	RecipeID         string   `json:"recipe_id"`
-	RecipeVersion    string   `json:"recipe_version"`
-	Title            string   `json:"title"`
-	MealCategoryID   string   `json:"meal_category_id"`
-	AgeStageIDs      []string `json:"age_stage_ids"`
-	SelectionReasons []string `json:"selection_reasons"`
-	NutritionTags    []string `json:"nutrition_tags,omitempty"`
-	PrepTimeMinutes  *int     `json:"prep_time_minutes"`
-	CookTimeMinutes  *int     `json:"cook_time_minutes"`
-	CostBand         *string  `json:"cost_band"`
-	Ingredients      []string `json:"ingredients"`
-	MethodSteps      []string `json:"method_steps"`
-	TextureServing   *string  `json:"texture_serving"`
-	Serving          string   `json:"serving"`
-	Safety           string   `json:"safety"`
-	ReviewStatus     string   `json:"review_status"`
+	RecipeID         string           `json:"recipe_id"`
+	RecipeVersion    string           `json:"recipe_version"`
+	Title            string           `json:"title"`
+	MealCategoryID   string           `json:"meal_category_id"`
+	AgeStageIDs      []string         `json:"age_stage_ids"`
+	SelectionReasons []string         `json:"selection_reasons"`
+	NutritionTags    []string         `json:"nutrition_tags,omitempty"`
+	PrepTimeMinutes  *int             `json:"prep_time_minutes"`
+	CookTimeMinutes  *int             `json:"cook_time_minutes"`
+	CostBand         *string          `json:"cost_band"`
+	Ingredients      []IngredientLine `json:"ingredients"`
+	MethodSteps      []string         `json:"method_steps"`
+	TextureServing   *string          `json:"texture_serving"`
+	Serving          string           `json:"serving"`
+	Safety           string           `json:"safety"`
+	ReviewStatus     string           `json:"review_status"`
 	// MethodIsProviderBoilerplate marks the 6-unique-texts problem (GAP-001) on the card
 	// itself, so a reader is told the steps are generic rather than discovering it.
 	MethodIsProviderBoilerplate bool `json:"method_is_provider_boilerplate"`

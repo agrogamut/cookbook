@@ -35,7 +35,13 @@
     <div class="card">
       <h3>Ingredients</h3>
       <ul>
-        {{ range .Ingredients }}<li class="mono">{{ . }}</li>{{ end }}
+        {{/* Bengali sits in its own span, in --font-indic, beside the English name -- never
+             folded into one string, so the script gets the right face and the name does not
+             need to be parsed back apart to style it. Printed only where ingredient_master
+             actually supplied one; no name here is a transliteration. */}}
+        {{ range .Ingredients }}
+        <li class="mono">{{ .Name }}{{ if .Bengali }} <span class="indic">{{ .Bengali }}</span>{{ end }}{{ if .Quantity }} ({{ .Quantity }}){{ end }}</li>
+        {{ end }}
       </ul>
     </div>
     <div class="card">

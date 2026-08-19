@@ -82,6 +82,11 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		return Book2{}, nil, fmt.Errorf("book: load meal categories: %w", err)
 	}
 
+	bengaliNames, err := ingredientBengaliNames(ctx, pool)
+	if err != nil {
+		return Book2{}, nil, fmt.Errorf("book: load ingredient bengali names: %w", err)
+	}
+
 	mapped, err := loadMealCategoryRecipeIDs(ctx, pool)
 	if err != nil {
 		return Book2{}, nil, fmt.Errorf("book: load meal category recipe map: %w", err)
@@ -130,7 +135,7 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			survivors = survivors[:cat.Target]
 		}
 
-		cards, cardSkips, err := loadRecipeCards(ctx, pool, survivors, cat.ID, version, boilerplate, ageStages, byID, cp, res)
+		cards, cardSkips, err := loadRecipeCards(ctx, pool, survivors, cat.ID, version, boilerplate, ageStages, bengaliNames, byID, cp, res)
 		if err != nil {
 			return Book2{}, nil, fmt.Errorf("book: load recipe cards for %s: %w", cat.ID, err)
 		}
@@ -251,6 +256,35 @@ func ageStagesByAgeGroup(ctx context.Context, pool *pgxpool.Pool) (map[string][]
 	return out, nil
 }
 
+// ingredientBengaliNames maps ingredient_master.ingredient_id to its bengali_name, when the
+// provider supplied one. 406 of 406 ingredients carry a Bengali name today; an id with none
+// (or not found here) renders with the English name alone, never a transliteration this
+// project has no source for.
+func ingredientBengaliNames(ctx context.Context, pool *pgxpool.Pool) (map[string]string, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT ingredient_id, coalesce(bengali_name, '')
+		FROM ingredient_master`)
+	if err != nil {
+		return nil, fmt.Errorf("query ingredient bengali names: %w", err)
+	}
+	defer rows.Close()
+
+	out := map[string]string{}
+	for rows.Next() {
+		var id, bengali string
+		if err := rows.Scan(&id, &bengali); err != nil {
+			return nil, fmt.Errorf("scan ingredient bengali name: %w", err)
+		}
+		if bengali != "" {
+			out[id] = bengali
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("ingredient bengali name rows: %w", err)
+	}
+	return out, nil
+}
+
 func loadMealCategories(ctx context.Context, pool *pgxpool.Pool) ([]mealCategory, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT meal_category_id, meal_category, coalesce(default_target_recipes, '')
@@ -314,12 +348,13 @@ func loadMealCategoryRecipeIDs(ctx context.Context, pool *pgxpool.Pool) (map[str
 // empty on current data; it exists so a future join miss is reported rather than rendering a
 // chapter one recipe short of what was asked for.
 func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, categoryID, version string,
-	boilerplate map[string]bool, ageStages map[string][]string, byID map[string]models.RankedRecipe,
-	cp models.ChildProfile, res models.EngineResult) ([]RecipeCard, []string, error) {
+	boilerplate map[string]bool, ageStages map[string][]string, bengaliNames map[string]string,
+	byID map[string]models.RankedRecipe, cp models.ChildProfile, res models.EngineResult) ([]RecipeCard, []string, error) {
 
 	rows, err := pool.Query(ctx, `
 		SELECT c.recipe_id, c.recipe_name, c.provider_method, c.provider_review_status,
-		       r.age_group, r.texture, r.serving_size_g, r.ingredient_names, r.ingredient_quantities_g,
+		       r.age_group, r.texture, r.serving_size_g, r.ingredient_ids, r.ingredient_names,
+		       r.ingredient_quantities_g,
 		       r.safety_rule, r.clinical_tag, r.growth_target, r.prep_time_min, r.cook_time_min,
 		       r.budget_band,
 		       n.ingredient_coverage, n.fully_verified
@@ -335,17 +370,17 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 	byRecipeID := make(map[string]RecipeCard, len(ids))
 	for rows.Next() {
 		var (
-			recipeID, recipeName, method, reviewStatus string
-			ageGroup, texture, safetyRule              string
-			clinicalTag, growthTarget                  string
-			servingSizeG, prepTimeMin, cookTimeMin     int
-			budgetBand                                 string
-			ingredientNames, ingredientQty             string
-			coverage                                   *float64
-			fullyVerified                              *bool
+			recipeID, recipeName, method, reviewStatus    string
+			ageGroup, texture, safetyRule                 string
+			clinicalTag, growthTarget                     string
+			servingSizeG, prepTimeMin, cookTimeMin        int
+			budgetBand                                    string
+			ingredientIDs, ingredientNames, ingredientQty string
+			coverage                                      *float64
+			fullyVerified                                 *bool
 		)
 		if err := rows.Scan(&recipeID, &recipeName, &method, &reviewStatus,
-			&ageGroup, &texture, &servingSizeG, &ingredientNames, &ingredientQty,
+			&ageGroup, &texture, &servingSizeG, &ingredientIDs, &ingredientNames, &ingredientQty,
 			&safetyRule, &clinicalTag, &growthTarget, &prepTimeMin, &cookTimeMin,
 			&budgetBand, &coverage, &fullyVerified); err != nil {
 			return nil, nil, fmt.Errorf("scan recipe card: %w", err)
@@ -363,7 +398,7 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 			PrepTimeMinutes:             &prep,
 			CookTimeMinutes:             &cook,
 			CostBand:                    &band,
-			Ingredients:                 splitIngredients(ingredientNames, ingredientQty),
+			Ingredients:                 splitIngredients(ingredientIDs, ingredientNames, ingredientQty, bengaliNames),
 			MethodSteps:                 splitMethodSteps(method),
 			TextureServing:              &tex,
 			Serving:                     fmt.Sprintf("%d g", servingSizeG),
@@ -434,24 +469,34 @@ func nutritionTags(clinicalTag, growthTarget string, coverage *float64, fullyVer
 	return tags
 }
 
-// splitIngredients pairs recipe_master's semicolon-delimited ingredient_names with the
-// parallel ingredient_quantities_g list. Both are transcribed verbatim; nothing here
-// estimates a quantity for a name with no matching entry.
-func splitIngredients(names, quantities string) []string {
+// splitIngredients pairs recipe_master's semicolon-delimited ingredient_ids, ingredient_names
+// and ingredient_quantities_g lists, which CLAUDE.md's "Verified clean" section already
+// establishes align 1:1 for all 1000 recipes. Names and quantities are transcribed verbatim;
+// nothing here estimates a quantity for a name with no matching entry. bengaliNames is keyed
+// by ingredient_id rather than by name, because matching on the provider's own id is exact
+// where matching on free-text name would not be.
+func splitIngredients(ids, names, quantities string, bengaliNames map[string]string) []IngredientLine {
+	idParts := strings.Split(ids, ";")
 	nameParts := strings.Split(names, ";")
 	qtyParts := strings.Split(quantities, ";")
-	out := make([]string, 0, len(nameParts))
+	out := make([]IngredientLine, 0, len(nameParts))
 	for i, name := range nameParts {
 		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
 		}
+		line := IngredientLine{Name: name}
 		if i < len(qtyParts) {
-			qty := strings.TrimSpace(qtyParts[i])
-			out = append(out, fmt.Sprintf("%s (%s g)", name, qty))
-		} else {
-			out = append(out, name)
+			if qty := strings.TrimSpace(qtyParts[i]); qty != "" {
+				line.Quantity = qty + " g"
+			}
 		}
+		if i < len(idParts) {
+			if id := strings.TrimSpace(idParts[i]); id != "" {
+				line.Bengali = bengaliNames[id]
+			}
+		}
+		out = append(out, line)
 	}
 	return out
 }
