@@ -50,9 +50,16 @@ func (h *Handlers) renderBookHTML(w http.ResponseWriter, r *http.Request, s prof
 	var data any
 	var bookKind book.Kind
 	switch kind {
+	// Both branches route ErrBlocked to the same 409. A stop gate stops every artifact
+	// issued in the child's name, not only the recipe book, so the two books must not
+	// answer a clinician's stop differently.
 	case "book1":
 		b1, dropped, err := book.AssembleBook1(ctx, h.pool, s, asOf)
 		if err != nil {
+			if errors.Is(err, book.ErrBlocked) {
+				h.writeBlocked(w, r, s, asOf, err)
+				return nil, book.Metadata{}, nil, false
+			}
 			writeError(w, http.StatusInternalServerError, "book1 assembly failed: "+err.Error())
 			return nil, book.Metadata{}, nil, false
 		}

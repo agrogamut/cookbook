@@ -17,10 +17,15 @@ import (
 	"github.com/madamgy/recipie/internal/profile"
 )
 
-// ErrBlocked is returned when the engine stops for this child. A blocked engine result must
-// never become a book: the special-care stop gate exists because the feeding decision for
-// those children is a clinician's, and a recipe book is exactly the artifact that would
-// override it.
+// ErrBlocked is returned by both assemblers when generation is stopped for this child. A
+// blocked result must never become a book: the special-care stop gate exists because the
+// feeding decision for those children is a clinician's, and a book issued in the child's
+// name is exactly the artifact that would override it.
+//
+// Both books, not only the recipe book. The provider's own wording is "Condition is a STOP
+// GATE, not a simple recipe filter", and a Book 1 carrying general-population milestone
+// tables under the name of a child with a STOP-REVIEW diagnosis is the same override in a
+// different binding.
 var ErrBlocked = errors.New("book: engine blocked generation")
 
 // methodStepPattern splits the provider's numbered preparation text ("1) ... 2) ... 3) ...")
@@ -172,7 +177,7 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			AgeMonths:     cp.AgeMonths,
 			AgeLabel:      ageLabel(cp.AgeMonths),
 			FoodPractice:  cp.DietType,
-			AllergyStatus: allergyStatus(cp.Allergens),
+			AllergyStatus: allergyStatus(cp.Allergens, cp.SuspectedAllergens),
 		},
 		MealSections: sections,
 		RotationPlan: nil,

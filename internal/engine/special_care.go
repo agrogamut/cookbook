@@ -10,6 +10,25 @@ import (
 	"github.com/madamgy/recipie/internal/models"
 )
 
+// SpecialCareBlock reports whether the special-care stop gate halts generation for this
+// child, and, when it does, the provider's own stop text -- automatic_action,
+// mandatory_reviewer and stop_if, quoted verbatim by specialCareGate.
+//
+// It exists for callers that produce an artifact for a child without ranking recipes.
+// internal/book's Book 1 is the one today: it carries no recipe, so it never reaches Run,
+// and without this it would print general-population milestone tables under the name of a
+// child whose clinician has stopped generation. The workbook's rule is "Condition is a STOP
+// GATE, not a simple recipe filter", which is broader than recipes, so the same gate has to
+// be reachable from outside the pipeline. It is the same function Run calls, deliberately,
+// rather than a second implementation that could drift from it.
+func SpecialCareBlock(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (bool, string, error) {
+	_, blocked, reason, err := specialCareGate(ctx, pool, p)
+	if err != nil {
+		return false, "", fmt.Errorf("engine: special-care block check: %w", err)
+	}
+	return blocked, reason, nil
+}
+
 // specialCareGate implements OR-001 from the provider's Special-Care Output Rule Matrix:
 // "special_care_condition != null ... -> STOP_SPECIAL_CARE_GENERATION", error code
 // SC-HOLD-001, classified HARD.

@@ -1,6 +1,7 @@
 package book
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -55,13 +56,159 @@ func TestAgeLabel(t *testing.T) {
 }
 
 // An unrecorded allergy must read as a recorded negative, not as a blank the reader has to
-// interpret. The prototype's wording is the provider's, so it is used verbatim.
-func TestAllergyStatusNamesTheEmptyCase(t *testing.T) {
-	if got := allergyStatus(nil); got != "No known food allergy reported" {
-		t.Fatalf("empty allergy status = %q", got)
+// interpret. The prototype's wording is the provider's, so it is used verbatim -- but only
+// for a child with nothing recorded at all.
+//
+// The suspected-only row is the regression. A child with a clinician-documented suspected
+// peanut allergy got a book reading "No known food allergy reported" while AS-002 correctly
+// left peanut recipes in the ranked set, so the page denied the allergy and the book could
+// serve it. The only disclosure was an HTTP header that never reaches the printed page.
+func TestAllergyStatusNamesEveryRecordedState(t *testing.T) {
+	for _, c := range []struct {
+		name            string
+		confirmed       []string
+		suspected       []string
+		wantNone        bool
+		wantContains    []string
+		wantNotContains []string
+	}{
+		{
+			name:     "nothing recorded",
+			wantNone: true,
+		},
+		{
+			name:            "confirmed only",
+			confirmed:       []string{"Peanut"},
+			wantContains:    []string{"Peanut", "Confirmed"},
+			wantNotContains: []string{"AS-002"},
+		},
+		{
+			name:         "suspected only",
+			suspected:    []string{"Peanut"},
+			wantContains: []string{"Peanut", "Suspected", "AS-002", "not filtered out"},
+		},
+		{
+			name:         "both",
+			confirmed:    []string{"Milk"},
+			suspected:    []string{"Peanut"},
+			wantContains: []string{"Milk", "Peanut", "Confirmed", "Suspected", "AS-002"},
+		},
+		{
+			// A resolved allergen never reaches either list: ToChildProfile keeps it out
+			// of both and reports it in the omissions instead, which
+			// TestResolvedAllergenIsReportedAsAnOmission pins.
+			name:     "resolved only",
+			wantNone: true,
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got := allergyStatus(c.confirmed, c.suspected)
+			const none = "No known food allergy reported"
+			if c.wantNone {
+				if got != none {
+					t.Fatalf("allergy status = %q, want %q", got, none)
+				}
+				return
+			}
+			if strings.Contains(got, none) {
+				t.Fatalf("a recorded allergen must never render as %q, got %q", none, got)
+			}
+			for _, want := range c.wantContains {
+				if !strings.Contains(got, want) {
+					t.Fatalf("allergy status %q must contain %q", got, want)
+				}
+			}
+			for _, unwanted := range c.wantNotContains {
+				if strings.Contains(got, unwanted) {
+					t.Fatalf("allergy status %q must not contain %q", got, unwanted)
+				}
+			}
+		})
 	}
-	if got := allergyStatus([]string{"Peanut"}); got == "No known food allergy reported" {
-		t.Fatalf("a declared allergen must not render as none: %q", got)
+}
+
+// The printed page, not just the helper: a suspected allergen must be named on the book's
+// own profile page, in both books, because the HTTP omissions header never reaches paper.
+func TestSuspectedAllergenReachesBothPrintedBooks(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	asOf := time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC)
+
+	s := profile.Stored{
+		ChildID:     "BOOK-TEST-SUSPECT",
+		DisplayName: "Suspected Allergen Child",
+		DateOfBirth: time.Date(2022, 5, 1, 0, 0, 0, 0, time.UTC),
+		DietType:    "Vegetarian",
+		Allergens: []profile.DeclaredAllergen{
+			{Group: "Peanut", Status: "suspected", Source: "clinician"},
+		},
+	}
+
+	b1, _, err := AssembleBook1(ctx, pool, s, asOf)
+	if err != nil {
+		t.Fatalf("AssembleBook1: %v", err)
+	}
+	b2, _, err := AssembleBook2(ctx, pool, s, asOf)
+	if err != nil {
+		t.Fatalf("AssembleBook2: %v", err)
+	}
+
+	for _, c := range []struct {
+		book   string
+		status string
+	}{{"book1", b1.Child.AllergyStatus}, {"book2", b2.Child.AllergyStatus}} {
+		if strings.Contains(c.status, "No known food allergy reported") {
+			t.Fatalf("%s prints %q for a child with a suspected peanut allergy", c.book, c.status)
+		}
+		if !strings.Contains(c.status, "Peanut") {
+			t.Fatalf("%s must name the suspected group, got %q", c.book, c.status)
+		}
+	}
+	if b1.Child.AllergyStatus != b2.Child.AllergyStatus {
+		t.Fatalf("the two books disagree about the same child: %q vs %q",
+			b1.Child.AllergyStatus, b2.Child.AllergyStatus)
+	}
+
+	// And it reaches the rendered page, not only the model.
+	var buf bytes.Buffer
+	if err := RenderHTML(&buf, Kind1, b1.Metadata, b1); err != nil {
+		t.Fatalf("render book1: %v", err)
+	}
+	if !strings.Contains(buf.String(), "Peanut") {
+		t.Fatal("the suspected group must appear on the rendered Book 1 profile page")
+	}
+}
+
+// A resolved allergen prints nowhere and is reported everywhere: it excludes nothing, so
+// naming it as a current status would be wrong, and dropping it silently would hide a
+// recorded clinical fact from the reviewer.
+func TestResolvedAllergenIsReportedAsAnOmission(t *testing.T) {
+	pool := testPool(t)
+	s := profile.Stored{
+		ChildID:     "BOOK-TEST-RESOLVED",
+		DisplayName: "Resolved Allergen Child",
+		DateOfBirth: time.Date(2022, 5, 1, 0, 0, 0, 0, time.UTC),
+		Allergens: []profile.DeclaredAllergen{
+			{Group: "Egg", Status: "resolved", Source: "clinician"},
+		},
+	}
+	b, skipped, err := AssembleBook1(context.Background(), pool, s,
+		time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("AssembleBook1: %v", err)
+	}
+	if b.Child.AllergyStatus != "No known food allergy reported" {
+		t.Fatalf("a resolved allergen excludes nothing and must not print as a current "+
+			"status, got %q", b.Child.AllergyStatus)
+	}
+	found := false
+	for _, s := range skipped {
+		if strings.Contains(s, "Egg") && strings.Contains(s, "resolved") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("a resolved allergen must be named in the omissions, got %v", skipped)
 	}
 }
 
@@ -165,22 +312,72 @@ func TestRenderedSectionsAreNotEmpty(t *testing.T) {
 	}
 }
 
-// The single most important property of this package. A special-care condition stops the
-// engine, and a recipe book is exactly the artifact that would override a clinician's
-// judgement if it were produced anyway.
+// The single most important property of this package, and it covers both books because the
+// provider's rule is "Condition is a STOP GATE, not a simple recipe filter". A special-care
+// condition stops generation, and a book issued in the child's name -- a recipe book, or a
+// Book 1 of general-population milestone tables -- is exactly the artifact that would
+// override a clinician's judgement if it were produced anyway.
+//
+// Every condition id is read from special_care_condition_gate rather than hardcoding one:
+// the gate covers six conditions, and a test that exercises one of them proves nothing about
+// the other five.
 func TestBlockedEngineProducesNoBook(t *testing.T) {
 	pool := testPool(t)
-	s := profile.Stored{
-		ChildID:     "BOOK-TEST-003",
-		DateOfBirth: time.Date(2022, 5, 1, 0, 0, 0, 0, time.UTC),
-		Conditions: []profile.ClinicalCondition{{
-			TriggerField: "Special_Care_Condition", FlagValue: "SC-CP", Class: "congenital",
-		}},
+	ctx := context.Background()
+	asOf := time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC)
+
+	rows, err := pool.Query(ctx, `SELECT condition_id FROM special_care_condition_gate ORDER BY condition_id`)
+	if err != nil {
+		t.Fatalf("load special-care condition ids: %v", err)
 	}
-	_, _, err := AssembleBook2(context.Background(), pool, s,
-		time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC))
-	if !errors.Is(err, ErrBlocked) {
-		t.Fatalf("a blocked engine result must not become a book, got err = %v", err)
+	var conditionIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			t.Fatalf("scan condition id: %v", err)
+		}
+		conditionIDs = append(conditionIDs, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		t.Fatalf("condition id rows: %v", err)
+	}
+	if len(conditionIDs) == 0 {
+		t.Fatal("special_care_condition_gate is empty; the stop gate cannot be exercised")
+	}
+
+	for _, conditionID := range conditionIDs {
+		s := profile.Stored{
+			ChildID:     "BOOK-TEST-003",
+			DateOfBirth: time.Date(2022, 5, 1, 0, 0, 0, 0, time.UTC),
+			Conditions: []profile.ClinicalCondition{{
+				TriggerField: "Special_Care_Condition", FlagValue: conditionID, Class: "congenital",
+			}},
+		}
+
+		_, _, err := AssembleBook2(ctx, pool, s, asOf)
+		if !errors.Is(err, ErrBlocked) {
+			t.Fatalf("%s: a blocked result must not become a recipe book, got err = %v",
+				conditionID, err)
+		}
+
+		b1, _, err := AssembleBook1(ctx, pool, s, asOf)
+		if !errors.Is(err, ErrBlocked) {
+			t.Fatalf("%s: a blocked result must not become a Book 1 either, got err = %v "+
+				"with %d sections", conditionID, err, len(b1.Sections))
+		}
+		// The provider's own stop text, not a sentence composed here, is what the caller
+		// gets to show the operator.
+		var reviewer string
+		if err := pool.QueryRow(ctx,
+			`SELECT coalesce(mandatory_reviewer, '') FROM special_care_condition_gate WHERE condition_id = $1`,
+			conditionID).Scan(&reviewer); err != nil {
+			t.Fatalf("%s: reviewer lookup: %v", conditionID, err)
+		}
+		if reviewer != "" && !strings.Contains(err.Error(), reviewer) {
+			t.Fatalf("%s: the block reason must quote the provider's mandatory reviewer %q, got %q",
+				conditionID, reviewer, err.Error())
+		}
 	}
 }
 

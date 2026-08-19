@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/madamgy/recipie/internal/engine"
 	"github.com/madamgy/recipie/internal/profile"
 )
 
@@ -57,10 +58,25 @@ type developmentMilestoneRow struct {
 //
 // The second return names every block that was skipped and why, so a reviewer sees what the
 // book does not contain rather than assuming the absence is deliberate.
+//
+// The special-care stop gate is consulted before anything is assembled, and returns
+// ErrBlocked exactly as AssembleBook2 does. Book 1 runs no engine of its own -- it carries
+// no recipe to filter -- which is precisely how a child with a STOP-REVIEW diagnosis got a
+// full book of general-population milestone tables in their own name with no mention of the
+// clinician's stop. The provider's rule is a stop on generation, not a recipe filter, so the
+// gate has to sit here too. Blocking needs no clinical sign-off; issuing the document does.
 func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, asOf time.Time) (Book1, []string, error) {
 	cp, dropped, err := s.ToChildProfile(asOf)
 	if err != nil {
 		return Book1{}, nil, fmt.Errorf("book: derive engine input: %w", err)
+	}
+
+	blocked, reason, err := engine.SpecialCareBlock(ctx, pool, cp)
+	if err != nil {
+		return Book1{}, nil, fmt.Errorf("book: special-care gate: %w", err)
+	}
+	if blocked {
+		return Book1{}, nil, fmt.Errorf("%w: %s", ErrBlocked, reason)
 	}
 
 	b := Book1{
@@ -75,10 +91,8 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			DisplayName: s.DisplayName,
 			AgeMonths:   cp.AgeMonths,
 			AgeLabel:    ageLabel(cp.AgeMonths),
-			// "No known food allergy reported" is the prototype's own wording for the
-			// empty case. An empty string here would render a blank cell that reads as an
-			// unanswered question rather than a recorded negative.
-			AllergyStatus: allergyStatus(cp.Allergens),
+			// Both lists, never only the confirmed one -- see allergyStatus.
+			AllergyStatus: allergyStatus(cp.Allergens, cp.SuspectedAllergens),
 		},
 	}
 
@@ -428,16 +442,39 @@ func ageLabel(months int) string {
 	return fmt.Sprintf("%d years %d months", y, m)
 }
 
-func allergyStatus(groups []string) string {
-	if len(groups) == 0 {
+// allergyStatus renders the allergy line both books print on the child's profile page. One
+// function, called by both assemblers, so the two books can never disagree about a child's
+// allergy status.
+//
+// It takes both lists because internal/profile splits them: only a confirmed allergen
+// reaches models.ChildProfile.Allergens and is filtered on, while a suspected one goes to
+// SuspectedAllergens and, per the provider's AS-002 (hard_block = N), ranks recipes down
+// without excluding any. A page that printed only the confirmed list would tell a parent
+// with a clinician-recorded suspected peanut allergy "No known food allergy reported" while
+// the book still carried peanut recipes, which is the confident-wrong output CLAUDE.md names
+// as the dangerous failure. So the suspected groups are named, and the line states what the
+// engine actually did with them -- the recorded status and AS-002's own consequence, not a
+// clinical sentence composed here.
+//
+// A resolved allergen is deliberately absent from this line: it excludes nothing and is
+// history rather than current status. ToChildProfile already emits a note saying so, and
+// that note reaches both books' omission list.
+func allergyStatus(confirmed, suspected []string) string {
+	var parts []string
+	if len(confirmed) > 0 {
+		parts = append(parts, "Confirmed: "+strings.Join(confirmed, ", "))
+	}
+	if len(suspected) > 0 {
+		parts = append(parts, "Suspected, not confirmed: "+strings.Join(suspected, ", ")+
+			". A suspected allergen ranks recipes down and raises a review flag, and does "+
+			"not exclude anything (AS-002), so recipes containing it are not filtered out "+
+			"of this book")
+	}
+	if len(parts) == 0 {
+		// The prototype's own wording for the empty case, and correct only when both lists
+		// are empty. An empty string here would render a blank cell that reads as an
+		// unanswered question rather than a recorded negative.
 		return "No known food allergy reported"
 	}
-	out := "Declared: "
-	for i, g := range groups {
-		if i > 0 {
-			out += ", "
-		}
-		out += g
-	}
-	return out
+	return strings.Join(parts, ". ")
 }

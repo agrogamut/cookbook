@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http/httptest"
@@ -44,77 +45,118 @@ func bookBrowserOnPath() bool {
 	return false
 }
 
+// specialCareConditionIDs reads every condition the provider's gate covers. Hardcoding one
+// id would leave the other five unexercised, and the gate is only as good as its least
+// covered row.
+func specialCareConditionIDs(t *testing.T, h *Handlers) []string {
+	t.Helper()
+	rows, err := h.pool.Query(context.Background(),
+		`SELECT condition_id FROM special_care_condition_gate ORDER BY condition_id`)
+	if err != nil {
+		t.Fatalf("load special-care condition ids: %v", err)
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			t.Fatalf("scan condition id: %v", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("condition id rows: %v", err)
+	}
+	if len(ids) == 0 {
+		t.Fatal("special_care_condition_gate is empty; the stop gate cannot be exercised")
+	}
+	return ids
+}
+
 // A clinical stop and a broken renderer must not look alike to an operator. A child with a
 // declared special-care condition must never get a book, blocked or otherwise -- the
 // special-care stop gate exists because the feeding decision for these children is a
 // clinician's, and this test pins that the HTTP layer carries the block through as 409
 // rather than papering over it with an empty 200.
+//
+// Both books and both routes, over every condition the gate defines. Book 1 runs no engine
+// of its own, so it was the branch where a STOP-REVIEW child got a 200 and a full book of
+// general-population milestone tables in their own name; asserting only book2 is what let
+// that stand while this test's own doc comment claimed otherwise.
 func TestBlockedChildGets409NotAnEmptyBook(t *testing.T) {
 	r, h := booksRouter(t)
 	const childID = "BOOK-TEST-BLOCKED-001"
 	cleanupChild(t, h, childID)
 
-	s := profile.Stored{
-		ChildID:     childID,
-		DisplayName: "Blocked Test Child",
-		DateOfBirth: time.Now().AddDate(0, -36, 0),
-		CreatedBy:   "books_test",
-		Conditions: []profile.ClinicalCondition{
-			// SC-CP (cerebral palsy) is one of the six STOP-REVIEW conditions the
-			// provider's Special-Care master defines. Routing it through TriggerField
-			// "Special_Care_Condition" is what internal/profile.ToChildProfile requires
-			// to reach models.ChildProfile.SpecialCareCondition rather than ClinicalFlags.
-			{TriggerField: "Special_Care_Condition", FlagValue: "SC-CP", Class: "congenital"},
-		},
-	}
-	if err := profile.Save(context.Background(), h.pool, s); err != nil {
-		t.Fatalf("profile.Save: %v", err)
-	}
+	for _, conditionID := range specialCareConditionIDs(t, h) {
+		s := profile.Stored{
+			ChildID:     childID,
+			DisplayName: "Blocked Test Child",
+			DateOfBirth: time.Now().AddDate(0, -36, 0),
+			CreatedBy:   "books_test",
+			Conditions: []profile.ClinicalCondition{
+				// Routing the condition through TriggerField "Special_Care_Condition" is
+				// what internal/profile.ToChildProfile requires to reach
+				// models.ChildProfile.SpecialCareCondition rather than ClinicalFlags.
+				{TriggerField: "Special_Care_Condition", FlagValue: conditionID, Class: "congenital"},
+			},
+		}
+		if err := profile.Save(context.Background(), h.pool, s); err != nil {
+			t.Fatalf("profile.Save: %v", err)
+		}
 
-	rec := httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequest("GET", "/api/books/"+childID+"/book2/preview", nil))
+		// Read from special_care_condition_gate.mandatory_reviewer directly, the same
+		// source the handler is supposed to use, rather than hardcoding the provider's
+		// current text -- this pins the join, not the workbook's current wording.
+		var wantReviewer string
+		if err := h.pool.QueryRow(context.Background(),
+			`SELECT mandatory_reviewer FROM special_care_condition_gate WHERE condition_id = $1`,
+			conditionID).Scan(&wantReviewer); err != nil {
+			t.Fatalf("reviewer lookup: %v", err)
+		}
 
-	if rec.Code != 409 {
-		t.Fatalf("a special-care child must get 409, got %d: %s", rec.Code, rec.Body.String())
-	}
-	// Never a service-fault status: an operator who reads a clinical stop as a broken
-	// renderer will retry it, and this stop is not a thing to retry.
-	if rec.Code == 503 {
-		t.Fatal("a clinical stop must not be reported as 503, that is reserved for a broken renderer")
-	}
-	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
-		t.Fatalf("a 409 body must be JSON, got Content-Type %q", ct)
-	}
+		for _, path := range []string{
+			"/api/books/" + childID + "/book1/preview",
+			"/api/books/" + childID + "/book1.pdf",
+			"/api/books/" + childID + "/book2/preview",
+			"/api/books/" + childID + "/book2.pdf",
+		} {
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
 
-	var body struct {
-		Error    string `json:"error"`
-		Reviewer string `json:"reviewer"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if body.Error == "" {
-		t.Fatal("a 409 body with no reason leaves the operator no next step")
-	}
-	// Read from special_care_condition_gate.mandatory_reviewer directly, the same source
-	// the handler is supposed to use, rather than hardcoding the provider's current text --
-	// this pins the join, not the workbook's current wording.
-	var wantReviewer string
-	if err := h.pool.QueryRow(context.Background(),
-		`SELECT mandatory_reviewer FROM special_care_condition_gate WHERE condition_id = 'SC-CP'`).
-		Scan(&wantReviewer); err != nil {
-		t.Fatalf("reviewer lookup: %v", err)
-	}
-	if body.Reviewer != wantReviewer {
-		t.Fatalf("reviewer = %q, want %q from special_care_condition_gate", body.Reviewer, wantReviewer)
-	}
+			// 409 and nothing else. 503 in particular is reserved for a broken renderer:
+			// an operator who reads a clinical stop as a service fault will retry it, and
+			// this stop is not a thing to retry.
+			if rec.Code != 409 {
+				t.Fatalf("%s (%s): a special-care child must get 409, got %d: %s",
+					path, conditionID, rec.Code, rec.Body.String())
+			}
+			if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+				t.Fatalf("%s (%s): a 409 body must be JSON, got Content-Type %q",
+					path, conditionID, ct)
+			}
+			// No book may leak through the block, in either binding.
+			if bytes.Contains(rec.Body.Bytes(), []byte("<html")) {
+				t.Fatalf("%s (%s): a blocked child must not receive a rendered document",
+					path, conditionID)
+			}
 
-	// Also confirm the download route carries the same block rather than only the preview
-	// route -- a reviewer reaching this child through either path must see the stop.
-	rec = httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequest("GET", "/api/books/"+childID+"/book2.pdf", nil))
-	if rec.Code != 409 {
-		t.Fatalf("the download route must also 409 a blocked child, got %d: %s", rec.Code, rec.Body.String())
+			var body struct {
+				Error    string `json:"error"`
+				Reviewer string `json:"reviewer"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+				t.Fatalf("%s (%s): decode: %v", path, conditionID, err)
+			}
+			if body.Error == "" {
+				t.Fatalf("%s (%s): a 409 body with no reason leaves the operator no next step",
+					path, conditionID)
+			}
+			if body.Reviewer != wantReviewer {
+				t.Fatalf("%s (%s): reviewer = %q, want %q from special_care_condition_gate",
+					path, conditionID, body.Reviewer, wantReviewer)
+			}
+		}
 	}
 }
 
