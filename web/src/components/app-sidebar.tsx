@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
-  Moon, Search, Wheat, ClipboardCheck, AlertTriangle, History, BookOpen, Sun,
+  Moon, Search, Wheat, ClipboardCheck, AlertTriangle, History, BookOpen, BookMarked, Sun,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -16,6 +16,7 @@ import {
 // screens a specific query rarely needs but a reviewer does.
 const routes = [
   { href: "/", label: "Engine console", icon: Search },
+  { href: "/books", label: "Books", icon: BookMarked },
   { href: "/ingredients", label: "Ingredients", icon: Wheat },
   { href: "/audit/nutrition", label: "Nutrition audit", icon: ClipboardCheck },
   { href: "/audit/gaps", label: "Gap register", icon: AlertTriangle },

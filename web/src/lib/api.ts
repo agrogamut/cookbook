@@ -6,7 +6,7 @@ import type {
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
-class ApiError extends Error {
+export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
     this.name = "ApiError";
@@ -101,4 +101,54 @@ export function getSpecialCareConditions(): Promise<SpecialCareCondition[]> {
   return request<SpecialCareCondition[]>("/api/reference/special-care-conditions");
 }
 
-export { ApiError };
+/**
+ * A book preview, plus what the book does not contain. `omissions` comes from the
+ * X-Book-Omissions header rather than the body, because the body is the document itself.
+ * An empty array means the API reported no omissions -- never that none were checked.
+ */
+export interface BookPreview {
+  html: string;
+  omissions: string[];
+}
+
+/** Thrown when the engine stops generation for a clinical reason. Distinct from ApiError
+ *  because an operator must never read a clinical stop as a fault. */
+export class BookBlockedError extends Error {
+  constructor(message: string, public reviewer?: string) {
+    super(message);
+    this.name = "BookBlockedError";
+  }
+}
+
+/** Thrown when the print pipeline has no browser. An operational fault, not a clinical one. */
+export class RendererUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "RendererUnavailableError";
+  }
+}
+
+async function bookError(res: Response): Promise<Error> {
+  const body = await res.json().catch(() => ({ error: res.statusText }));
+  if (res.status === 409) return new BookBlockedError(body.error ?? res.statusText, body.reviewer);
+  if (res.status === 503) return new RendererUnavailableError(body.error ?? res.statusText);
+  return new ApiError(res.status, body.error ?? res.statusText);
+}
+
+function omissionsOf(res: Response): string[] {
+  const header = res.headers.get("X-Book-Omissions");
+  if (!header) return [];
+  return header.split(";").map((s) => s.trim()).filter(Boolean);
+}
+
+export async function getBookPreview(childID: string, book: "book1" | "book2"): Promise<BookPreview> {
+  const res = await fetch(`${BASE_URL}/api/books/${encodeURIComponent(childID)}/${book}/preview`);
+  if (!res.ok) throw await bookError(res);
+  return { html: await res.text(), omissions: omissionsOf(res) };
+}
+
+export async function getBookPdf(childID: string, book: "book1" | "book2"): Promise<Blob> {
+  const res = await fetch(`${BASE_URL}/api/books/${encodeURIComponent(childID)}/${book}.pdf`);
+  if (!res.ok) throw await bookError(res);
+  return res.blob();
+}

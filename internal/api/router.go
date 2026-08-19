@@ -21,10 +21,14 @@ func NewRouter(pool *pgxpool.Pool) http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Logger)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"}, // internal tool, no browser cookie auth to protect; tighten if this ever leaves a private network
-		AllowedMethods:   []string{"GET", "POST", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type"},
-		MaxAge:           300,
+		AllowedOrigins: []string{"*"}, // internal tool, no browser cookie auth to protect; tighten if this ever leaves a private network
+		AllowedMethods: []string{"GET", "POST", "PUT", "OPTIONS"},
+		AllowedHeaders: []string{"Content-Type"},
+		// A browser hides every non-simple response header unless it is named here. The
+		// omissions list is what a book does not contain, so a frontend that cannot read
+		// it would render a book as though nothing had been left out.
+		ExposedHeaders: []string{"X-Book-Omissions"},
+		MaxAge:         300,
 	}))
 	r.Use(middleware.Timeout(30 * time.Second))
 
