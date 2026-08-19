@@ -72,11 +72,14 @@ services:
     startCommand: npm start
     envVars:
       # NEXT_PUBLIC_* is inlined into the client bundle at build time, not read at runtime,
-      # so this has to be a build-time variable -- which is what a Blueprint envVar is. The
-      # browser calls the API directly, so it must be the API's public host and not an
-      # internal one.
+      # so this has to be a build-time variable -- which is what a Blueprint envVar is.
+      #
+      # Written out rather than referenced with fromService, which cannot express it: Render
+      # exposes only host, port and hostport for a service, and all three are private-network
+      # values. This URL is fetched by the operator's browser, which has no route to the
+      # private network, so `property: host` yielded https://madamgy-api and every call
+      # failed with "Failed to fetch" -- a page that renders perfectly and can reach nothing.
+      #
+      # It therefore has to match the api service's name above. Change one and change both.
       - key: NEXT_PUBLIC_API_URL
-        fromService:
-          type: web
-          name: madamgy-api
-          property: host
+        value: https://madamgy-api.onrender.com
