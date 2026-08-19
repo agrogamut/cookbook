@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -151,5 +152,85 @@ func TestEngineInputReportsDroppedFacts(t *testing.T) {
 	// always present and never null, so a caller can render it without a nil check.
 	if got.Dropped == nil {
 		t.Fatal("dropped must serialise as [] rather than null")
+	}
+}
+
+// The write path is where a bad vocabulary value has to be caught. Left to generation time,
+// diet_type surfaces as a 500 nobody can trace back to the write that caused it, and
+// region_culture and cuisine_code do not surface at all -- they produce a successful book
+// ranked against a region the corpus does not carry, with nothing reported as omitted.
+//
+// Each row changes exactly one field of an otherwise valid body, so a 400 can only be about
+// that field, and the message has to name it: an operator retyping a profile needs to know
+// which of the four was wrong.
+func TestPutProfileRejectsValuesTheCorpusDoesNotCarry(t *testing.T) {
+	r, h := profileRouter(t)
+	cleanupProfile(t, h)
+
+	for _, c := range []struct {
+		name  string
+		field string
+		body  string
+	}{
+		{
+			name:  "diet type in the wrong case",
+			field: "diet_type",
+			// Lowercase is the real failure mode: engine.dietPermits is keyed on the
+			// provider's capitalisation, so this used to write cleanly and blow up later.
+			body: `{"child_id":"TEST-CHILD-001","date_of_birth":"2023-08-18","diet_type":"vegetarian"}`,
+		},
+		{
+			name:  "region that does not exist",
+			field: "region_culture",
+			body:  `{"child_id":"TEST-CHILD-001","date_of_birth":"2023-08-18","region_culture":"Atlantis"}`,
+		},
+		{
+			name:  "cuisine code that does not exist",
+			field: "cuisine_code",
+			body:  `{"child_id":"TEST-CHILD-001","date_of_birth":"2023-08-18","cuisine_code":"CL-XX-NOPE"}`,
+		},
+		{
+			name:  "budget band that does not exist",
+			field: "budget_band",
+			body:  `{"child_id":"TEST-CHILD-001","date_of_birth":"2023-08-18","budget_band":"cheap"}`,
+		},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			r.ServeHTTP(rec, httptest.NewRequest("PUT", "/api/profiles/TEST-CHILD-001",
+				bytes.NewBufferString(c.body)))
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+			}
+			if !strings.Contains(rec.Body.String(), c.field) {
+				t.Fatalf("the 400 must name the field that was wrong, got %s", rec.Body.String())
+			}
+			// Nothing may have been written: a rejected profile that half-saved is worse
+			// than one that failed outright.
+			var exists bool
+			if err := h.pool.QueryRow(context.Background(),
+				`SELECT exists(SELECT 1 FROM child_profile WHERE child_id = 'TEST-CHILD-001')`).
+				Scan(&exists); err != nil {
+				t.Fatalf("existence check: %v", err)
+			}
+			if exists {
+				t.Fatal("a rejected profile must not have been written")
+			}
+		})
+	}
+
+	// An empty value is legal -- an operator who has not asked for a region is not the same
+	// as one who asked for a region that does not exist -- and a fully populated valid
+	// profile still writes.
+	for _, body := range []string{
+		`{"child_id":"TEST-CHILD-001","date_of_birth":"2023-08-18"}`,
+		putProfileBody,
+	} {
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, httptest.NewRequest("PUT", "/api/profiles/TEST-CHILD-001",
+			bytes.NewBufferString(body)))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("a valid profile must still write, got %d: %s", rec.Code, rec.Body.String())
+		}
 	}
 }

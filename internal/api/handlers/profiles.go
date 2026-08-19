@@ -1,9 +1,13 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -103,6 +107,98 @@ func fromDTO(d profileDTO) (profile.Stored, error) {
 	return s, nil
 }
 
+// profileVocabularies names each write-validated field and the query that yields the values
+// the corpus actually recognises for it.
+//
+// Read from the database, never from a list written here. Every one of these vocabularies
+// lives in a provider table that a re-import can change, and a hardcoded copy would drift
+// from the corpus silently -- the accepted values would still be listed in an error message
+// long after the workbook stopped using them. For the same reason none of these becomes a
+// CHECK constraint: a migration-time constraint would fight the importer.
+//
+// region_focus rather than recipe_master.region_culture, because region_focus is the single
+// place scope is decided (CLAUDE.md, "Region focus"); cuisine_option rather than the culture
+// master, because the view is already gated on count(*) > 0 and the 8 orphan culture codes
+// with zero recipes must not be accepted any more than a typo should be.
+var profileVocabularies = []struct {
+	field string
+	value func(profile.Stored) string
+	query string
+}{
+	{
+		field: "diet_type",
+		value: func(s profile.Stored) string { return s.DietType },
+		// Capitalisation is part of the value: engine.dietPermits is keyed on the
+		// provider's own casing, so "vegetarian" is not "Vegetarian" and used to survive
+		// the write only to fail as a 500 at generation time, far from its cause.
+		query: `SELECT DISTINCT diet_type FROM recipe_master WHERE diet_type <> '' ORDER BY 1`,
+	},
+	{
+		field: "budget_band",
+		value: func(s profile.Stored) string { return s.BudgetBand },
+		query: `SELECT DISTINCT budget_band FROM recipe_master WHERE budget_band <> '' ORDER BY 1`,
+	},
+	{
+		field: "region_culture",
+		value: func(s profile.Stored) string { return s.RegionCulture },
+		query: `SELECT region_culture FROM region_focus ORDER BY 1`,
+	},
+	{
+		field: "cuisine_code",
+		value: func(s profile.Stored) string { return s.CuisineCode },
+		query: `SELECT culture_code FROM cuisine_option ORDER BY 1`,
+	},
+}
+
+// validateProfileVocabularies returns a message naming the first field whose non-empty value
+// the corpus does not recognise, and the values it does.
+//
+// An empty value stays legal: an operator who has not asked for a region is not the same as
+// one who asked for a region that does not exist. A wrong one is rejected at the write
+// rather than at generation, because the two failures it otherwise produces are both bad in
+// their own way -- diet_type explodes as a 500 hours later, and region_culture and
+// cuisine_code do not fail at all, they quietly produce a book ranked against nothing with
+// no omission reported.
+func (h *Handlers) validateProfileVocabularies(ctx context.Context, s profile.Stored) (string, error) {
+	for _, v := range profileVocabularies {
+		value := v.value(s)
+		if value == "" {
+			continue
+		}
+		accepted, err := h.vocabulary(ctx, v.query)
+		if err != nil {
+			return "", fmt.Errorf("read accepted %s values: %w", v.field, err)
+		}
+		if slices.Contains(accepted, value) {
+			continue
+		}
+		return fmt.Sprintf("%s %q is not a value this corpus carries; accepted values are: %s",
+			v.field, value, strings.Join(accepted, ", ")), nil
+	}
+	return "", nil
+}
+
+func (h *Handlers) vocabulary(ctx context.Context, query string) ([]string, error) {
+	rows, err := h.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("query: %w", err)
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			return nil, fmt.Errorf("scan: %w", err)
+		}
+		out = append(out, v)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows: %w", err)
+	}
+	return out, nil
+}
+
 // PutProfile creates or replaces one child's stored profile. profile.Save is an upsert,
 // so PUT rather than POST: the same body sent twice leaves the same state.
 //
@@ -129,6 +225,19 @@ func (h *Handlers) PutProfile(w http.ResponseWriter, r *http.Request) {
 	s, err := fromDTO(d)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid profile field: "+err.Error())
+		return
+	}
+	// Validated here rather than at generation time. A value the corpus does not carry is
+	// a typo, and a typo caught at the write names the field that caused it; the same typo
+	// caught later is either a 500 nobody can trace back to this request or, worse, a
+	// successful book ranked against a region that does not exist.
+	badField, err := h.validateProfileVocabularies(r.Context(), s)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "profile validation failed: "+err.Error())
+		return
+	}
+	if badField != "" {
+		writeError(w, http.StatusBadRequest, badField)
 		return
 	}
 	if err := profile.Save(r.Context(), h.pool, s); err != nil {
