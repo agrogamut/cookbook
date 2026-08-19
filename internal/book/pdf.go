@@ -29,17 +29,29 @@ var ErrChromiumUnavailable = errors.New("book: headless chromium unavailable")
 // "nothing about this child changed" would have them retry a data problem forever.
 var ErrPrintFailed = errors.New("book: pdf print failed")
 
-// browserOnPath reports whether any Chromium build is installed under any of the names the
-// common distributions use. Arch packages the browser as google-chrome-stable, Debian as
-// google-chrome, and the open-source builds as chromium or chromium-browser.
+// browserNames mirrors chromedp v0.16.0's own Unix search list (allocate.go, findExecPath).
+// It must stay a superset of nothing and a copy of that: a name chromedp resolves but this
+// list omits turns a working install into a hard "no browser found", which is exactly the
+// regression a four-name version of this list produced -- the chromedp Docker image ships
+// the browser as headless-shell, and snap installs it at /snap/bin/chromium.
 //
-// chromedp finds the browser itself; this only separates "not installed" from "installed and
-// broken", and it lives here rather than in the test file so production and test cannot
-// disagree about what counts as installed.
+// Keep it in sync when bumping chromedp. Drift in the other direction is harmless: a name
+// here that chromedp does not resolve only means the run proceeds and fails, and that
+// failure is classified correctly below.
+var browserNames = []string{
+	"headless_shell", "headless-shell", "chromium", "chromium-browser",
+	"google-chrome", "google-chrome-stable", "google-chrome-beta", "google-chrome-unstable",
+	"/usr/bin/google-chrome", "/usr/local/bin/chrome", "/snap/bin/chromium", "chrome",
+}
+
+// browserOnPath reports whether chromedp will find a browser to launch.
+//
+// It lives here rather than in the test file so production and test cannot disagree about
+// what counts as installed. It is only a fast path: a missing browser is also recognised
+// from the run's own error, so getting this list wrong cannot on its own misreport a
+// working install.
 func browserOnPath() bool {
-	for _, name := range []string{
-		"google-chrome-stable", "google-chrome", "chromium", "chromium-browser",
-	} {
+	for _, name := range browserNames {
 		if _, err := exec.LookPath(name); err == nil {
 			return true
 		}
@@ -131,6 +143,13 @@ func PrintPDF(ctx context.Context, htmlDoc []byte, meta Metadata) ([]byte, error
 		}),
 	)
 	if err != nil {
+		// Classified from chromedp's own failure as well as from the probe above, because
+		// the probe reads a copied list of names and chromedp reads its own. When the two
+		// disagree the run is the authority: it is the thing that actually tried to launch
+		// a browser, and exec.ErrNotFound from it means there was none to launch.
+		if errors.Is(err, exec.ErrNotFound) {
+			return nil, fmt.Errorf("%w: %v", ErrChromiumUnavailable, err)
+		}
 		return nil, fmt.Errorf("%w: %v", ErrPrintFailed, err)
 	}
 	return out, nil
