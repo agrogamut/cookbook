@@ -276,7 +276,9 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
           <AccordionItem value="stored">
             <AccordionTrigger className={section}>Load stored profile</AccordionTrigger>
             <AccordionContent className="space-y-1">
-              <label htmlFor="load-child" className={label}>Load stored profile</label>
+              {/* Names the input rather than repeating the section heading above it. It is
+                  the field's only accessible name, so it stays a real label. */}
+              <label htmlFor="load-child" className={label}>Child id</label>
               <div className="flex gap-1">
                 <Input
                   id="load-child" type="text" placeholder="child id"
