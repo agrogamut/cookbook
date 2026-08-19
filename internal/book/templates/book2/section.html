@@ -17,8 +17,7 @@
 <section class="page-break">
   <div class="section-header" style="background: var(--brand);">
     <h2>{{ .Title }}</h2>
-    <p>{{ len .Recipes }} recipe{{ if ne (len .Recipes) 1 }}s{{ end }} selected for this meal
-       {{ with .SelectionNote }}-- {{ . }}{{ end }}</p>
+    <p>{{ len .Recipes }} recipe{{ if ne (len .Recipes) 1 }}s{{ end }} selected for this meal</p>
   </div>
   {{ range $i, $r := .Recipes }}
     {{ if eq $i 0 }}{{ template "B2-RECIPE-01-OPENER" $r }}{{ else }}{{ template "B2-RECIPE-01" $r }}{{ end }}

@@ -113,8 +113,8 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 	for _, cat := range categories {
 		candidateIDs := mapped[cat.ID]
 		if len(candidateIDs) == 0 {
-			skipped = append(skipped, fmt.Sprintf(
-				"meal category %s (%s) has no recipes mapped to it at all (GAP-023)",
+			skipped = append(skipped, omissionMealCategory+fmt.Sprintf(
+				"%s (%s) has no recipes mapped to it at all (GAP-023)",
 				cat.ID, cat.Name))
 			continue
 		}
@@ -126,8 +126,8 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			}
 		}
 		if len(survivors) == 0 {
-			skipped = append(skipped, fmt.Sprintf(
-				"meal category %s (%s) has %d recipes mapped to it, but none survived "+
+			skipped = append(skipped, omissionMealCategory+fmt.Sprintf(
+				"%s (%s) has %d recipes mapped to it, but none survived "+
 					"this child's age, allergy, clinical or diet filters",
 				cat.ID, cat.Name, len(candidateIDs)))
 			continue
@@ -150,8 +150,8 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			// recipe_method_card/recipe_master should never drop one -- reaching this
 			// means an id is orphaned somewhere upstream, and the honest response is to
 			// report the omission rather than render a heading with nothing under it.
-			skipped = append(skipped, fmt.Sprintf(
-				"meal category %s (%s) had %d surviving candidates but none could be "+
+			skipped = append(skipped, omissionMealCategory+fmt.Sprintf(
+				"%s (%s) had %d surviving candidates but none could be "+
 					"loaded as a recipe card", cat.ID, cat.Name, len(survivors)))
 			continue
 		}

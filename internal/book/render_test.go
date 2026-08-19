@@ -98,13 +98,16 @@ func TestVaccinationTrackerNeverPrintsADate(t *testing.T) {
 	}
 }
 
-// A nil measurement renders as a writing line, never as a number.
-func TestMissingActualRendersAsAWritingLine(t *testing.T) {
+// An unobserved value renders as a writing line, never as a number. B1-DEV-01 is the block
+// that carries the case on paper: this project observed no milestone, so the observation,
+// date and concern columns are the parent's and the clinician's to fill in, and printing a
+// 0 or an "n/a" in any of them would read as a finding nobody made.
+func TestUnobservedValueRendersAsAWritingLine(t *testing.T) {
 	b := Book1{
 		Metadata: Metadata{Language: "en", ReviewStatus: "Draft"},
 		Sections: []Section{{
-			TemplateID: "B1-COMPARE-01", Title: "Growth",
-			Rows: []Row{{Label: "Weight", Reference: "Use approved age/sex growth reference"}},
+			TemplateID: "B1-DEV-01", Title: "Development monitoring",
+			Rows: []Row{{Label: "Gross motor", Reference: "Sits without support"}},
 		}},
 	}
 	var buf bytes.Buffer
@@ -112,10 +115,10 @@ func TestMissingActualRendersAsAWritingLine(t *testing.T) {
 		t.Fatalf("render: %v", err)
 	}
 	if !strings.Contains(buf.String(), "write-line") {
-		t.Fatal("an unrecorded measurement must render as a writing line")
+		t.Fatal("an unobserved value must render as a writing line")
 	}
 	if strings.Contains(buf.String(), ">0<") {
-		t.Fatal("an unrecorded measurement must never render as zero")
+		t.Fatal("an unobserved value must never render as zero")
 	}
 }
 

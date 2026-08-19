@@ -268,7 +268,7 @@ func TestEveryBlockIsEitherRenderedOrReported(t *testing.T) {
 		}
 		blockSkips := 0
 		for _, s := range skipped {
-			if strings.HasPrefix(s, "block ") {
+			if strings.HasPrefix(s, omissionBlock) {
 				blockSkips++
 			}
 		}
@@ -284,7 +284,7 @@ func TestEveryBlockIsEitherRenderedOrReported(t *testing.T) {
 // every block is rendered or reported; it says nothing about whether a rendered block has
 // anything in it, which is exactly how a heading over an empty table shipped once already
 // on this branch (D1). This is the other half: for every section AssembleBook1 puts in the
-// book, at least one of Rows, Cards or Callout must be non-empty.
+// book, at least one of Rows or Callout must be non-empty.
 //
 // B1-END-01 (block B1-022) is the one deliberate exception. Its template reads
 // Book1.Metadata directly -- book_version, release_id, generation_date, review_status --
@@ -303,9 +303,9 @@ func TestRenderedSectionsAreNotEmpty(t *testing.T) {
 			if sec.TemplateID == "B1-END-01" {
 				continue
 			}
-			if len(sec.Rows) == 0 && len(sec.Cards) == 0 && sec.Callout == nil {
-				t.Fatalf("at %d months: block %s (%s) was rendered with no rows, no cards "+
-					"and no callout -- a heading over an empty table, not a book",
+			if len(sec.Rows) == 0 && sec.Callout == nil {
+				t.Fatalf("at %d months: block %s (%s) was rendered with no rows and no "+
+					"callout -- a heading over an empty table, not a book",
 					months, sec.BlockID, sec.TemplateID)
 			}
 		}
@@ -416,11 +416,11 @@ func TestEmptyChaptersAreOmittedAndReported(t *testing.T) {
 		}
 	}
 
-	// Only entries prefixed "meal category " are counted, because skipped also carries
+	// Only omissionMealCategory entries are counted, because skipped also carries
 	// profile-level drops from ToChildProfile, which are not meal categories.
 	categorySkips := 0
 	for _, sk := range skipped {
-		if strings.HasPrefix(sk, "meal category ") {
+		if strings.HasPrefix(sk, omissionMealCategory) {
 			categorySkips++
 		}
 	}

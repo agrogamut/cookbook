@@ -145,15 +145,15 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			return Book1{}, nil, fmt.Errorf("book: scan block: %w", err)
 		}
 		if (ageFrom != nil && cp.AgeMonths < *ageFrom) || (ageTo != nil && cp.AgeMonths > *ageTo) {
-			skipped = append(skipped, fmt.Sprintf(
-				"block %s (%s) covers %s and does not apply at %d months",
+			skipped = append(skipped, omissionBlock+fmt.Sprintf(
+				"%s (%s) covers %s and does not apply at %d months",
 				blockID, sectionTitle, ageRangeLabel(ageFrom, ageTo), cp.AgeMonths))
 			continue
 		}
 		tmpl, ok := blockTemplate[blockID]
 		if !ok {
-			skipped = append(skipped, fmt.Sprintf(
-				"block %s (%s) has no template mapping and was not rendered", blockID, sectionTitle))
+			skipped = append(skipped, omissionBlock+fmt.Sprintf(
+				"%s (%s) has no template mapping and was not rendered", blockID, sectionTitle))
 			continue
 		}
 
@@ -174,9 +174,9 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			var excluded int
 			sec.Rows, excluded = vaccineRows(vaccines, cp.AgeMonths)
 			if excluded > 0 {
-				// Deliberately not prefixed "block ": the block itself IS rendered (it is
-				// about to be appended to b.Sections below), so this must not be counted as
-				// a block-level skip by the conservation check in
+				// Deliberately unmarked: the block itself IS rendered (it is about to be
+				// appended to b.Sections below), so this must not carry omissionBlock and
+				// must not be counted as a block-level skip by the conservation check in
 				// TestEveryBlockIsEitherRenderedOrReported -- it is a note about which rows
 				// within a rendered block were left out, not about the block being absent.
 				skipped = append(skipped, fmt.Sprintf(
@@ -185,8 +185,8 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 					excluded, len(vaccines), blockID, sectionTitle, cp.AgeMonths))
 			}
 			if len(sec.Rows) == 0 {
-				skipped = append(skipped, fmt.Sprintf(
-					"block %s (%s) has no vaccination-schedule rows due at %d months and "+
+				skipped = append(skipped, omissionBlock+fmt.Sprintf(
+					"%s (%s) has no vaccination-schedule rows due at %d months and "+
 						"was not rendered", blockID, sectionTitle, cp.AgeMonths))
 				continue
 			}
@@ -195,16 +195,16 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			var excluded int
 			sec.Rows, excluded = milestoneRows(milestones, cp.AgeMonths)
 			if excluded > 0 {
-				// See the vaccination-row note above: not "block "-prefixed, for the same
-				// reason -- the block is rendered, this only reports rows within it.
+				// See the vaccination-row note above: unmarked for the same reason -- the
+				// block is rendered, this only reports rows within it.
 				skipped = append(skipped, fmt.Sprintf(
 					"%d of %d development-milestone rows for block %s (%s) are ahead of "+
 						"this child's current age (%d months) and are left off this page",
 					excluded, len(milestones), blockID, sectionTitle, cp.AgeMonths))
 			}
 			if len(sec.Rows) == 0 {
-				skipped = append(skipped, fmt.Sprintf(
-					"block %s (%s) has no development-milestone rows at or before %d months "+
+				skipped = append(skipped, omissionBlock+fmt.Sprintf(
+					"%s (%s) has no development-milestone rows at or before %d months "+
 						"and was not rendered", blockID, sectionTitle, cp.AgeMonths))
 				continue
 			}
@@ -212,8 +212,8 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		case "B1-RED-01":
 			callout, ok := globalRedFlagCallout(milestones)
 			if !ok {
-				skipped = append(skipped, fmt.Sprintf(
-					"block %s (%s) has no global red-flag row in book1_development_milestone "+
+				skipped = append(skipped, omissionBlock+fmt.Sprintf(
+					"%s (%s) has no global red-flag row in book1_development_milestone "+
 						"and was not rendered", blockID, sectionTitle))
 				continue
 			}

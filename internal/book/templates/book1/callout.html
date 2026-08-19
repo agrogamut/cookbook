@@ -1,27 +1,3 @@
-{{ define "B1-COMPARE-01" }}
-<table>
-  <thead>
-    <tr>
-      <th>Parameter</th><th>Reference / expected</th>
-      <th>Child's actual</th><th>Parent note / next review</th>
-    </tr>
-  </thead>
-  <tbody>
-    {{ range .Rows }}
-    <tr>
-      <td>{{ .Label }}</td>
-      <td>{{ .Reference }}</td>
-      {{/* A nil Actual is an unrecorded measurement, and it renders as a line the parent
-           writes on. Printing 0, "-" or "n/a" would each read as a finding. */}}
-      <td>{{ if .Actual }}{{ .Actual }}{{ else }}<span class="write-line"></span>{{ end }}</td>
-      <td>{{ .Note }}</td>
-    </tr>
-    {{ end }}
-  </tbody>
-</table>
-{{ with .Callout }}{{ template "callout" . }}{{ end }}
-{{ end }}
-
 {{ define "callout" }}
 <div class="callout{{ if eq .Severity "warning" }} warning{{ end }}">
   {{/* avoid_color_only_meaning: Severity is one of exactly "info" or "warning" (see

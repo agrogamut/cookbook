@@ -5,6 +5,16 @@ import "time"
 // Metadata carries the three release footer fields the template contract names
 // (book_version, release_id, generation_date). It is not the provider schema's
 // book_metadata object -- see the Book1 doc comment for why.
+// Omission scope markers. An assembler reports two different things through one skip slice:
+// a whole unit of the book that is absent, and a note about rows left out of a unit that did
+// render. The conservation checks count only the first kind, and they match on these
+// constants rather than on the message's opening words -- so the human-readable remainder
+// stays free to be rewritten without silently breaking the accounting.
+const (
+	omissionBlock        = "[block] "
+	omissionMealCategory = "[meal category] "
+)
+
 type Metadata struct {
 	Title          string    `json:"title"`
 	BookVersion    string    `json:"book_version"`
@@ -42,23 +52,18 @@ type Section struct {
 	Title      string   `json:"title"`
 	Subtitle   string   `json:"subtitle,omitempty"`
 	Rows       []Row    `json:"rows,omitempty"`
-	Cards      []Card   `json:"cards,omitempty"`
 	Callout    *Callout `json:"callout,omitempty"`
 }
 
-// Row is the comparison shape B1-COMPARE-01 draws and that pages 3, 5 and 6 of the Book 1
-// prototype all share: reference, the child's actual, and what to do next. Actual is a
-// pointer because an unrecorded measurement renders as a writing line, never as a zero.
+// Row is one line of a Book 1 table: what the block is about, the approved reference for it,
+// and the personalized note built from the child's own record. The child's observed value is
+// deliberately absent -- every block that ships today prints a writing line for it, because
+// this project observed no measurement and a pre-filled column would read as a finding. The
+// field returns with the growth-comparison page that has a verified value to put in it.
 type Row struct {
-	Label     string  `json:"label"`
-	Reference string  `json:"reference"`
-	Actual    *string `json:"actual"`
-	Note      string  `json:"note,omitempty"`
-}
-
-type Card struct {
-	Heading string `json:"heading"`
-	Body    string `json:"body"`
+	Label     string `json:"label"`
+	Reference string `json:"reference"`
+	Note      string `json:"note,omitempty"`
 }
 
 // Severity is "info" or "warning". The contract sets clinical_warning_visibility to high and
@@ -83,7 +88,6 @@ type Callout struct {
 type Book1 struct {
 	Metadata            Metadata     `json:"book_metadata"`
 	Child               ChildSummary `json:"child_profile"`
-	ConsultationSummary []Row        `json:"consultation_summary"`
 	Sections            []Section    `json:"sections"`
 }
 
@@ -137,7 +141,6 @@ type MealSection struct {
 	Title             string       `json:"title"`
 	TargetRecipeCount int          `json:"target_recipe_count"`
 	Recipes           []RecipeCard `json:"recipes"`
-	SelectionNote     *string      `json:"selection_note"`
 }
 
 // Book2 mirrors MadamGY_Book2_JSON_Schema_V1.json. RotationPlan is nullable there and is

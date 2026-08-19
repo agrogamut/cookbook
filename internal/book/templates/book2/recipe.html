@@ -82,7 +82,10 @@
     <tbody>
       <tr>
         <td>
-          {{ if .TextureServing }}{{ .TextureServing }}{{ end }},
+          {{/* The separator belongs to the texture, not to the cell: an empty texture used
+               to leave a bare leading comma, which reads as a value that failed to print
+               rather than as a field the provider does not carry. */}}
+          {{ with .TextureServing }}{{ . }},{{ end }}
           <span class="mono">{{ .Serving }}</span>
         </td>
         <td>{{ .Safety }}</td>
