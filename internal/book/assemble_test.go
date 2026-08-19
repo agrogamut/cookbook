@@ -133,6 +133,38 @@ func TestEveryBlockIsEitherRenderedOrReported(t *testing.T) {
 	}
 }
 
+// A rendered section must carry content. TestEveryBlockIsEitherRenderedOrReported proves
+// every block is rendered or reported; it says nothing about whether a rendered block has
+// anything in it, which is exactly how a heading over an empty table shipped once already
+// on this branch (D1). This is the other half: for every section AssembleBook1 puts in the
+// book, at least one of Rows, Cards or Callout must be non-empty.
+//
+// B1-END-01 (block B1-022) is the one deliberate exception. Its template reads
+// Book1.Metadata directly -- book_version, release_id, generation_date, review_status --
+// because those are release-level facts with nowhere else to live, not per-section content,
+// so the section it renders under legitimately carries none of the three.
+func TestRenderedSectionsAreNotEmpty(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	for _, months := range []int{7, 51, 200} {
+		b, _, err := AssembleBook1(ctx, pool, storedProfileAged(months), time.Now())
+		if err != nil {
+			t.Fatalf("assemble at %d months: %v", months, err)
+		}
+		for _, sec := range b.Sections {
+			if sec.TemplateID == "B1-END-01" {
+				continue
+			}
+			if len(sec.Rows) == 0 && len(sec.Cards) == 0 && sec.Callout == nil {
+				t.Fatalf("at %d months: block %s (%s) was rendered with no rows, no cards "+
+					"and no callout -- a heading over an empty table, not a book",
+					months, sec.BlockID, sec.TemplateID)
+			}
+		}
+	}
+}
+
 // The single most important property of this package. A special-care condition stops the
 // engine, and a recipe book is exactly the artifact that would override a clinician's
 // judgement if it were produced anyway.
@@ -222,7 +254,7 @@ func TestLoadRecipeCardsReportsAJoinMiss(t *testing.T) {
 
 	ids := []string{realID, missingID}
 	cards, skipped, err := loadRecipeCards(ctx, pool, ids, "MC-TEST", "v-test",
-		map[string]bool{}, map[string][]string{}, map[string]models.RankedRecipe{},
+		map[string]bool{}, map[string][]string{}, map[string]string{}, map[string]models.RankedRecipe{},
 		models.ChildProfile{}, models.EngineResult{})
 	if err != nil {
 		t.Fatalf("loadRecipeCards: %v", err)
