@@ -7,6 +7,7 @@ import (
 	"html"
 	"os"
 	"os/exec"
+	"sync"
 	"time"
 
 	"github.com/chromedp/cdproto/page"
@@ -68,9 +69,10 @@ func browserOnPath() bool {
 // allocatorFor builds the browser allocator, applying the container-only flags when the
 // environment asks for them.
 //
-// Shared by the single and batch entry points so the two cannot disagree about how the
-// browser is launched -- a sandbox flag that applied to one book and not to the other would
-// mean a set where one book prints and the other does not.
+// Called once per browser launch rather than once per print, since sharedBrowser holds the
+// browser for the process lifetime. It stays a function so there is exactly one description
+// of how this service launches a browser -- a sandbox flag that applied to one path and not
+// another would mean a set where one book prints and the other does not.
 func allocatorFor(ctx context.Context) (context.Context, context.CancelFunc) {
 	// In a container the browser runs as root with user namespaces unavailable, where
 	// Chrome's sandbox cannot initialise and the process exits before it prints anything.
@@ -112,26 +114,112 @@ func PrintPDF(ctx context.Context, htmlDoc []byte, meta Metadata) ([]byte, error
 	// chromedp failure as "renderer unavailable" told an operator a 60-second timeout, a
 	// crash and malformed HTML were all a missing install, which is a 503 they can only
 	// retry.
+	browser, err := sharedBrowser()
+	if err != nil {
+		return nil, err
+	}
+	return printIn(browser, htmlDoc, meta)
+}
+
+// browser holds the one Chromium this process launches, and the cancel that stops it.
+//
+// Guarded by mu rather than sync.Once because a browser can die -- it is a child process on a
+// memory-capped instance -- and a Once cannot restart. ctx is nil until the first print and
+// after a death; its Err() being non-nil is what "died" looks like from here.
+var browserState struct {
+	mu   sync.Mutex
+	ctx  context.Context
+	stop context.CancelFunc
+}
+
+// sharedBrowser returns a context whose Chromium is already running, launching one if there
+// is none.
+//
+// Launching the browser is the single largest cost in a print and it was being paid per
+// request. Measured against the deployed free instance, printing Book 1 alone took 24.4s and
+// Book 2 alone 20.5s, while printing both in one browser took 31.2s -- so the launch is
+// about 13.7s of every request and the layout is the remaining 10.8s and 6.8s. On a
+// developer's machine the same two prints are under half a second each, which is why this
+// only ever looked like a production problem.
+//
+// One browser for the process lifetime, a fresh tab per print (printIn), and the tab closed
+// on the way out. The alternative -- a browser per request -- pays a 14-second fork on a
+// 0.1-CPU instance to render a document that takes seven.
+//
+// It is rooted at context.Background() deliberately. Deriving it from a request context would
+// tie the browser's life to whichever request happened to start it and kill it the moment
+// that response was written, which is the same launch-per-request cost with extra steps.
+func sharedBrowser() (context.Context, error) {
+	browserState.mu.Lock()
+	defer browserState.mu.Unlock()
+
+	if browserState.ctx != nil && browserState.ctx.Err() == nil {
+		return browserState.ctx, nil
+	}
+	// Dead or never started. Release whatever is left before replacing it, so a crashed
+	// browser does not leak its allocator.
+	if browserState.stop != nil {
+		browserState.stop()
+		browserState.ctx, browserState.stop = nil, nil
+	}
+
+	// Probed here rather than per print, so a missing install stays distinguishable from a
+	// print that failed with a browser present -- the two need opposite operator responses.
 	if !browserOnPath() {
 		return nil, fmt.Errorf("%w: no chromium build found on PATH", ErrChromiumUnavailable)
 	}
 
-	allocCtx, allocCancel := allocatorFor(ctx)
-	defer allocCancel()
-	ctx = allocCtx
+	allocCtx, allocCancel := allocatorFor(context.Background())
+	browserCtx, browserCancel := chromedp.NewContext(allocCtx)
 
-	ctx, cancel := chromedp.NewContext(ctx)
-	defer cancel()
+	// chromedp starts the browser lazily, on the first Run. Starting it here means the launch
+	// cost is paid by whoever calls this first -- WarmUp at boot, when nobody is waiting --
+	// rather than by a request. A failure here is a launch failure, so it is reported as an
+	// unavailable renderer rather than as a failed print.
+	stop := func() { browserCancel(); allocCancel() }
+	if err := chromedp.Run(browserCtx); err != nil {
+		stop()
+		if errors.Is(err, exec.ErrNotFound) {
+			return nil, fmt.Errorf("%w: %v", ErrChromiumUnavailable, err)
+		}
+		return nil, fmt.Errorf("%w: launching browser: %v", ErrChromiumUnavailable, err)
+	}
 
-	return printIn(ctx, htmlDoc, meta)
+	browserState.ctx, browserState.stop = browserCtx, stop
+	return browserCtx, nil
 }
 
-// PrintPDFAll prints several documents in one browser.
+// WarmUp launches the shared browser before any request needs it.
 //
-// Launching Chromium dominates the cost of a print: on a small cloud instance a book takes
-// about twenty seconds, nearly all of it startup, so printing a set as two separate calls
-// paid that twice and overran the request budget. One browser, two documents, and the second
-// print costs only its own layout.
+// Called at startup. Without it the first operator to ask for a PDF after a deploy pays the
+// whole launch on top of their own print, which on the free instance is the difference
+// between a slow request and one that reads as broken.
+//
+// A failure is returned rather than fatal: a service that cannot print is still a service
+// that can serve the console, the audit pages and the HTML previews, and it already reports
+// a missing renderer as a 503 per request.
+func WarmUp() error {
+	_, err := sharedBrowser()
+	return err
+}
+
+// ShutdownBrowser stops the shared browser. For a clean process exit and for tests that need
+// to prove a restart; printing after it simply launches a new one.
+func ShutdownBrowser() {
+	browserState.mu.Lock()
+	defer browserState.mu.Unlock()
+	if browserState.stop != nil {
+		browserState.stop()
+		browserState.ctx, browserState.stop = nil, nil
+	}
+}
+
+// PrintPDFAll prints several documents.
+//
+// Since the browser became process-wide (see sharedBrowser) this no longer saves a launch --
+// every print shares one browser now. It stays because the set is one deliverable: it prints
+// the documents in order and returns on the first failure rather than handing back a partial
+// set the caller has to reason about.
 //
 // All or nothing: a set of books is one deliverable, so the first failure returns rather than
 // handing back a partial set the caller has to reason about. Errors name the document that
@@ -140,18 +228,14 @@ func PrintPDFAll(ctx context.Context, docs []PrintJob) ([][]byte, error) {
 	if len(docs) == 0 {
 		return nil, nil
 	}
-	if !browserOnPath() {
-		return nil, fmt.Errorf("%w: no chromium build found on PATH", ErrChromiumUnavailable)
+	browser, err := sharedBrowser()
+	if err != nil {
+		return nil, err
 	}
-
-	ctx, cancel := allocatorFor(ctx)
-	defer cancel()
-	ctx, cancel = chromedp.NewContext(ctx)
-	defer cancel()
 
 	out := make([][]byte, 0, len(docs))
 	for _, d := range docs {
-		pdf, err := printIn(ctx, d.HTML, d.Metadata)
+		pdf, err := printIn(browser, d.HTML, d.Metadata)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", d.Name, err)
 		}
@@ -168,10 +252,12 @@ type PrintJob struct {
 	Metadata Metadata
 }
 
-// printIn prints one document in an existing browser context.
+// printIn prints one document in the shared browser.
 //
 // Each document gets its own tab and its own timeout, so one slow book cannot consume the
-// budget of the next and a crashed tab does not take the browser with it.
+// budget of the next and a crashed tab does not take the browser with it. The tab is closed
+// on the way out, which matters more now that the browser outlives the request: a leaked tab
+// per print would grow the process until the instance's memory cap killed it.
 func printIn(parent context.Context, htmlDoc []byte, meta Metadata) ([]byte, error) {
 	ctx, cancel := chromedp.NewContext(parent)
 	defer cancel()

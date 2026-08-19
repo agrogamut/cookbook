@@ -150,7 +150,11 @@ h1, h2, h3, h4 { font-family: var(--font-serif); font-weight: 600; }
    such failure mode: they are short enough that break-after: avoid is a promise the
    fragmenter can always keep.
    -------------------------------------------------------------------------------------- */
-.page-head { margin: 0 0 7mm; break-after: avoid; }
+/* Centred, like the cover and the chapter openers. The body of every page stays flush left --
+   tables, forms, prose and anything a parent writes on read worse centred, and a writing line
+   under a centred label is a line nobody knows where to start. What centres is the furniture
+   that announces a page; what stays left is everything a reader works through. */
+.page-head { margin: 0 0 8mm; break-after: avoid; text-align: center; }
 .page-head .kicker {
   font-family: var(--font-sans);
   font-size: var(--caption-size);
@@ -163,7 +167,7 @@ h1, h2, h3, h4 { font-family: var(--font-serif); font-weight: 600; }
 .page-head h2 {
   font-size: var(--title);
   line-height: 1.15;
-  margin: 0;
+  margin: 0 auto;
   color: var(--brand-deep);
   max-width: 150mm;
 }
@@ -171,8 +175,8 @@ h1, h2, h3, h4 { font-family: var(--font-serif); font-weight: 600; }
   font-size: var(--lead);
   font-style: italic;
   color: var(--ink-soft);
-  margin: 2.5mm 0 0;
-  max-width: var(--measure);
+  margin: 2.5mm auto 0;
+  max-width: 116mm;
 }
 .page-head::after {
   content: "";
@@ -397,7 +401,7 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    fragment to resolve it in. The cover no longer touches the bottom margin, which is a much
    smaller loss than a foot block that lands somewhere different on every child's book.
    -------------------------------------------------------------------------------------- */
-.cover { display: block; }
+.cover { display: block; text-align: center; }
 .cover .cover-kicker {
   font-family: var(--font-sans);
   font-size: var(--caption-size);
@@ -408,6 +412,11 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   padding-bottom: 3mm;
   border-bottom: 0.5mm solid var(--brand);
 }
+/* Centred blocks need their own measure and their own centring: text-align does nothing for
+   a block whose width is already the full column, so each of these caps its width and takes
+   auto margins. Without the cap a centred paragraph runs the full 170mm and the centring is
+   invisible on the long lines and ragged on the short ones. */
+.cover h1, .cover .cover-sub { margin-left: auto; margin-right: auto; }
 /* The middle of the cover grows to fill whatever the title and portrait do not, so the foot
    block sits on the bottom margin on every book regardless of name length or photograph. */
 /* The drop that carries the title into the lower half of the sheet. A declared distance, for
@@ -415,17 +424,17 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 .cover .cover-main { margin-top: 105mm; }
 .cover h1 {
   font-size: var(--display);
-  line-height: 1.1;
-  margin: 0 0 4mm;
+  line-height: 1.15;
+  margin: 0 0 5mm;
   color: var(--brand-deep);
-  max-width: 150mm;
+  max-width: 140mm;
 }
 .cover .cover-sub {
   font-size: var(--lead);
   font-style: italic;
   color: var(--ink-soft);
   margin: 0;
-  max-width: 120mm;
+  max-width: 116mm;
 }
 .cover .cover-name {
   font-size: 26pt;
@@ -443,6 +452,7 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   margin-top: 24mm;
 }
 .cover .cover-facts .label { display: block; margin-bottom: 1mm; }
+.cover .cover-facts > div { text-align: center; }
 .cover .cover-facts .value { font-family: var(--font-sans); }
 
 /* Cover portrait. A fixed frame filled with object-fit: cover, so a portrait and a landscape
@@ -451,7 +461,7 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    as a mistake, and reflowing per image means the cover is a different design for every
    child. Without a photograph the block is simply absent -- no placeholder silhouette, which
    would look like a picture that failed to load. */
-.cover-photo { margin: 0 0 8mm; width: 62mm; }
+.cover-photo { margin: 0 auto 8mm; width: 62mm; }
 .cover-photo img {
   width: 62mm;
   height: 62mm;
@@ -535,7 +545,7 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    column in the paged flow redistributes differently depending on which sheet it lands on,
    and a chapter opener that sits at a different height in each chapter is the same defect
    the cover had. */
-.chapter { display: block; margin-top: 62mm; }
+.chapter { display: block; margin-top: 62mm; text-align: center; }
 .chapter .chapter-num {
   font-family: var(--font-sans);
   font-size: 64pt;
@@ -554,13 +564,26 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   font-size: var(--lead);
   font-style: italic;
   color: var(--ink-soft);
-  margin: 0 0 8mm;
-  max-width: var(--measure);
+  margin: 0 auto 9mm;
+  max-width: 116mm;
 }
 /* No list numbering. The <ol> counter ran 1..5 down the left while the recipe's own book
    number ran 01..05 on the right of the same line -- two different numbers for one dish, and
    only one of them finds the page. The book number leads instead. */
-.chapter ul { list-style: none; margin: 0; padding: 0; max-width: 140mm; }
+/* A centred block of left-aligned lines, not centred lines. Centring the list itself left
+   every recipe number at a different indent -- five titles of different lengths, five
+   left edges -- so the column of numbers that makes the list scannable was not a column at
+   all. inline-block shrinks the list to its longest line and the parent's text-align centres
+   that box; inside it, everything lines up. */
+.chapter ul {
+  list-style: none;
+  display: inline-block;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+  max-width: 130mm;
+}
+.chapter li { max-width: none; }
 .chapter li { margin: 0 0 2mm; }
 .chapter li .n {
   font-family: var(--font-mono);
@@ -828,7 +851,18 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    with 0.08em of tracking broke mid-word across four lines; at 8.5pt in sentence case the
    longest word in the corpus fits its column and the breaks land between words. This is table
    content and nothing else uses the rule -- see TestTableSizingDoesNotLeakOntoProse. */
-.tracker th { text-transform: none; letter-spacing: 0; font-size: var(--small-size); }
+.tracker th {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: var(--small-size);
+  /* Half the gutter the other tables use. An eight-column tracker gets 21mm a column, and
+     "Daily/weekly" at 8.5pt is about 19mm -- with a 3mm gutter it missed by a millimetre and
+     broke mid-word as "Daily/weekl / y". Nothing breaks at a slash in any browser, so the
+     column has to be wide enough for the whole token. The hyphenated headings ("Family/age-
+     appropriate") were already breaking at their hyphen and are unaffected. */
+  padding-right: 1.5mm;
+}
+.tracker td { padding-right: 1.5mm; }
 
 .tracker td, .domain td:last-child { height: 6.5mm; }
 .tracker .write-line, .domain .write-line { min-width: 0; width: 92%; }
