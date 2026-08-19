@@ -4,7 +4,24 @@ import type {
   Allergen, ClinicalMarker, ReferenceEnums, StoredProfile, EngineInputResult, SpecialCareCondition,
 } from "./types";
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+/** Resolve the API base URL, tolerating an address given without a scheme.
+ *
+ *  Render's Blueprint supplies one service's address to another as a bare host
+ *  ("madamgy-api.onrender.com"), because a service can be reached over more than one scheme.
+ *  fetch() reads a scheme-less string as a *relative path*, so the call would quietly go to
+ *  the console's own origin and 404 -- a failure that looks like a missing endpoint rather
+ *  than a misconfigured URL. Resolving it here keeps the blueprint self-wiring instead of
+ *  needing the full URL pasted in by hand, and re-pasted after any rename.
+ *
+ *  A local address keeps http, because a dev machine has no certificate. */
+export function resolveBaseUrl(raw: string): string {
+  const trimmed = raw.trim().replace(/\/+$/, "");
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i.test(trimmed)) return `http://${trimmed}`;
+  return `https://${trimmed}`;
+}
+
+const BASE_URL = resolveBaseUrl(process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080");
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {

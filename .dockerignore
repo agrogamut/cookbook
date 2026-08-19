@@ -1,0 +1,12 @@
+# The API image needs the Go source and the provider workbooks. Nothing else.
+web/
+node_modules/
+.next/
+.git/
+.superpowers/
+docs/
+# Not committed, fetched by scripts/fetch_data.fish and verified against SHA256SUMS. The
+# enrichment tables they populate are annotations; the API serves without them.
+data/external/
+data/book-engine-spec/
+*.md

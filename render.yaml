@@ -1,0 +1,82 @@
+# The whole stack on Render: Postgres, the Go API, and the operator console.
+#
+# One platform rather than a frontend host plus a separate backend host, because the console
+# is useless without the API and the API is useless without the database. Split across
+# providers, "is it up?" becomes three questions with three dashboards.
+#
+# Deploy: New > Blueprint in the Render dashboard, pointed at this repository. Render reads
+# this file and creates all three.
+
+databases:
+  - name: madamgy-db
+    databaseName: recipie
+    user: recipie
+    # A free Render database is deleted 30 days after creation. Nothing here is precious --
+    # the provider workbooks are committed and the importer rebuilds the whole database from
+    # them -- but a child profile entered through the console is not in that set and would go
+    # with it. Move off free before anyone records a real child.
+    plan: free
+    postgresMajorVersion: "16"
+
+services:
+  # ---------------------------------------------------------------------------------------
+  # The engine API. Docker rather than a native Go build because the image also carries
+  # Chromium and Bengali fonts: every ingredient has a Bengali name, and printing a book
+  # without a shaping engine produces ingredient names that are subtly and silently wrong.
+  # See the Dockerfile.
+  # ---------------------------------------------------------------------------------------
+  - type: web
+    name: madamgy-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    # Free to start, so this deploys without a card. Chromium is the reason to watch it: a
+    # free instance has 512 MB, and printing a 22-page book with a browser in that space is
+    # tight. If a .pdf request returns 500 or the service restarts mid-print, that is the
+    # memory ceiling and not a bug -- move this to starter.
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: madamgy-db
+          property: connectionString
+
+      # Load the provider's 14 workbooks on first boot. The importer is idempotent -- upsert
+      # plus a sweep, every table content-hashed -- so leaving this set is safe, but it adds
+      # about a minute to every start, so remove it once the first deploy is live.
+      #
+      # If the first deploy times out while importing, unset this and run `import` once from
+      # the service's shell instead. The data is the same either way.
+      - key: IMPORT_ON_START
+        value: "1"
+
+      # Chrome's sandbox cannot initialise as root with no user namespaces, which is every
+      # container: without this the browser exits before printing anything. Safe here because
+      # the browser only ever loads a document this service just rendered from its own
+      # database -- it never visits a remote page.
+      - key: CHROMIUM_NO_SANDBOX
+        value: "1"
+
+  # ---------------------------------------------------------------------------------------
+  # The operator console.
+  # ---------------------------------------------------------------------------------------
+  - type: web
+    name: madamgy-console
+    runtime: node
+    # The console holds no data and does no rendering of its own, so free is sufficient. Both
+    # free services sleep after 15 minutes idle and take about a minute to wake.
+    plan: free
+    rootDir: web
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      # NEXT_PUBLIC_* is inlined into the client bundle at build time, not read at runtime,
+      # so this has to be a build-time variable -- which is what a Blueprint envVar is. The
+      # browser calls the API directly, so it must be the API's public host and not an
+      # internal one.
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: madamgy-api
+          property: host

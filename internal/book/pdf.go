@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"os"
 	"os/exec"
 	"time"
 
@@ -87,6 +88,27 @@ func PrintPDF(ctx context.Context, htmlDoc []byte, meta Metadata) ([]byte, error
 	// retry.
 	if !browserOnPath() {
 		return nil, fmt.Errorf("%w: no chromium build found on PATH", ErrChromiumUnavailable)
+	}
+
+	// In a container the browser runs as root with user namespaces unavailable, where
+	// Chrome's sandbox cannot initialise and the process exits before it prints anything.
+	// CHROMIUM_NO_SANDBOX drops the sandbox for exactly that case.
+	//
+	// Off by default, so a developer's machine keeps the sandbox it can actually use. It is
+	// safe where it is set and not in general: the browser here only ever loads a document
+	// this service just rendered from its own database, never a remote page, so there is no
+	// untrusted content for the sandbox to contain. Setting it in an environment that also
+	// browses the web would not be safe.
+	if os.Getenv("CHROMIUM_NO_SANDBOX") != "" {
+		allocCtx, allocCancel := chromedp.NewExecAllocator(ctx,
+			append(chromedp.DefaultExecAllocatorOptions[:],
+				chromedp.NoSandbox,
+				// Chrome sizes its shared memory from /dev/shm, which containers default to
+				// 64 MB. A book of 22 pages exhausts it and the renderer crashes mid-print.
+				chromedp.Flag("disable-dev-shm-usage", true),
+			)...)
+		defer allocCancel()
+		ctx = allocCtx
 	}
 
 	ctx, cancel := chromedp.NewContext(ctx)

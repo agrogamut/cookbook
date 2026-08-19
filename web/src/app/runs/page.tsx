@@ -4,6 +4,18 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PageHeader } from "@/components/page-header";
 
+// Rendered per request, never prerendered at build.
+//
+// These pages read the live database through the API. Statically generated, they would bake
+// whatever the API returned at build time into HTML and serve it as current -- an ingredient
+// value, a gap count or an audit finding frozen at a build nobody can see the date of. That
+// is the same failure the provenance columns exist to prevent, reached from the other side:
+// the number would carry its source and still be stale.
+//
+// It also means the build does not need a reachable API, which prerendering did.
+export const dynamic = "force-dynamic";
+
+
 export default async function RunsPage() {
   const runs = await getRuns();
 
