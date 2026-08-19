@@ -12,8 +12,11 @@ Internal tool. Staff use it to serve families; families never use it directly.
 ## Status
 
 Phase 1 (make the data usable) and Phase 2 (the 14-step engine, the Go API and the operator
-console) are built. Phase 3, the Book Engine, is specified and not started - see
-`docs/phase-3-book-engine.md`, and `CLAUDE.md` for the plan and the current task list.
+console) are built. Phase 3, the Book Engine, is partly built: the Book 1 content layer, the
+canonical child profile, and the renderer that assembles, previews and prints both books are
+done. The generation-job and release layer - stable release ids, stored profile snapshots and
+the human review gate the JSON schemas require - is not. See `docs/phase-3-book-engine.md`,
+and `CLAUDE.md` for the plan and the current task list.
 
 **Nothing here is approved.** All 940 recipes carry the provider's `Review_Status = Draft`
 and all 406 ingredients `Needs Validation`; the provider's culinary, nutrition and clinical

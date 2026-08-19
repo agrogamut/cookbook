@@ -217,7 +217,7 @@ pass from an empty database.
 | 5 | NT00-NT12 ranker | done - migration `0003`, weights read from the provider table |
 | 6 | IFCT 2017 nutrition audit | done - `cmd/enrich`, 542 foods loaded |
 | 7 | External prep-text join | done - `cmd/enrich`, 166 of 940 recipes |
-| 8 | Gap register | done - 20 rows (12 seeded in 0002, 4 upserted by cmd/enrich, 4 added in 0012), re-counted on every run |
+| 8 | Gap register | done - 24 rows (12 seeded in 0002, 4 upserted by cmd/enrich, 4 added in 0012, 2 in 0015, 1 each in 0016 and 0017), re-counted on every run |
 | + | Corrected nutrition layer | done - migrations `0009`-`0010`, 139 ingredients on IFCT values, 410 recipes fully verified |
 | + | `Book1_Content_Master` import | done - migration `0013`, 9 tables. `internal/importer/spec.go`'s exclusion comment (which had listed it alongside the empty Review/Version Control scaffold and the PDF-pagination Page Registry) is corrected: it is the general content layer of Book 1, not a pagination concern, and is bound to the importer like every other master |
 
@@ -923,6 +923,10 @@ internal/db/migrations/
   0013_book1_content            9 Book 1 tables, ai_can_draft CHECK gate, book_order
   0014_child_profile            child_profile + 4 child tables, dated growth, three-state allergy
   0015_special_care             9 special-care tables, 6 STOP-REVIEW condition gates
+  0016_meal_category_map        meal_category_target -> recipe_master.meal_type, GAP-023
+                                (354 of 940 recipes reach no Book 2 chapter)
+  0017_recipe_version_gap       GAP-024, the recipe_version the Book 2 card schema requires
+                                and recipe_master does not carry
 ```
 
 **Migrations 0012 and 0013-0014 were authored on separate branches and merged after the
@@ -937,7 +941,7 @@ scripts/dev_db.fish down && scripts/dev_db.fish up
 go run ./cmd/import && go run ./cmd/enrich
 ```
 
-The check that it worked is `SELECT count(*) FROM gap_register` returning 22, not 16 or 20.
+The check that it worked is `SELECT count(*) FROM gap_register` returning 24, not 16, 20 or 22.
 
 ```
 internal/db/integrity_test.go   22 invariants + row counts + idempotency
@@ -951,10 +955,48 @@ internal/profile/               stored profile -> engine input: dated growth, th
                                 allergy, expiring acute conditions
 internal/profile/profile_test.go  round-trip, age derivation, suspected-allergen and
                                 acute-expiry conversion
+internal/book/                  Book 1 and Book 2 assembly, html/template rendering, PDF print
+internal/book/templates/        base + tokens.css, 7 Book 1 and 6 Book 2 block templates
+internal/book/assemble_test.go  block and meal-category conservation, allergy status on paper
+internal/book/render_test.go    template dispatch, writing lines, typography floors
+internal/book/pdf_test.go       real print, skipped when no browser is installed
 data/external/                  downloaded datasets + SHA256SUMS
 scripts/dev_db.fish             throwaway Postgres
 scripts/fetch_data.fish         download external datasets, verify checksums
 ```
+
+### The book renderer
+
+`internal/book/` assembles a child's Book 1 (daily-life guidance) and Book 2 (recipe book)
+from the imported masters and the stored profile, renders them with Go `html/template`, and
+prints them to PDF through headless Chromium (chromedp).
+
+Chromium rather than a Go PDF library because all 406 ingredients carry Bengali names, and
+Bengali needs conjunct formation and matra repositioning that no Go PDF library shapes. A
+renderer that silently mis-shapes an ingredient name is worse than one that is absent, so a
+missing browser is reported as `ErrChromiumUnavailable` (HTTP 503) rather than falling back.
+A print that fails with a browser present is `ErrPrintFailed` (HTTP 500) - the two need
+opposite operator responses, so they are never merged.
+
+**Printing needs a Chromium on PATH** under any of `google-chrome-stable`, `google-chrome`,
+`chromium` or `chromium-browser`. Without one, `/preview` still works (it returns HTML) and
+`.pdf` returns 503; `pdf_test.go` skips.
+
+| Surface | What it is |
+|---|---|
+| `GET /api/books/{childID}/{book1\|book2}/preview` | rendered HTML, omissions in `X-Book-Omissions` |
+| `GET /api/books/{childID}/{book1\|book2}.pdf` | printed PDF, same header |
+| `/books` in the console | profile picker, iframe preview, download, omission list |
+
+Two rules the package enforces and that must not be relaxed:
+
+- **The special-care stop gate blocks both books.** A declared special-care condition
+  returns 409 with the provider's mandatory reviewer, for Book 1 as well as Book 2 - Book 1
+  runs no engine of its own, so the gate is applied in the handler for both.
+- **Every unit of a book is either rendered or reported.** Block-level and category-level
+  omissions carry the `[block] ` and `[meal category] ` markers and are counted against the
+  corpus total by the conservation tests. A row left out of a block that did render is
+  reported unmarked, because it is not an absent block.
 
 The importer binds sheets to tables by snake-casing the workbook header and matching it
 against `information_schema`, so **the migration DDL is the single source of truth** for
