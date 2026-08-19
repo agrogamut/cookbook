@@ -1631,7 +1631,13 @@ Fill the elided section following the pattern in `internal/api/handlers/recipes.
 
 - [ ] **Step 3: Write the Book 2 templates**
 
-Nine components. The two that carry the design are:
+Six components, not the contract's nine. `B2-RECIPE-02`, `B2-SWAP-01` and `B2-FAV-01` are
+deferred until something dispatches them - a length threshold choosing between full and
+compact cards, a swap field on `RecipeCard`, and wired preference data respectively. An
+unreachable template is code nothing executes, nothing tests, and nothing keeps honest as
+the types around it change, which is the same call already made for three Book 1 templates.
+
+The two that carry the design are:
 
 `B2-RECIPE-01` (prototype page 3): title, reason chips in a bordered strip, a cream
 ingredients panel beside a numbered method, then a three-column
