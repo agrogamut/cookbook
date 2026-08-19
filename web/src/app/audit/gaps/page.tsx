@@ -2,6 +2,7 @@ import { getGaps } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { PageHeader } from "@/components/page-header";
 import type { GapSeverity } from "@/lib/types";
 
 const severityOrder: GapSeverity[] = ["blocker", "major", "minor", "parked"];
@@ -18,7 +19,11 @@ export default async function GapsPage() {
 
   return (
     <div>
-      <h1 className="mb-4 font-mono text-lg">Gap register ({gaps.length})</h1>
+      <PageHeader
+        title="Gap register"
+        description="Every missing or provisional field, counted. Nothing here is silently absent."
+        meta={`${gaps.length} entries`}
+      />
       {gaps.length === 0 ? (
         <Alert>
           <AlertTitle>No gaps loaded</AlertTitle>

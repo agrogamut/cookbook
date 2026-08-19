@@ -4,6 +4,7 @@ import { ProvenanceChip } from "@/components/provenance-chip";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageHeader } from "@/components/page-header";
 import { safeHref } from "@/lib/utils";
 
 export default async function RecipeDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -22,13 +23,11 @@ export default async function RecipeDetailPage({ params }: { params: Promise<{ i
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
-        <h1 className="font-mono text-lg">{method.recipe_id}</h1>
-        <p className="text-sm text-muted-foreground">{method.recipe_name} &middot; {method.region_culture}</p>
-        <Badge variant="outline" className="mt-1">{method.provider_review_status}</Badge>
-      </div>
-
-      <Separator />
+      <PageHeader
+        title={method.recipe_id}
+        description={`${method.recipe_name} · ${method.region_culture}`}
+        meta={<Badge variant="outline">{method.provider_review_status}</Badge>}
+      />
 
       <Tabs defaultValue="provider">
         <TabsList>

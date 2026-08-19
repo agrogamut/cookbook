@@ -2,13 +2,18 @@ import { getRuns } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { PageHeader } from "@/components/page-header";
 
 export default async function RunsPage() {
   const runs = await getRuns();
 
   return (
     <div>
-      <h1 className="mb-4 font-mono text-lg">Import runs</h1>
+      <PageHeader
+        title="Import runs"
+        description="Import and enrichment history, content hashes, rows skipped."
+        meta={`${runs.length} runs`}
+      />
       {runs.length === 0 ? (
         <Alert>
           <AlertTitle>No import runs recorded</AlertTitle>

@@ -2,18 +2,18 @@ import { getNutritionAudit } from "@/lib/api";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ProvenanceChip } from "@/components/provenance-chip";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { PageHeader } from "@/components/page-header";
 
 export default async function NutritionAuditPage() {
   const rows = await getNutritionAudit();
 
   return (
     <div>
-      <h1 className="mb-1 font-mono text-lg">Nutrition discrepancy report</h1>
-      <p className="mb-4 text-xs text-muted-foreground">
-        Confirmed exact-name matches where the provider disagrees with IFCT 2017 by more
-        than 20%. This is the list to hand the provider -- nothing here is corrected
-        locally.
-      </p>
+      <PageHeader
+        title="Nutrition discrepancy report"
+        description="Confirmed exact-name matches where the provider disagrees with IFCT 2017 by more than 20%. The list to hand the provider -- nothing here is corrected locally."
+        meta={`${rows.length} rows`}
+      />
       {rows.length === 0 ? (
         <Alert>
           <AlertTitle>No discrepancies loaded</AlertTitle>

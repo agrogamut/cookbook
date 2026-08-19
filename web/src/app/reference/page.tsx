@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ProvenanceChip } from "@/components/provenance-chip";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/page-header";
 
 export default async function ReferencePage() {
   const [regions, cuisines, targets, book1Blocks] = await Promise.all([
@@ -11,7 +12,9 @@ export default async function ReferencePage() {
   ]);
 
   return (
-    <Tabs defaultValue="regions">
+    <div>
+      <PageHeader title="Reference" description="Regions, cuisines, NT00-NT12 weights, engine steps." />
+      <Tabs defaultValue="regions">
       <TabsList>
         <TabsTrigger value="regions">Regions</TabsTrigger>
         <TabsTrigger value="cuisines">Cuisines</TabsTrigger>
@@ -172,6 +175,7 @@ export default async function ReferencePage() {
           </TableBody>
         </Table>
       </TabsContent>
-    </Tabs>
+      </Tabs>
+    </div>
   );
 }

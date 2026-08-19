@@ -1,6 +1,7 @@
 import { listIngredients } from "@/lib/api";
 import { ProvenanceChip } from "@/components/provenance-chip";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { PageHeader } from "@/components/page-header";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -14,7 +15,11 @@ export default async function IngredientsPage() {
 
   return (
     <div>
-      <h1 className="mb-4 font-mono text-lg">Ingredients ({ingredients.length})</h1>
+      <PageHeader
+        title="Ingredients"
+        description="Provider values verbatim, IFCT-corrected where an alias resolves. Unverified rows show the provider figure alongside."
+        meta={`${ingredients.length} rows`}
+      />
       {ingredients.length === 0 ? (
         <Alert>
           <AlertTitle>No ingredients loaded</AlertTitle>
