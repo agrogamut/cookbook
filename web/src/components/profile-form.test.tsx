@@ -74,4 +74,30 @@ describe("ProfileForm", () => {
     render(<ProfileForm onSubmit={() => {}} loading={true} />);
     expect(await screen.findByRole("button", { name: /running engine/i })).toBeDisabled();
   });
+
+  it("keeps logistics controls collapsed until opened", async () => {
+    // Meal type, budget and timing are rankers, not safety filters. They start closed so
+    // the operator reaches Search without scrolling past controls a routine query ignores.
+    render(<ProfileForm onSubmit={() => {}} loading={false} />);
+    const trigger = await screen.findByRole("button", { name: /logistics/i });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(trigger);
+    await waitFor(() => expect(trigger).toHaveAttribute("aria-expanded", "true"));
+  });
+
+  it("keeps clinical controls collapsed until opened", async () => {
+    render(<ProfileForm onSubmit={() => {}} loading={false} />);
+    const trigger = await screen.findByRole("button", { name: /clinical/i });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("leaves the two hard-filter sections expanded on first render", async () => {
+    // Age and allergens are engine steps 1 and 2. A collapsed safety control is a
+    // regression, not a layout preference.
+    render(<ProfileForm onSubmit={() => {}} loading={false} />);
+    const basics = await screen.findByRole("button", { name: /basics/i });
+    const allergens = await screen.findByRole("button", { name: /^allergens/i });
+    expect(basics).toHaveAttribute("aria-expanded", "true");
+    expect(allergens).toHaveAttribute("aria-expanded", "true");
+  });
 });

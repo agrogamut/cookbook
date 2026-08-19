@@ -7,6 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import {
+  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
+} from "@/components/ui/accordion";
 import { SuspectedAllergenFieldset } from "./suspected-allergen-fieldset";
 import {
   getAllergens, getClinicalMarkers, getEnums, getRegions, getCuisines, getProfileEngineInput,
@@ -254,9 +257,10 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
 
   const enumValues = (key: string) => enums[key] ?? [];
   const label = "text-xs uppercase text-muted-foreground";
+  const section = "font-mono text-xs uppercase tracking-wide py-2";
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 font-mono text-sm">
+    <form onSubmit={handleSubmit} className="flex h-full flex-col font-mono text-sm">
       {refError && (
         <p className="text-xs text-destructive">
           Reference vocabularies failed to load ({refError}). Controls below are empty
@@ -264,336 +268,375 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
         </p>
       )}
 
-      <div className="space-y-1 border-b pb-3">
-        <label htmlFor="load-child" className={label}>Load stored profile</label>
-        <div className="flex gap-1">
-          <Input
-            id="load-child" type="text" placeholder="child id"
-            value={loadChildID}
-            onChange={(e) => setLoadChildID(e.target.value)}
-          />
-          <Button type="button" variant="outline" onClick={handleLoadProfile}>Load</Button>
-        </div>
-        {loadError && <p className="text-xs text-destructive">{loadError}</p>}
-        {loadedAsOf && (
-          <p className="text-xs text-muted-foreground">
-            Age derived as of <span className="font-mono">{loadedAsOf}</span>.
-          </p>
-        )}
-        {loadDropped.length > 0 && (
-          <div className="text-xs text-muted-foreground">
-            <p>Stored facts that do not reach the engine query:</p>
-            <ul className="list-disc pl-4">
-              {loadDropped.map((d) => <li key={d}>{d}</li>)}
-            </ul>
-          </div>
-        )}
-      </div>
-
-      <div className="space-y-1">
-        <label htmlFor="age" className={label}>Age (months) *</label>
-        <Input
-          id="age" type="number" min={0} max={216} required
-          value={ageMonths}
-          onChange={(e) => setAgeMonths(e.target.value === "" ? "" : Number(e.target.value))}
-        />
-      </div>
-
-      <div className="space-y-1">
-        <span className={label}>Diet type</span>
-        <Select value={dietType || NONE} onValueChange={(v) => setDietType(v === NONE ? "" : v)}>
-          <SelectTrigger><SelectValue placeholder="No preference" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NONE}>No preference</SelectItem>
-            {enumValues("diet_type").map((v) => (
-              <SelectItem key={v.value} value={v.value}>{v.value} ({v.count})</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <label className="flex items-start gap-2 text-xs">
-        <input type="checkbox" checked={vegan} onChange={(e) => setVegan(e.target.checked)} className="mt-0.5" />
-        <span>Vegan - additional to diet type; excludes dairy, fish and animal-protein food groups</span>
-      </label>
-
-      <fieldset className="space-y-1">
-        <legend className={label}>Declared allergens</legend>
-        <div className="flex flex-wrap gap-1">
-          {allergenOptions.map((a) => {
-            const on = allergens.includes(a.allergen_group);
-            return (
-              <button
-                key={a.allergen_group}
-                type="button"
-                onClick={() => toggleAllergen(a.allergen_group)}
-                title={a.note}
-                aria-pressed={on}
-                className="focus-visible:ring-ring rounded focus-visible:outline-none focus-visible:ring-2"
-              >
-                <Badge
-                  variant={on ? "default" : "outline"}
-                  className={a.screens ? "" : "border-dashed opacity-70"}
-                >
-                  {a.allergen_group}
-                  {!a.screens && " - not screened"}
-                </Badge>
-              </button>
-            );
-          })}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Dashed groups have no tag anywhere in the corpus. They stay selectable so the
-          allergy can be recorded, and every result is labelled unscreened for them.
-        </p>
-      </fieldset>
-
-      <SuspectedAllergenFieldset
-        options={allergenOptions}
-        selected={suspectedAllergens}
-        declared={allergens}
-        onToggle={toggleSuspectedAllergen}
-      />
-
-      <div className="space-y-1">
-        <span className={label}>Nutrition target marker</span>
-        <Select value={clinicalMarker || NONE} onValueChange={(v) => setClinicalMarker(v === NONE ? "" : v)}>
-          <SelectTrigger><SelectValue placeholder="None - age-default ranking" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NONE}>None - age-default ranking</SelectItem>
-            {CLINICAL_MARKERS.map((m) => (
-              <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Built from special_care_condition_gate, never a hardcoded list, so the picker
-          cannot offer a condition the engine does not block on. Selecting one is not a
-          filter or a ranker: the engine stops and returns no recipes at all. */}
-      <div className="space-y-1">
-        <span className={label}>Special-care condition</span>
-        <Select value={specialCare || NONE} onValueChange={(v) => setSpecialCare(v === NONE ? "" : v)}>
-          <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NONE}>None</SelectItem>
-            {specialCareOptions.map((c) => (
-              <SelectItem key={c.condition_id} value={c.condition_id}>
-                {c.condition} ({c.condition_id})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {specialCare ? (
-          <p className="text-xs text-destructive">
-            {specialCareOptions.find((c) => c.condition_id === specialCare)?.mandatory_reviewer}
-          </p>
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            All six are STOP-REVIEW in the provider&apos;s master. Selecting one stops
-            generation and names the required reviewer - it does not filter or rank.
-          </p>
-        )}
-      </div>
-
-      <fieldset className="space-y-1.5">
-        <legend className={label}>Clinical flags</legend>
-        <div className="flex flex-col gap-1.5">
-          {markerOptions.map((m) => {
-            const control = markerControl(m);
-            // "holds" is a fact about a VALUE, not the field (finding 1). When something
-            // is selected, show it only if that selected value escalates. When nothing is
-            // selected, show it if any of the marker's values escalate -- a true statement
-            // about the marker that primes the operator before they pick anything.
-            const anyEscalates = m.values.some((v) => v.escalates);
-            const title = `${m.rule_ids} - ${m.engine_actions}`;
-
-            if (control.kind === "inert") {
-              return (
-                <div key={m.trigger_field} className="flex items-center gap-2 opacity-50" title={title}>
-                  <Badge variant="outline" className="border-dashed">{m.trigger_field}</Badge>
-                  <span className="text-xs text-muted-foreground">{control.note}</span>
+      <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+        {/* Age and allergens are engine steps 1 and 2 -- the two hard filters. They are
+            the defaultValue below so neither is ever behind a click. Everything else is
+            a ranker or a stop gate an operator opens when the case calls for it. */}
+        <Accordion type="multiple" defaultValue={["basics", "allergens"]}>
+          <AccordionItem value="stored">
+            <AccordionTrigger className={section}>Load stored profile</AccordionTrigger>
+            <AccordionContent className="space-y-1">
+              <label htmlFor="load-child" className={label}>Load stored profile</label>
+              <div className="flex gap-1">
+                <Input
+                  id="load-child" type="text" placeholder="child id"
+                  value={loadChildID}
+                  onChange={(e) => setLoadChildID(e.target.value)}
+                />
+                <Button type="button" variant="outline" onClick={handleLoadProfile}>Load</Button>
+              </div>
+              {loadError && <p className="text-xs text-destructive">{loadError}</p>}
+              {loadedAsOf && (
+                <p className="text-xs text-muted-foreground">
+                  Age derived as of <span className="font-mono">{loadedAsOf}</span>.
+                </p>
+              )}
+              {loadDropped.length > 0 && (
+                <div className="text-xs text-muted-foreground">
+                  <p>Stored facts that do not reach the engine query:</p>
+                  <ul className="list-disc pl-4">
+                    {loadDropped.map((d) => <li key={d}>{d}</li>)}
+                  </ul>
                 </div>
-              );
-            }
+              )}
+            </AccordionContent>
+          </AccordionItem>
 
-            if (control.kind === "toggle") {
-              const on = clinicalFlags[m.trigger_field] === control.value.value;
-              const holds = on ? control.value.escalates : anyEscalates;
-              return (
-                <div key={m.trigger_field} className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => toggleFlag(m.trigger_field, control.value.value)}
-                    title={title}
-                    aria-pressed={on}
-                    aria-label={m.trigger_field}
-                    className="focus-visible:ring-ring w-fit rounded focus-visible:outline-none focus-visible:ring-2"
-                  >
-                    <Badge variant={on ? "default" : "outline"} className={holds ? "border-destructive" : ""}>
-                      {m.trigger_field}
-                      {holds && " - holds"}
-                    </Badge>
-                  </button>
-                  {control.mixedCount > 0 && (
-                    <span className="text-xs text-muted-foreground">
-                      +{control.mixedCount} recorded value(s) not offered: no loadable rule, or a loaded rule the engine cannot classify
-                    </span>
-                  )}
-                </div>
-              );
-            }
+          <AccordionItem value="basics">
+            <AccordionTrigger className={section}>Basics</AccordionTrigger>
+            <AccordionContent className="space-y-3">
+              <div className="space-y-1">
+                <label htmlFor="age" className={label}>Age (months) *</label>
+                <Input
+                  id="age" type="number" min={0} max={216} required
+                  value={ageMonths}
+                  onChange={(e) => setAgeMonths(e.target.value === "" ? "" : Number(e.target.value))}
+                />
+              </div>
 
-            // select: several offerable values. Only values that are both loadable AND
-            // escalating are listed. Two kinds of value are left off: one the engine's query
-            // never loads, and one it loads but cannot classify -- the latter would make
-            // generation refuse rather than filter, so offering it would promise a screen
-            // that cannot happen.
-            const current = clinicalFlags[m.trigger_field] ?? NONE;
-            const selected = control.values.find((v) => v.value === current);
-            const holds = selected ? selected.escalates : anyEscalates;
-            return (
-              <div key={m.trigger_field} className="flex items-center gap-2" title={title}>
-                <Badge variant={current !== NONE ? "default" : "outline"} className={holds ? "border-destructive" : ""}>
-                  {m.trigger_field}
-                  {holds && " - holds"}
-                </Badge>
-                <Select
-                  value={current}
-                  onValueChange={(v) => (v === NONE ? clearFlag(m.trigger_field) : setFlag(m.trigger_field, v))}
-                >
-                  <SelectTrigger className="h-7 w-44 text-xs" aria-label={m.trigger_field}>
-                    <SelectValue placeholder="not set" />
-                  </SelectTrigger>
+              <div className="space-y-1">
+                <span className={label}>Diet type</span>
+                <Select value={dietType || NONE} onValueChange={(v) => setDietType(v === NONE ? "" : v)}>
+                  <SelectTrigger><SelectValue placeholder="No preference" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={NONE}>not set</SelectItem>
-                    {control.values.map((v) => (
-                      <SelectItem key={v.value} value={v.value}>
-                        {v.value}
-                        {v.escalates && " (holds)"}
+                    <SelectItem value={NONE}>No preference</SelectItem>
+                    {enumValues("diet_type").map((v) => (
+                      <SelectItem key={v.value} value={v.value}>{v.value} ({v.count})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <label className="flex items-start gap-2 text-xs">
+                <input type="checkbox" checked={vegan} onChange={(e) => setVegan(e.target.checked)} className="mt-0.5" />
+                <span>Vegan - additional to diet type; excludes dairy, fish and animal-protein food groups</span>
+              </label>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="allergens">
+            <AccordionTrigger className={section}>Allergens</AccordionTrigger>
+            <AccordionContent className="space-y-3">
+              <fieldset className="space-y-1">
+                <legend className={label}>Declared allergens</legend>
+                <div className="flex flex-wrap gap-1">
+                  {allergenOptions.map((a) => {
+                    const on = allergens.includes(a.allergen_group);
+                    return (
+                      <button
+                        key={a.allergen_group}
+                        type="button"
+                        onClick={() => toggleAllergen(a.allergen_group)}
+                        title={a.note}
+                        aria-pressed={on}
+                        className="focus-visible:ring-ring rounded focus-visible:outline-none focus-visible:ring-2"
+                      >
+                        <Badge
+                          variant={on ? "default" : "outline"}
+                          className={a.screens ? "" : "border-dashed opacity-70"}
+                        >
+                          {a.allergen_group}
+                          {!a.screens && " - not screened"}
+                        </Badge>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Dashed groups have no tag anywhere in the corpus. They stay selectable so the
+                  allergy can be recorded, and every result is labelled unscreened for them.
+                </p>
+              </fieldset>
+
+              <SuspectedAllergenFieldset
+                options={allergenOptions}
+                selected={suspectedAllergens}
+                declared={allergens}
+                onToggle={toggleSuspectedAllergen}
+              />
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="clinical">
+            <AccordionTrigger className={section}>Clinical</AccordionTrigger>
+            <AccordionContent className="space-y-3">
+              <div className="space-y-1">
+                <span className={label}>Nutrition target marker</span>
+                <Select value={clinicalMarker || NONE} onValueChange={(v) => setClinicalMarker(v === NONE ? "" : v)}>
+                  <SelectTrigger><SelectValue placeholder="None - age-default ranking" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>None - age-default ranking</SelectItem>
+                    {CLINICAL_MARKERS.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Built from special_care_condition_gate, never a hardcoded list, so the picker
+                  cannot offer a condition the engine does not block on. Selecting one is not a
+                  filter or a ranker: the engine stops and returns no recipes at all. */}
+              <div className="space-y-1">
+                <span className={label}>Special-care condition</span>
+                <Select value={specialCare || NONE} onValueChange={(v) => setSpecialCare(v === NONE ? "" : v)}>
+                  <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>None</SelectItem>
+                    {specialCareOptions.map((c) => (
+                      <SelectItem key={c.condition_id} value={c.condition_id}>
+                        {c.condition} ({c.condition_id})
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {control.mixedCount > 0 && (
-                  <span className="text-xs text-muted-foreground">
-                    +{control.mixedCount} recorded value(s) not offered: no loadable rule, or a loaded rule the engine cannot classify
-                  </span>
+                {specialCare ? (
+                  <p className="text-xs text-destructive">
+                    {specialCareOptions.find((c) => c.condition_id === specialCare)?.mandatory_reviewer}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    All six are STOP-REVIEW in the provider&apos;s master. Selecting one stops
+                    generation and names the required reviewer - it does not filter or rank.
+                  </p>
                 )}
               </div>
-            );
-          })}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          Three states appear here. A live control (toggle badge or dropdown) sends a value
-          the engine's own rule query actually loads; outlined in red when the selected (or,
-          if nothing is selected, any offerable) value holds generation for specialist
-          review rather than filtering it -- no recipe list is returned for those. A dashed,
-          unclickable marker has nothing this console can usefully send: either its operator
-          has no case in the engine's switch (Age_Months, Texture_Skill, and the one
-          substring-matching allergy flag, which belongs in Declared allergens instead), or
-          every value the provider recorded for it sits below the tier clinicalFilter loads,
-          or the engine loads a rule for it but cannot classify it, in which case setting it
-          would make generation refuse rather than filter. A dropdown may still show a "+N
-          recorded, not offered" note, which covers both of the last two cases: the value is
-          left off the list rather than hidden entirely, because the provider did record it.
-        </p>
-      </fieldset>
 
-      <div className="space-y-1">
-        <span className={label}>Region</span>
-        <Select value={regionCulture || NONE} onValueChange={(v) => setRegionCulture(v === NONE ? "" : v)}>
-          <SelectTrigger><SelectValue placeholder="No preference - West Bengal first" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NONE}>No preference - West Bengal first</SelectItem>
-            {regions.map((r) => (
-              <SelectItem key={r.region_culture} value={r.region_culture}>
-                {r.region_culture} (tier {r.focus_tier})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+              <fieldset className="space-y-1.5">
+                <legend className={label}>Clinical flags</legend>
+                <div className="flex flex-col gap-1.5">
+                  {markerOptions.map((m) => {
+                    const control = markerControl(m);
+                    // "holds" is a fact about a VALUE, not the field (finding 1). When something
+                    // is selected, show it only if that selected value escalates. When nothing is
+                    // selected, show it if any of the marker's values escalate -- a true statement
+                    // about the marker that primes the operator before they pick anything.
+                    const anyEscalates = m.values.some((v) => v.escalates);
+                    const title = `${m.rule_ids} - ${m.engine_actions}`;
+
+                    if (control.kind === "inert") {
+                      return (
+                        <div key={m.trigger_field} className="flex items-center gap-2 opacity-50" title={title}>
+                          <Badge variant="outline" className="border-dashed">{m.trigger_field}</Badge>
+                          <span className="text-xs text-muted-foreground">{control.note}</span>
+                        </div>
+                      );
+                    }
+
+                    if (control.kind === "toggle") {
+                      const on = clinicalFlags[m.trigger_field] === control.value.value;
+                      const holds = on ? control.value.escalates : anyEscalates;
+                      return (
+                        <div key={m.trigger_field} className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => toggleFlag(m.trigger_field, control.value.value)}
+                            title={title}
+                            aria-pressed={on}
+                            aria-label={m.trigger_field}
+                            className="focus-visible:ring-ring w-fit rounded focus-visible:outline-none focus-visible:ring-2"
+                          >
+                            <Badge variant={on ? "default" : "outline"} className={holds ? "border-destructive" : ""}>
+                              {m.trigger_field}
+                              {holds && " - holds"}
+                            </Badge>
+                          </button>
+                          {control.mixedCount > 0 && (
+                            <span className="text-xs text-muted-foreground">
+                              +{control.mixedCount} recorded value(s) not offered: no loadable rule, or a loaded rule the engine cannot classify
+                            </span>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    // select: several offerable values. Only values that are both loadable AND
+                    // escalating are listed. Two kinds of value are left off: one the engine's query
+                    // never loads, and one it loads but cannot classify -- the latter would make
+                    // generation refuse rather than filter, so offering it would promise a screen
+                    // that cannot happen.
+                    const current = clinicalFlags[m.trigger_field] ?? NONE;
+                    const selected = control.values.find((v) => v.value === current);
+                    const holds = selected ? selected.escalates : anyEscalates;
+                    return (
+                      <div key={m.trigger_field} className="flex items-center gap-2" title={title}>
+                        <Badge variant={current !== NONE ? "default" : "outline"} className={holds ? "border-destructive" : ""}>
+                          {m.trigger_field}
+                          {holds && " - holds"}
+                        </Badge>
+                        <Select
+                          value={current}
+                          onValueChange={(v) => (v === NONE ? clearFlag(m.trigger_field) : setFlag(m.trigger_field, v))}
+                        >
+                          <SelectTrigger className="h-7 w-44 text-xs" aria-label={m.trigger_field}>
+                            <SelectValue placeholder="not set" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={NONE}>not set</SelectItem>
+                            {control.values.map((v) => (
+                              <SelectItem key={v.value} value={v.value}>
+                                {v.value}
+                                {v.escalates && " (holds)"}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {control.mixedCount > 0 && (
+                          <span className="text-xs text-muted-foreground">
+                            +{control.mixedCount} recorded value(s) not offered: no loadable rule, or a loaded rule the engine cannot classify
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Three states appear here. A live control (toggle badge or dropdown) sends a value
+                  the engine's own rule query actually loads; outlined in red when the selected (or,
+                  if nothing is selected, any offerable) value holds generation for specialist
+                  review rather than filtering it -- no recipe list is returned for those. A dashed,
+                  unclickable marker has nothing this console can usefully send: either its operator
+                  has no case in the engine's switch (Age_Months, Texture_Skill, and the one
+                  substring-matching allergy flag, which belongs in Declared allergens instead), or
+                  every value the provider recorded for it sits below the tier clinicalFilter loads,
+                  or the engine loads a rule for it but cannot classify it, in which case setting it
+                  would make generation refuse rather than filter. A dropdown may still show a "+N
+                  recorded, not offered" note, which covers both of the last two cases: the value is
+                  left off the list rather than hidden entirely, because the provider did record it.
+                </p>
+              </fieldset>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="culture">
+            <AccordionTrigger className={section}>Culture &amp; region</AccordionTrigger>
+            <AccordionContent className="space-y-3">
+              <div className="space-y-1">
+                <span className={label}>Region</span>
+                <Select value={regionCulture || NONE} onValueChange={(v) => setRegionCulture(v === NONE ? "" : v)}>
+                  <SelectTrigger><SelectValue placeholder="No preference - West Bengal first" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>No preference - West Bengal first</SelectItem>
+                    {regions.map((r) => (
+                      <SelectItem key={r.region_culture} value={r.region_culture}>
+                        {r.region_culture} (tier {r.focus_tier})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <span className={label}>Cuisine cluster</span>
+                <Select value={cuisineCode || NONE} onValueChange={(v) => setCuisineCode(v === NONE ? "" : v)}>
+                  <SelectTrigger><SelectValue placeholder="No preference" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>No preference</SelectItem>
+                    {cuisines.map((c) => (
+                      <SelectItem key={c.culture_code} value={c.culture_code}>
+                        {c.cuisine_cluster} - {c.region_culture} ({c.recipe_count})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="logistics">
+            <AccordionTrigger className={section}>Logistics</AccordionTrigger>
+            <AccordionContent className="space-y-3">
+              <div className="space-y-1">
+                <span className={label}>Meal type</span>
+                <Select value={mealType || NONE} onValueChange={(v) => setMealType(v === NONE ? "" : v)}>
+                  <SelectTrigger><SelectValue placeholder="No preference" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>No preference</SelectItem>
+                    {enumValues("meal_type").map((v) => (
+                      <SelectItem key={v.value} value={v.value}>{v.value} ({v.count})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <span className={label}>Budget band</span>
+                <Select value={budgetBand || NONE} onValueChange={(v) => setBudgetBand(v === NONE ? "" : v)}>
+                  <SelectTrigger><SelectValue placeholder="No preference" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE}>No preference</SelectItem>
+                    {enumValues("budget_band").map((v) => (
+                      <SelectItem key={v.value} value={v.value}>{v.value} ({v.count})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <span className={label}>Max prep (min)</span>
+                  <Select value={maxPrep || NONE} onValueChange={(v) => setMaxPrep(v === NONE ? "" : v)}>
+                    <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NONE}>Any</SelectItem>
+                      {enumValues("prep_time_min").map((v) => (
+                        <SelectItem key={v.value} value={v.value}>{v.value} ({v.count})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <span className={label}>Max cook (min)</span>
+                  <Select value={maxCook || NONE} onValueChange={(v) => setMaxCook(v === NONE ? "" : v)}>
+                    <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NONE}>Any</SelectItem>
+                      {enumValues("cook_time_min").map((v) => (
+                        <SelectItem key={v.value} value={v.value}>{v.value} ({v.count})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="limit" className={label}>Result limit</label>
+                <Input
+                  id="limit" type="number" min={1} max={200} placeholder="25 (meal_category_target)"
+                  value={limit} onChange={(e) => setLimit(e.target.value)}
+                />
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
       </div>
 
-      <div className="space-y-1">
-        <span className={label}>Cuisine cluster</span>
-        <Select value={cuisineCode || NONE} onValueChange={(v) => setCuisineCode(v === NONE ? "" : v)}>
-          <SelectTrigger><SelectValue placeholder="No preference" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NONE}>No preference</SelectItem>
-            {cuisines.map((c) => (
-              <SelectItem key={c.culture_code} value={c.culture_code}>
-                {c.cuisine_cluster} - {c.region_culture} ({c.recipe_count})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      {/* Outside the accordion and pinned: a collapsed section must never put Search
+          out of reach. */}
+      <div className="sticky bottom-0 border-t bg-background pt-3">
+        <Button type="submit" disabled={ageMonths === "" || loading} className="w-full">
+          {loading ? "Running engine..." : "Search"}
+        </Button>
       </div>
-
-      <div className="space-y-1">
-        <span className={label}>Meal type</span>
-        <Select value={mealType || NONE} onValueChange={(v) => setMealType(v === NONE ? "" : v)}>
-          <SelectTrigger><SelectValue placeholder="No preference" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NONE}>No preference</SelectItem>
-            {enumValues("meal_type").map((v) => (
-              <SelectItem key={v.value} value={v.value}>{v.value} ({v.count})</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-1">
-        <span className={label}>Budget band</span>
-        <Select value={budgetBand || NONE} onValueChange={(v) => setBudgetBand(v === NONE ? "" : v)}>
-          <SelectTrigger><SelectValue placeholder="No preference" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value={NONE}>No preference</SelectItem>
-            {enumValues("budget_band").map((v) => (
-              <SelectItem key={v.value} value={v.value}>{v.value} ({v.count})</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2">
-        <div className="space-y-1">
-          <span className={label}>Max prep (min)</span>
-          <Select value={maxPrep || NONE} onValueChange={(v) => setMaxPrep(v === NONE ? "" : v)}>
-            <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE}>Any</SelectItem>
-              {enumValues("prep_time_min").map((v) => (
-                <SelectItem key={v.value} value={v.value}>{v.value} ({v.count})</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <span className={label}>Max cook (min)</span>
-          <Select value={maxCook || NONE} onValueChange={(v) => setMaxCook(v === NONE ? "" : v)}>
-            <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE}>Any</SelectItem>
-              {enumValues("cook_time_min").map((v) => (
-                <SelectItem key={v.value} value={v.value}>{v.value} ({v.count})</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="space-y-1">
-        <label htmlFor="limit" className={label}>Result limit</label>
-        <Input
-          id="limit" type="number" min={1} max={200} placeholder="25 (meal_category_target)"
-          value={limit} onChange={(e) => setLimit(e.target.value)}
-        />
-      </div>
-
-      <Button type="submit" disabled={ageMonths === "" || loading} className="w-full">
-        {loading ? "Running engine..." : "Search"}
-      </Button>
     </form>
   );
 }
