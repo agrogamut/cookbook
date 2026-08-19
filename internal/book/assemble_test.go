@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/madamgy/recipie/internal/models"
 	"github.com/madamgy/recipie/internal/profile"
 )
 
@@ -198,5 +199,51 @@ func TestEmptyChaptersAreOmittedAndReported(t *testing.T) {
 		t.Fatalf("%d rendered + %d reported skips = %d, want %d (all rows of "+
 			"meal_category_target); a category that is neither rendered nor reported is "+
 			"silently absent", len(b.MealSections), categorySkips, got, total)
+	}
+}
+
+// The property under test: for the ids handed to loadRecipeCards, every id ends up either as
+// a rendered card or named in the skip slice, never neither. recipe_method_card joins
+// recipe_master 1:1 across all 940 recipes today, so a genuine join miss cannot be produced by
+// asking AssembleBook2 for a real child -- it is fabricated directly here by asking for one
+// real recipe id alongside one that does not exist in recipe_method_card, exercising the exact
+// path that is otherwise unreachable on current data. This is the same defect class that
+// already shipped once on this branch for Book 1 content, where a dropped row left the
+// rendered count and the skip list both short and the test stayed green.
+func TestLoadRecipeCardsReportsAJoinMiss(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	var realID string
+	if err := pool.QueryRow(ctx, `SELECT recipe_id FROM recipe_method_card LIMIT 1`).Scan(&realID); err != nil {
+		t.Fatalf("find a real recipe id: %v", err)
+	}
+	const missingID = "MG-R-99999"
+
+	ids := []string{realID, missingID}
+	cards, skipped, err := loadRecipeCards(ctx, pool, ids, "MC-TEST", "v-test",
+		map[string]bool{}, map[string][]string{}, map[string]models.RankedRecipe{},
+		models.ChildProfile{}, models.EngineResult{})
+	if err != nil {
+		t.Fatalf("loadRecipeCards: %v", err)
+	}
+
+	if len(cards)+len(skipped) != len(ids) {
+		t.Fatalf("%d ids requested, %d cards + %d skips = %d; every id must be either "+
+			"rendered or reported, never neither",
+			len(ids), len(cards), len(skipped), len(cards)+len(skipped))
+	}
+	if len(cards) != 1 || cards[0].RecipeID != realID {
+		t.Fatalf("the real id must still be rendered, got %+v", cards)
+	}
+	found := false
+	for _, s := range skipped {
+		if strings.Contains(s, missingID) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("recipe id %s has no method card row; it must be named in the skip list, got %v",
+			missingID, skipped)
 	}
 }

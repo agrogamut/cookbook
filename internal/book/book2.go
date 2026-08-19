@@ -130,10 +130,11 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			survivors = survivors[:cat.Target]
 		}
 
-		cards, err := loadRecipeCards(ctx, pool, survivors, cat.ID, version, boilerplate, ageStages, byID, cp, res)
+		cards, cardSkips, err := loadRecipeCards(ctx, pool, survivors, cat.ID, version, boilerplate, ageStages, byID, cp, res)
 		if err != nil {
 			return Book2{}, nil, fmt.Errorf("book: load recipe cards for %s: %w", cat.ID, err)
 		}
+		skipped = append(skipped, cardSkips...)
 		if len(cards) == 0 {
 			// Every id in survivors came from the engine's own result, so the join to
 			// recipe_method_card/recipe_master should never drop one -- reaching this
@@ -307,9 +308,14 @@ func loadMealCategoryRecipeIDs(ctx context.Context, pool *pgxpool.Pool) (map[str
 // IFCT-verification band). Following the same shape as
 // internal/api/handlers/recipes.go's RecipeDetail: query, scan into a local struct, wrap
 // every error at the boundary.
+//
+// Every id in ids ends up either in the returned cards or named in the returned skip slice --
+// never silently absent. The join is 1:1 across all 940 recipes today, so the skip slice is
+// empty on current data; it exists so a future join miss is reported rather than rendering a
+// chapter one recipe short of what was asked for.
 func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, categoryID, version string,
 	boilerplate map[string]bool, ageStages map[string][]string, byID map[string]models.RankedRecipe,
-	cp models.ChildProfile, res models.EngineResult) ([]RecipeCard, error) {
+	cp models.ChildProfile, res models.EngineResult) ([]RecipeCard, []string, error) {
 
 	rows, err := pool.Query(ctx, `
 		SELECT c.recipe_id, c.recipe_name, c.provider_method, c.provider_review_status,
@@ -322,7 +328,7 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 		LEFT JOIN recipe_nutrition_recomputed n ON n.recipe_id = c.recipe_id
 		WHERE c.recipe_id = ANY($1)`, ids)
 	if err != nil {
-		return nil, fmt.Errorf("query recipe cards: %w", err)
+		return nil, nil, fmt.Errorf("query recipe cards: %w", err)
 	}
 	defer rows.Close()
 
@@ -342,7 +348,7 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 			&ageGroup, &texture, &servingSizeG, &ingredientNames, &ingredientQty,
 			&safetyRule, &clinicalTag, &growthTarget, &prepTimeMin, &cookTimeMin,
 			&budgetBand, &coverage, &fullyVerified); err != nil {
-			return nil, fmt.Errorf("scan recipe card: %w", err)
+			return nil, nil, fmt.Errorf("scan recipe card: %w", err)
 		}
 
 		prep, cook, band, tex := prepTimeMin, cookTimeMin, budgetBand, texture
@@ -368,18 +374,25 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 		byRecipeID[recipeID] = card
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("recipe card rows: %w", err)
+		return nil, nil, fmt.Errorf("recipe card rows: %w", err)
 	}
 
 	// Rebuild in the caller's rank order rather than the query's arbitrary row order, so a
-	// chapter's recipes stay best-first.
+	// chapter's recipes stay best-first. An id with no matching row is named in the skip
+	// slice rather than dropped -- a chapter that asked for twelve recipes and got eleven
+	// must say so, not just render eleven.
 	cards := make([]RecipeCard, 0, len(ids))
+	var skipped []string
 	for _, id := range ids {
-		if c, ok := byRecipeID[id]; ok {
-			cards = append(cards, c)
+		c, ok := byRecipeID[id]
+		if !ok {
+			skipped = append(skipped, fmt.Sprintf(
+				"recipe %s has no method card row and was not rendered", id))
+			continue
 		}
+		cards = append(cards, c)
 	}
-	return cards, nil
+	return cards, skipped, nil
 }
 
 // selectionReasons draws only from the engine's own recorded decisions -- never invented
