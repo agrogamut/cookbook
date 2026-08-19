@@ -17,7 +17,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <TooltipProvider>
             <SidebarProvider>
               <AppSidebar />
-              <main className="flex-1 overflow-x-auto p-6">{children}</main>
+              <main className="h-svh flex-1 overflow-y-auto p-6">{children}</main>
               <CommandPalette />
             </SidebarProvider>
           </TooltipProvider>
