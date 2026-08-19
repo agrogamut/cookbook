@@ -1,0 +1,34 @@
+{{/* B2-TOC-01: the meals in this book and the recipes under each.
+
+     Built from the sections that rendered, never from the meal-category master. Book 2 omits
+     categories routinely -- 354 of 940 recipes reach no Book 2 chapter (GAP-023), and a child
+     with a narrow age or diet loses more -- so a contents page built from the master would
+     list chapters the book does not contain.
+
+     Recipe names are listed, not just meal names. That is the difference between a contents
+     page and a divider: an operator handing this to a family, or a parent looking for what
+     they cooked last week, is looking for a dish, and a recipe book whose contents page says
+     only "Breakfast, Lunch, Dinner" answers no question anyone has.
+
+     No page numbers -- Chromium assigns them at print time and the template cannot know them. */}}
+{{ define "B2-TOC-01" }}
+<section class="page-break contents">
+  <div class="section-header">
+    <h2>What is in this book</h2>
+    <p>Recipes selected for {{ .Child.DisplayName }}, by meal</p>
+  </div>
+  {{ range .MealSections }}
+    <h3 class="toc-meal">{{ .Title }}</h3>
+    <ol class="toc">
+      {{ range .Recipes }}
+        <li>
+          <span class="toc-title">{{ .Title }}</span>
+          <span class="toc-sub mono">{{ .RecipeID }}</span>
+        </li>
+      {{ end }}
+    </ol>
+  {{ end }}
+  <p class="toc-note">Every recipe here passed the age and allergy filters, which are absolute.
+    Recipes left out, and which step removed them, are listed with the generated output.</p>
+</section>
+{{ end }}

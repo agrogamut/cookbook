@@ -49,17 +49,6 @@
     </table>
   {{ end }}
 
-  {{ with .ReactionLog }}
-    <h3>{{ if .Title }}{{ .Title }}{{ else }}Reaction record{{ end }}</h3>
-    <table>
-      <thead><tr>{{ range .Columns }}<th>{{ . }}</th>{{ end }}</tr></thead>
-      <tbody>
-        {{ $cols := .Columns }}
-        {{ range $i, $_ := rows .Rows }}
-          <tr>{{ range $cols }}<td><span class="write-line"></span></td>{{ end }}</tr>
-        {{ end }}
-      </tbody>
-    </table>
-  {{ end }}
+  {{ with .ReactionLog }}{{ template "B1-GRID" . }}{{ end }}
 {{ end }}
 {{ end }}

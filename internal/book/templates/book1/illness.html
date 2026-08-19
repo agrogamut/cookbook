@@ -22,4 +22,8 @@
     {{ with .EngineLimit }}<p class="domain-limit">{{ . }}</p>{{ end }}
   </div>
 {{ end }}
+{{/* B1-016 seeds a monitoring template rather than illness rows -- it is the "supportive
+     table" beside the situations. Omitting this dispatch is what printed it as a section band
+     over an empty page. */}}
+{{ range .Trackers }}{{ template "B1-GRID" . }}{{ end }}
 {{ end }}

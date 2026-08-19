@@ -2,14 +2,17 @@
 {{ $b := .Data }}
 {{ template "B1-COVER-01" $b }}
 {{ template "B1-TOC-01" $b }}
-{{ range $i, $s := $b.Sections }}
+{{ range $b.Sections }}
   {{/* break-before on every section but the first, never break-after.
 
        break-after: page on every section emits a break after the last one too, and Chromium
        honours it as a physical page -- so the book ended on an empty sheet, every time.
        Moving the break to the front of each section says the same thing about every
        boundary between two sections and says nothing at all after the final one. */}}
-  <section class="{{ if $i }}page-break{{ end }}">
+  {{/* Every section, including the first: the contents page always precedes it, and the
+       conditional version left Child Profile sharing a page with the contents whenever the
+       contents happened to be short. */}}
+  <section class="page-break">
     <div class="section-header">
       <h2>{{ .Title }}</h2>
       {{ with .Subtitle }}<p>{{ . }}</p>{{ end }}

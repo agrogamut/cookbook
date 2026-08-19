@@ -23,9 +23,9 @@ var trackerRowsByFrequency = []struct {
 	rows  int
 }{
 	{"selected week", 7}, // one row per day of the week the parent picks
-	{"each vaccine", 12}, // the tracker sits beside a 44-row schedule; twelve is a page
-	{"daily", 14},        // a fortnight, so a pattern is visible rather than a snapshot
-	{"weekly", 8},        // two months of weeks
+	{"each vaccine", 8},
+	{"daily", 8},
+	{"weekly", 7},
 	{"monthly", 6},
 	{"routine follow-up", 4}, // a growth parameter recorded at each routine visit
 	{"at follow-up", 3},
@@ -35,6 +35,23 @@ var trackerRowsByFrequency = []struct {
 	{"during illness", 7},
 	{"as needed", 6},
 }
+
+// The counts above are also a page budget, not only a usefulness judgement.
+//
+// A domain page carries a section band, the block's purpose, a reference table, a red-flag
+// callout, a referral line and then the grid, in about 130mm before a single row is drawn.
+// The content box is 225mm, so the grid has roughly 90mm. At 6.5mm a row, eight rows and a
+// header fit; at ten the tracker no longer fits beside its domain, and since .tracker is
+// break-inside: avoid it moved whole -- printing every daily-life block as two half-empty
+// pages instead of one full one. At the original fourteen it split mid-grid and stranded two
+// writing lines on a sheet of their own.
+//
+// Eight rows is therefore a page-fit number as much as a useful-history one, which is why the
+// two are documented together.
+//
+// So these numbers are load-bearing in two directions, and changing one without re-printing a
+// book and looking at it will silently reintroduce that. The row height is .tracker td in
+// tokens.css and the two must be considered together.
 
 // TrackerRows is how many blank rows a tracker grid gets for a declared frequency.
 //

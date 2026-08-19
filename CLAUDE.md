@@ -217,7 +217,7 @@ pass from an empty database.
 | 5 | NT00-NT12 ranker | done - migration `0003`, weights read from the provider table |
 | 6 | IFCT 2017 nutrition audit | done - `cmd/enrich`, 542 foods loaded |
 | 7 | External prep-text join | done - `cmd/enrich`, 166 of 940 recipes |
-| 8 | Gap register | done - 24 rows (12 seeded in 0002, 4 upserted by cmd/enrich, 4 added in 0012, 2 in 0015, 1 each in 0016 and 0017), re-counted on every run |
+| 8 | Gap register | done - 27 rows (12 seeded in 0002, 4 upserted by cmd/enrich, 4 added in 0012, 2 in 0015, 1 each in 0016 and 0017, 3 in 0018), re-counted on every run |
 | + | Corrected nutrition layer | done - migrations `0009`-`0010`, 139 ingredients on IFCT values, 410 recipes fully verified |
 | + | `Book1_Content_Master` import | done - migration `0013`, 9 tables. `internal/importer/spec.go`'s exclusion comment (which had listed it alongside the empty Review/Version Control scaffold and the PDF-pagination Page Registry) is corrected: it is the general content layer of Book 1, not a pagination concern, and is bound to the importer like every other master |
 
@@ -927,6 +927,10 @@ internal/db/migrations/
                                 (354 of 940 recipes reach no Book 2 chapter)
   0017_recipe_version_gap       GAP-024, the recipe_version the Book 2 card schema requires
                                 and recipe_master does not carry
+  0018_book1_block_sources      book1_block_source: which provider rows fill each Book 1
+                                block, 37 hand-written rows. GAP-025 (no recipe imagery),
+                                GAP-026 (no red-flag/doctor-approach text on 27 blocks),
+                                GAP-027 (feeding stages stop at 216mo, blocks declare 228)
 ```
 
 **Migrations 0012 and 0013-0014 were authored on separate branches and merged after the
@@ -941,7 +945,7 @@ scripts/dev_db.fish down && scripts/dev_db.fish up
 go run ./cmd/import && go run ./cmd/enrich
 ```
 
-The check that it worked is `SELECT count(*) FROM gap_register` returning 24, not 16, 20 or 22.
+The check that it worked is `SELECT count(*) FROM gap_register` returning 27, not 16, 20, 22 or 24.
 
 ```
 internal/db/integrity_test.go   22 invariants + row counts + idempotency
@@ -956,9 +960,11 @@ internal/profile/               stored profile -> engine input: dated growth, th
 internal/profile/profile_test.go  round-trip, age derivation, suspected-allergen and
                                 acute-expiry conversion
 internal/book/                  Book 1 and Book 2 assembly, html/template rendering, PDF print
+internal/book/sources.go        the four Book 1 provider tables + age_feeding_stage_master
+internal/book/tracker.go        declared columns -> blank forms, and the has-content guard
 internal/book/set.go            one run -> both books, one asOf, omissions partitioned
 internal/book/set_test.go       both books produced, one instant, blocked whole, omission split
-internal/book/templates/        base + tokens.css, 8 Book 1 and 6 Book 2 block templates
+internal/book/templates/        base + tokens.css, 14 Book 1 and 7 Book 2 block templates
 internal/book/assemble_test.go  block and meal-category conservation, allergy status on paper
 internal/book/render_test.go    template dispatch, writing lines, typography floors
 internal/book/pdf_test.go       real print, skipped when no browser is installed
@@ -1035,6 +1041,97 @@ Set omissions are split into `profile_omissions`, `book1_omissions` and `book2_o
 omission both assemblers reported is a fact about the child's stored profile rather than about
 either book - a suspected allergen, an expired acute condition - and is listed once, so an
 operator is never left deciding whether a repeated line is one finding or two.
+
+### Book 1's content was already in the database
+
+Until 20 August 2026 a Book 1 for a four-year-old was eleven pages. Twenty-five of the
+thirty-two content blocks reported `has no template mapping and was not rendered` - accurate
+about the code and wrong about the data. The provider had shipped the content in four tables
+that migration `0013` imported and nothing queried:
+
+| Table | Rows | Fills |
+|---|---|---|
+| `book1_daily_life_module` | 13 | sleep, screens, teeth, toilet training, activity, school, behaviour, self-care, adolescent - each with a reference standard, a progress goal, red flags and a referral |
+| `book1_monitoring_template` | 18 | the column specification and frequency for every tracker |
+| `book1_illness_feeding_block` | 5 | fever, diarrhoea, vomiting, constipation, recovery |
+| `book1_evidence_source` | 13 | WHO and IAP citations, each with its stated limitation |
+
+`age_feeding_stage_master` (10 stages x 43 columns) was a fifth: the engine had read it since
+Phase 2 and the book never had. It is the provider's answer to "what should a parent know
+about feeding a child this age", written out in full sentences.
+
+**Reading `writable_fields` as a tracker's column headings is following the provider's layout
+declaration, not inventing a layout.** Every block row carries `table_or_format` ("Sleep diary
++ comparison table"), `writable_fields` ("Bedtime; sleep onset; waking; naps; night waking;
+snoring; parent note") and `monitoring_fields` ("Age/routine target vs actual"). That is a
+form specification. A blank form drawn from it invents nothing. Drafting the guidance prose
+those pages carry no text for still would, and is still forbidden.
+
+Three daily-life columns - `parent_actual_status`, `date_or_frequency`,
+`parent_example_or_note` - are empty on all thirteen rows, and empty by design: they are the
+parent's side of an ideal-versus-actual table. They render as writing lines, never as empty
+cells, because an empty cell reads as data nobody had.
+
+The map from block to source rows is hand-written in `book1_block_source` (migration `0018`,
+37 rows) because the workbook carries no foreign key between the tables - the join is by
+meaning, and a fuzzy name match would put a toilet-training red flag on a dental page. The
+reading is recorded in `docs/book1-block-sources.md` and asserted in both directions by
+`TestBlockSourceSeedResolvesBothWays`.
+
+Result: 31 of 32 blocks render, and a four-year-old's book is 42 pages.
+
+**B1-004 is the one block that stays unmapped, permanently.** Growth trend interpretation
+declares a z-score/percentile engine as its input. Interpreting a trend means computing
+against the WHO reference tables this project does not carry, and a trend stated without them
+is a clinical finding with no source. `TestOnlyTheZScoreBlockIsUnmapped` holds it there and
+names it, rather than counting omissions.
+
+**What conservation accounting could not see.** `rendered + reported == total` held at
+7-plus-25 exactly as well as it holds at 31-plus-1, which is how the book shipped nearly empty
+with a green suite. Four defects on this change were invisible to every count and were found
+only by printing a book and reading the pages:
+
+- Four feeding blocks shared one template and printed the identical twenty-row table four
+  times consecutively. Fixed by `stageFacet`, which gives each the slice its own
+  `table_or_format` declares; pinned by `TestTheFourFeedingBlocksDoNotPrintTheSamePage`.
+  B1-011 and B1-014 had the same defect on the milestone table.
+- B1-016 populated a tracker that `B1-ILLNESS-01` never rendered - content present in the
+  model, absent from the page, with both halves passing their own check. Fixed by extracting
+  a single `B1-GRID`; pinned by `TestEveryContentKindReachesThePage`, which renders every
+  content kind through the real templates and requires each to appear.
+- `break-inside: avoid` on a whole daily-life domain made it unsplittable, so it jumped the
+  page and left a section band alone on a sheet. A domain runs taller than a page, so "keep
+  together" is a promise the fragmenter cannot keep. Only the small units stay whole now.
+- An empty `<div class="page-break">` after the cover was harmless while `.page-break` meant
+  `break-after` and became a blank page 2 the moment it meant `break-before`.
+
+Page fitting is deliberate and coupled: `trackerRowsByFrequency` in `tracker.go` and the row
+height on `.tracker td` in `tokens.css` are set against each other so a domain and its grid
+share one page. Changing either without re-printing a book and looking at it will silently
+reintroduce two half-empty pages per domain.
+
+Where the two masters say the same thing, it prints once. A daily-life domain's
+`concern_or_red_flag` and its monitoring template's `alarm_column` are the same warning in
+different words ("Dental pain, swelling, trauma, visible caries concern" against
+"Pain/swelling/trauma/caries concern"); the fuller sentence prints and the shorter copy is
+suppressed. That is declining to print the same content twice, not dropping provider content.
+
+**Recipe photographs do not exist and are not coming from a dataset** (`GAP-025`). No workbook
+carries an image column and neither loaded external dataset has one. The Tier 2 image sets
+label dish types, not the 940 combinatorially-named provider recipes, so a join would
+reproduce the wrong-match failure already measured on method text - and neither has a use
+basis for operational output. Filling this needs photographs commissioned against the recipe
+list, not another join.
+
+**Twenty-seven blocks declare a red-flag or doctor-approach box the workbook ships no text
+for** (`GAP-026`). Where a mapped source row supplies `concern_or_red_flag` or
+`approach_doctor_or_specialist`, it prints verbatim. Where none does, the page prints the
+heading and a writing line. This is the item to chase the provider on.
+
+**Both books carry a contents page**, built from the sections that actually rendered and never
+from the block or meal-category master - both books omit units routinely, and a contents entry
+for a page the book does not contain sends a reader hunting for nothing. Neither carries page
+numbers: Chromium assigns those at print time and the template cannot know them.
 
 ### What the books know about a child, and what they do not
 

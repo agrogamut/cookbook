@@ -309,7 +309,7 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			}
 
 		case "B1-DAILY-01":
-			sec.Domains = dailyDomains(src.Daily[blockID], src.Monitoring[blockID])
+			sec.Domains, sec.Trackers = dailyDomains(src.Daily[blockID], src.Monitoring[blockID])
 
 		case "B1-ILLNESS-01":
 			for _, i := range src.Illness[blockID] {
@@ -736,34 +736,58 @@ func allergyStatus(confirmed, suspected []string) string {
 // and behaviour) and two monitoring templates, and they line up, while B1-023 carries two
 // modules against one shared tracker. Guessing a correspondence where the seed declares none
 // would put a behaviour grid under a school heading.
-func dailyDomains(mods []DailyLifeModule, mons []MonitoringTemplate) []DailyDomain {
+func dailyDomains(mods []DailyLifeModule, mons []MonitoringTemplate) ([]DailyDomain, []TrackerSpec) {
 	out := make([]DailyDomain, 0, len(mods))
-	for i, m := range mods {
-		d := DailyDomain{
+	for _, m := range mods {
+		out = append(out, DailyDomain{
 			ID: m.DailyLifeID, Domain: m.Domain, AgeContext: m.AgeContext,
 			Reference: m.Reference, Goal: m.Goal, RedFlag: m.RedFlag,
 			Referral: m.Referral, AILimit: m.AILimit, Display: m.Display,
-		}
-		switch {
-		case len(mons) == len(mods):
-			t := trackerFromMonitoring(mons[i])
-			// The module's own book1_display names the form ("Sleep diary", "Dental
-			// tracker"), which is what a parent looking for it on the page reads. The
-			// monitoring template's section/parameter title is an internal label.
-			if m.Display != "" {
-				t.Title = m.Display
-			}
-			d.Tracker = &t
-		case len(mons) > 0:
-			t := trackerFromMonitoring(mons[0])
-			if m.Display != "" {
-				t.Title = m.Display
-			}
-			d.Tracker = &t
-		}
-		out = append(out, d)
+		})
 	}
-	return out
+
+	// One tracker per domain only when the counts line up. B1-030 is the case that works that
+	// way: two modules (school, behaviour) and two monitoring templates, one each.
+	if len(mons) == len(mods) {
+		for i := range out {
+			t := trackerFromMonitoring(mons[i])
+			// The module's own book1_display names the form -- "Sleep diary", "Dental
+			// tracker" -- which is what a parent looking for it on the page reads. The
+			// monitoring template's section/parameter title is an internal label.
+			if out[i].Display != "" {
+				t.Title = out[i].Display
+			}
+			// The two masters say the same thing in two columns, and printing both put two
+			// warning boxes on one page saying the same words twice: the dental domain's
+			// "Dental pain, swelling, trauma, visible caries concern" against its tracker's
+			// "Pain/swelling/trauma/caries concern". The domain's is the fuller sentence, so
+			// it is the one that prints; suppressing the shorter copy is not dropping
+			// provider content, it is declining to print the same content twice. Same for the
+			// reviewer line against the domain's own referral.
+			if out[i].RedFlag != "" {
+				t.Alarm = ""
+			}
+			if out[i].Referral != "" {
+				t.Review = ""
+			}
+			out[i].Tracker = &t
+		}
+		return out, nil
+	}
+
+	// Otherwise the block's trackers belong to the block, not to any one domain, and print
+	// once after all of them.
+	//
+	// B1-023 is why. It carries two modules -- toilet-training readiness and daytime progress
+	// -- against one shared PM-TOIL-01, and attaching that one tracker to each domain printed
+	// the identical seven-column grid twice on consecutive pages. Two copies of one form is
+	// not two forms; it is the same page turning up again, which is exactly what a reader
+	// calls filler.
+	var shared []TrackerSpec
+	for _, m := range mons {
+		shared = append(shared, trackerFromMonitoring(m))
+	}
+	return out, shared
 }
 
 // dashboardBlocks are the two blocks that summarise across every domain rather than naming

@@ -13,10 +13,10 @@ func TestTrackerRowsFollowsTheDeclaredFrequency(t *testing.T) {
 		want      int
 	}{
 		{"Selected week", 7},
-		{"Daily / visit", 14},
-		{"Daily/selected days", 14},
-		{"Weekly", 8},
-		{"Weekly / as needed", 8},
+		{"Daily / visit", 8},
+		{"Daily/selected days", 8},
+		{"Weekly", 7},
+		{"Weekly / as needed", 7},
 		{"Monthly/visit", 6},
 		{"At follow-up", 3},
 		{"As advised / routine visit", 4},
@@ -25,7 +25,7 @@ func TestTrackerRowsFollowsTheDeclaredFrequency(t *testing.T) {
 		{"Term/follow-up", 4},
 		{"During illness", 7},
 		{"As needed", 6},
-		{"Each vaccine", 12},
+		{"Each vaccine", 8},
 		{"", defaultTrackerRows},
 		{"every third blue moon", defaultTrackerRows},
 	} {

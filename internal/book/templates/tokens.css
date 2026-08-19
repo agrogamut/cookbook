@@ -287,7 +287,32 @@ tbody tr:nth-child(even) { background: var(--zebra); }
    The pieces that must stay whole are small enough to be kept whole individually: the
    reference table, each tracker row, and the red-flag callout. Tables repeat their headers
    natively across a break, so a split tracker is still readable. */
-.domain, .illness, .tracker { margin: 0 0 8mm; }
+.domain, .illness { margin: 0 0 8mm; }
+
+/* A tracker moves whole or not at all.
+
+   This is safe only because the row counts are capped -- see trackerRowsByFrequency in
+   tracker.go. A tracker is at most ten rows plus a header and a threshold callout, about
+   105mm, so it always fits on a fresh page and "keep together" is a promise the fragmenter
+   can actually keep. The same declaration on .domain could not be kept, because a domain runs
+   taller than a page, and Chromium resolved that by moving the whole domain and leaving a
+   section band alone on its own sheet.
+
+   Without it the grid split at whatever row the page ended on, leaving one or two writing
+   lines and a repeated header stranded on a three-quarters-empty continuation sheet. */
+.tracker { margin: 0 0 8mm; break-inside: avoid; }
+
+/* A grid whose rows come from the data rather than from a row count -- the two dashboards,
+   eighteen monitoring areas each -- is taller than a page, so "keep together" is a promise
+   the fragmenter cannot keep and it responds by leaving the section band alone on its own
+   sheet. These split, repeating their header, which is what a long table should do. */
+.tracker.tall { break-inside: auto; }
+
+/* A prefilled row already carries its label, so it does not need the 6.5mm writing height a
+   blank row does -- only the cells the parent fills do, and a writing line sets its own. At
+   the full height the eighteen dashboard rows ran one row past the page and that single row
+   printed on a sheet of its own. */
+.tracker.tall td { height: auto; padding: 1.8mm 3mm; }
 
 /* A heading is never the last thing on a page. break-after: avoid is safe here in a way it
    is not on .section-header -- what follows a domain heading is a short definition table
@@ -331,9 +356,12 @@ tbody tr:nth-child(even) { background: var(--zebra); }
 }
 .tracker-meta { font-size: var(--caption-size); color: var(--ink-soft); margin: 0 0 2mm; }
 
-/* A tracker row must be tall enough to write in. 7mm is roughly a line of adult handwriting;
-   the default table padding produces about 4mm, which prints a form nobody can use. */
-.tracker td, .domain td:last-child { height: 7mm; }
+/* A tracker row must be tall enough to write in. The default table padding produces about
+   4mm, which prints a form nobody can use; 6.5mm is a line of adult handwriting. It is also
+   half of a page budget -- see trackerRowsByFrequency in tracker.go, which sets the row
+   counts against this height so a domain and its grid fit one page. Change either and
+   re-print a book. */
+.tracker td, .domain td:last-child { height: 6.5mm; }
 .tracker .write-line, .domain .write-line { min-width: 20mm; width: 90%; }
 
 .stage-band {
@@ -363,3 +391,12 @@ tbody tr:nth-child(even) { background: var(--zebra); }
 /* break-before, not break-after. See body.html: break-after on every section emitted one
    after the last section too, and the book ended on a blank sheet. */
 .page-break { break-before: page; }
+
+/* Book 2's contents page groups by meal. break-after: avoid on the meal heading so a meal
+   name is never the last thing on a page with its recipes overleaf. */
+.toc-meal {
+  color: var(--brand-deep);
+  font-size: 12pt;
+  margin: 6mm 0 2mm;
+  break-after: avoid;
+}
