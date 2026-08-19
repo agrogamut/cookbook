@@ -958,7 +958,7 @@ internal/profile/profile_test.go  round-trip, age derivation, suspected-allergen
 internal/book/                  Book 1 and Book 2 assembly, html/template rendering, PDF print
 internal/book/set.go            one run -> both books, one asOf, omissions partitioned
 internal/book/set_test.go       both books produced, one instant, blocked whole, omission split
-internal/book/templates/        base + tokens.css, 7 Book 1 and 6 Book 2 block templates
+internal/book/templates/        base + tokens.css, 8 Book 1 and 6 Book 2 block templates
 internal/book/assemble_test.go  block and meal-category conservation, allergy status on paper
 internal/book/render_test.go    template dispatch, writing lines, typography floors
 internal/book/pdf_test.go       real print, skipped when no browser is installed
@@ -1008,6 +1008,42 @@ Set omissions are split into `profile_omissions`, `book1_omissions` and `book2_o
 omission both assemblers reported is a fact about the child's stored profile rather than about
 either book - a suspected allergen, an expired acute condition - and is listed once, so an
 operator is never left deciding whether a repeated line is one finding or two.
+
+### What the books know about a child, and what they do not
+
+The child's own inputs live in `child_profile` and its four child tables. This is the whole
+list, because "do we collect X?" is the question that decides whether a page can print X or
+must leave a writing line for it.
+
+| Input | Collected? | On the page |
+|---|---|---|
+| Name, date of birth, sex, language | yes, `child_profile` | Child Profile (B1-001), printed as stored |
+| Diet, region, cuisine, budget, prep/cook time | yes, `child_profile` | drives Book 2 selection |
+| Allergies, three-state | yes, `child_allergen` | Child Profile, confirmed and suspected both named |
+| Dated growth measurements | yes, `child_growth_measurement` - date, weight, height, head circumference, three z-scores, interpretation, measured-by | Growth Monitoring (B1-003), one row per visit, oldest first |
+| Clinical conditions | yes, `child_clinical_condition` | drives the stop gate and clinical filters |
+| Food likes/dislikes | yes, `child_preference` | ranker only |
+| **Vaccine history** | **no** - `book1_vaccine_schedule` is the IAP reference schedule, not this child's record | the tracker prints the schedule with blank columns to write in |
+| **Development observations** | **no** - `book1_development_milestone` is the reference, not this child's record | the same: reference skill, blank observation columns |
+| **Priority goals** | **no** - B1-002 (Consultation Summary, "Goals agreed with family") has no input behind it | unmapped, reported as an omission |
+| **Clinician approval ID** | **no** - and see below | nothing prints one |
+
+The four marked no are absent inputs, not rendering gaps. Printing any of them today would
+mean inventing a vaccination the child may not have had, a milestone nobody observed, a goal
+nobody agreed or an approval nobody gave. Each needs a table, a write path and an operator
+surface before it can appear.
+
+**The approval id is the one to be careful with.** `human_approval` on a block names a *role*
+("Clinical editor", "Consultant + clinical editor"), not a person and not an id. If an
+approval field is ever added it records a human's own sign-off and is written by that human;
+nothing in this system may populate it, which is the same rule as "never mark anything
+approved locally" applied to a new column.
+
+`B1-004` (growth trend interpretation) is deliberately left unmapped next to `B1-003`. Its
+declared input is a "z-score/percentile engine": interpreting a trend means computing against
+the WHO reference tables, which this project does not carry, and a trend stated without them
+is a clinical finding with no source. Recorded z-scores print because a clinician entered
+them; none is ever computed.
 
 Two rules the package enforces and that must not be relaxed:
 

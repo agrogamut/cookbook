@@ -209,3 +209,126 @@ func TestPartitionOmissions(t *testing.T) {
 		t.Fatal("empty input must still produce empty slices, not nil")
 	}
 }
+
+// The child's own recorded facts must reach the page they are recorded for. Date of birth,
+// sex and language are stored on child_profile and named by B1-001's own
+// personalization_inputs, and each was stored but unprinted -- a book that knows a child's
+// birth date and prints only a derived age gives a parent no way to check the book is about
+// their child.
+func TestIdentityFactsReachTheProfilePage(t *testing.T) {
+	pool := testPool(t)
+	asOf := time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC)
+
+	s := profile.Stored{
+		ChildID:     "BOOK-TEST-IDENTITY",
+		DisplayName: "Identity Child",
+		DateOfBirth: time.Date(2022, 5, 1, 0, 0, 0, 0, time.UTC),
+		Sex:         "female",
+		LanguageID:  "bn",
+	}
+
+	b, _, err := AssembleBook1(context.Background(), pool, s, asOf)
+	if err != nil {
+		t.Fatalf("AssembleBook1: %v", err)
+	}
+
+	var out strings.Builder
+	if err := RenderHTML(&out, Kind1, b.Metadata, b); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	page := out.String()
+
+	for label, want := range map[string]string{
+		"date of birth": "2022-05-01",
+		"sex":           "female",
+		"language":      "bn",
+		"name":          "Identity Child",
+	} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("the profile page must print the child's %s (%q)", label, want)
+		}
+	}
+}
+
+// A dated growth record must print as the dates and values a clinician entered, and a
+// measurement not taken at a visit must print as a line to write on -- never a zero, which
+// reads as a measured value of nothing.
+func TestGrowthTablePrintsWhatWasMeasuredAndOnlyThat(t *testing.T) {
+	pool := testPool(t)
+	asOf := time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC)
+
+	weight, height, head := 14.2, 96.5, 49.1
+	z := -0.4
+	s := profile.Stored{
+		ChildID:     "BOOK-TEST-GROWTH",
+		DisplayName: "Growth Child",
+		DateOfBirth: time.Date(2022, 5, 1, 0, 0, 0, 0, time.UTC),
+		Growth: []profile.GrowthMeasurement{
+			// Newest first, the order profile.Load returns.
+			{
+				MeasuredOn: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+				WeightKg:   &weight, HeightCm: &height,
+				WeightForAgeZ: &z, Interpretation: "tracking along the same centile",
+				MeasuredBy: "Dr Sen",
+			},
+			{
+				// An earlier visit that recorded head circumference but no weight: the
+				// weight cell must be a writing line, not a zero.
+				MeasuredOn: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC),
+				HeadCircumferenceCm: &head,
+			},
+		},
+	}
+
+	b, _, err := AssembleBook1(context.Background(), pool, s, asOf)
+	if err != nil {
+		t.Fatalf("AssembleBook1: %v", err)
+	}
+
+	var growth *Section
+	for i := range b.Sections {
+		if b.Sections[i].TemplateID == "B1-GROWTH-01" {
+			growth = &b.Sections[i]
+		}
+	}
+	if growth == nil {
+		t.Fatal("a child with recorded measurements must get the growth monitoring block")
+	}
+	if len(growth.Growth) != 2 {
+		t.Fatalf("growth table has %d rows, want 2", len(growth.Growth))
+	}
+
+	// Oldest first: a monitoring table reads as a trend down the page.
+	if growth.Growth[0].MeasuredOn != "2026-01-05" {
+		t.Fatalf("first row is %s, want the oldest visit", growth.Growth[0].MeasuredOn)
+	}
+	if growth.Growth[0].WeightKg != "" {
+		t.Fatalf("a visit that recorded no weight must leave it empty, got %q",
+			growth.Growth[0].WeightKg)
+	}
+	// Nothing is carried forward from the later visit to fill the gap.
+	if strings.Contains(growth.Growth[0].HeadCircumCm, "14.2") {
+		t.Fatal("a measurement must never be carried between visits")
+	}
+	if growth.Growth[1].ZScores != "weight-for-age -0.4" {
+		t.Fatalf("recorded z-score = %q", growth.Growth[1].ZScores)
+	}
+	// No z-score is computed: the earlier visit recorded none and must show none.
+	if growth.Growth[0].ZScores != "" {
+		t.Fatalf("an unrecorded z-score must stay empty, got %q", growth.Growth[0].ZScores)
+	}
+
+	var out strings.Builder
+	if err := RenderHTML(&out, Kind1, b.Metadata, b); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	page := out.String()
+	for _, want := range []string{"2026-01-05", "2026-07-01", "14.2 kg", "49.1 cm", "Dr Sen"} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("the printed growth table must contain %q", want)
+		}
+	}
+	if strings.Contains(page, "0.0 kg") {
+		t.Fatal("an unrecorded measurement must never print as zero")
+	}
+}

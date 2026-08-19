@@ -114,8 +114,14 @@ export function BookGenerator() {
             <Button variant="outline" onClick={downloadBoth} disabled={busy}>
               Download both (.zip)
             </Button>
-            <Button variant="ghost" onClick={() => downloadOne(shown)} disabled={busy}>
-              Download {shown === "book1" ? "Book 1" : "Book 2"} only
+            {/* Both single downloads are always offered, not just the tab that happens to be
+                open: a run produced both books, so an operator who wants one of them should
+                not have to switch tabs to reach it. */}
+            <Button variant="ghost" onClick={() => downloadOne("book1")} disabled={busy}>
+              Book 1 PDF
+            </Button>
+            <Button variant="ghost" onClick={() => downloadOne("book2")} disabled={busy}>
+              Book 2 PDF
             </Button>
           </>
         )}

@@ -284,7 +284,7 @@ func TestEveryBlockIsEitherRenderedOrReported(t *testing.T) {
 // every block is rendered or reported; it says nothing about whether a rendered block has
 // anything in it, which is exactly how a heading over an empty table shipped once already
 // on this branch (D1). This is the other half: for every section AssembleBook1 puts in the
-// book, at least one of Rows or Callout must be non-empty.
+// book, at least one of Rows, Growth or Callout must be non-empty.
 //
 // B1-END-01 (block B1-022) is the one deliberate exception. Its template reads
 // Book1.Metadata directly -- book_version, release_id, generation_date, review_status --
@@ -303,9 +303,9 @@ func TestRenderedSectionsAreNotEmpty(t *testing.T) {
 			if sec.TemplateID == "B1-END-01" {
 				continue
 			}
-			if len(sec.Rows) == 0 && sec.Callout == nil {
-				t.Fatalf("at %d months: block %s (%s) was rendered with no rows and no "+
-					"callout -- a heading over an empty table, not a book",
+			if len(sec.Rows) == 0 && len(sec.Growth) == 0 && sec.Callout == nil {
+				t.Fatalf("at %d months: block %s (%s) was rendered with no rows, no growth "+
+					"table and no callout -- a heading over an empty table, not a book",
 					months, sec.BlockID, sec.TemplateID)
 			}
 		}

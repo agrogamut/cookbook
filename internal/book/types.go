@@ -32,9 +32,19 @@ type Metadata struct {
 // stored measurement or a stored declaration. Nothing here is computed except AgeMonths,
 // which is derived from date of birth by internal/profile.
 type ChildSummary struct {
-	DisplayName   string  `json:"display_name"`
-	AgeMonths     int     `json:"age_months"`
-	AgeLabel      string  `json:"age_label"`
+	DisplayName string `json:"display_name"`
+	// DateOfBirth is printed as well as the age derived from it. The age is what the book
+	// reasons with, but a parent checking the book is about their child reads the birth date,
+	// and a clinician re-deriving an age needs the input rather than the result.
+	DateOfBirth string `json:"date_of_birth"`
+	AgeMonths   int    `json:"age_months"`
+	AgeLabel    string `json:"age_label"`
+	// Sex and Language are recorded on the profile and named by B1-001's own
+	// personalization_inputs, so they are printed as stored. Sex never changes recipe
+	// ranking -- the provider's sex_applicability is "All" on every row -- and it is on the
+	// page as identity, not as an input to any selection.
+	Sex      string `json:"sex,omitempty"`
+	Language string `json:"language,omitempty"`
 	FoodPractice  string  `json:"food_practice,omitempty"`
 	AllergyStatus string  `json:"allergy_status"`
 	WeightKg      *string `json:"weight_kg"`
@@ -51,6 +61,10 @@ type Section struct {
 	Title      string   `json:"title"`
 	Subtitle   string   `json:"subtitle,omitempty"`
 	Rows       []Row    `json:"rows,omitempty"`
+	// Growth carries B1-003's dated anthropometry table. It is a distinct shape rather than
+	// more Rows because a monitoring table is one row per visit across several measured
+	// columns, which Row's label/reference/note shape cannot hold.
+	Growth []GrowthRow `json:"growth,omitempty"`
 	Callout    *Callout `json:"callout,omitempty"`
 }
 
@@ -68,6 +82,26 @@ type Row struct {
 // Severity is "info" or "warning". The contract sets clinical_warning_visibility to high and
 // asks that colour never be the only carrier of meaning, so the template prints the severity
 // as a word as well as a colour.
+// GrowthRow is one dated anthropometry record, printed exactly as a clinician recorded it.
+//
+// Every field is a formatted string, and empty means "not recorded at this visit" -- a real
+// measurement never formats to empty, so the template can render a writing line for the gap
+// without a second nil flag. A visit that weighed a child but did not measure head
+// circumference must print a line in that column, never a zero.
+//
+// ZScores holds what a clinician entered, never anything computed here. Deriving a z-score
+// needs the WHO reference tables and the growth-trend engine that B1-004 names and this
+// project does not have, so an unrecorded z-score stays blank rather than being calculated.
+type GrowthRow struct {
+	MeasuredOn     string `json:"measured_on"`
+	WeightKg       string `json:"weight_kg,omitempty"`
+	HeightCm       string `json:"height_cm,omitempty"`
+	HeadCircumCm   string `json:"head_circumference_cm,omitempty"`
+	ZScores        string `json:"z_scores,omitempty"`
+	Interpretation string `json:"interpretation,omitempty"`
+	MeasuredBy     string `json:"measured_by,omitempty"`
+}
+
 type Callout struct {
 	Severity string `json:"severity"`
 	Heading  string `json:"heading"`

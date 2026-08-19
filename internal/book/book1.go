@@ -24,6 +24,15 @@ import (
 // layout for clinical content is the same class of error as inventing its text.
 var blockTemplate = map[string]string{
 	"B1-001": "B1-PROFILE-01",
+	// B1-003 is the provider's "Writable monitoring table" of dated anthropometry, and its
+	// declared inputs -- DOB, sex, weight, length/height, BMI and HC where age-appropriate --
+	// are exactly what child_growth_measurement stores.
+	//
+	// B1-004 (growth trend interpretation) is deliberately NOT mapped alongside it. Its
+	// declared input is a "z-score/percentile engine", which this project does not have:
+	// interpreting a trend means computing against the WHO reference tables, and a trend
+	// stated without them would be a clinical finding with no source. It stays an omission.
+	"B1-003": "B1-GROWTH-01",
 	"B1-009": "B1-VAX-01",
 	"B1-011": "B1-DEV-01",
 	"B1-012": "B1-RED-01",
@@ -89,8 +98,13 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		},
 		Child: ChildSummary{
 			DisplayName: s.DisplayName,
+			DateOfBirth: s.DateOfBirth.UTC().Format("2006-01-02"),
 			AgeMonths:   cp.AgeMonths,
 			AgeLabel:    ageLabel(cp.AgeMonths),
+			// As stored. There is no language master to resolve an id against, and
+			// inventing a display name for one would be a value with no source.
+			Sex:      s.Sex,
+			Language: s.LanguageID,
 			// Both lists, never only the confirmed one -- see allergyStatus.
 			AllergyStatus: allergyStatus(cp.Allergens, cp.SuspectedAllergens),
 		},
@@ -218,6 +232,15 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 				continue
 			}
 			sec.Callout = &callout
+
+		case "B1-GROWTH-01":
+			sec.Growth = growthRows(s.Growth)
+			if len(sec.Growth) == 0 {
+				skipped = append(skipped, omissionBlock+fmt.Sprintf(
+					"%s (%s) has no recorded growth measurements for this child and was "+
+						"not rendered", blockID, sectionTitle))
+				continue
+			}
 
 		case "B1-END-01":
 			// No section content: the template reads Metadata directly (book_version,
@@ -392,10 +415,69 @@ func globalRedFlagCallout(milestones []developmentMilestoneRow) (Callout, bool) 
 // parent to write in: it is a fact the corpus can derive, from age against
 // age_feeding_stage. A blank line invites someone to hand-enter a value the system should
 // already know. It returns as a row when that join is built, not before.
+// growthRows turns the child's stored measurements into B1-003's monitoring table, oldest
+// first so the page reads as a trend down the column rather than backwards.
+//
+// profile.Load returns them newest first, which is right for "what is this child's current
+// weight" and wrong for a monitoring table, so they are reversed here rather than the loader
+// being changed under the other callers that depend on its order.
+//
+// A measurement absent from a visit formats to empty and the template draws a writing line.
+// Nothing is carried forward from an earlier visit to fill it: a weight from three months ago
+// printed on today's row would read as today's weight.
+func growthRows(ms []profile.GrowthMeasurement) []GrowthRow {
+	rows := make([]GrowthRow, 0, len(ms))
+	for i := len(ms) - 1; i >= 0; i-- {
+		m := ms[i]
+		r := GrowthRow{
+			MeasuredOn:     m.MeasuredOn.UTC().Format("2006-01-02"),
+			Interpretation: m.Interpretation,
+			MeasuredBy:     m.MeasuredBy,
+		}
+		if m.WeightKg != nil {
+			r.WeightKg = fmt.Sprintf("%.1f kg", *m.WeightKg)
+		}
+		if m.HeightCm != nil {
+			r.HeightCm = fmt.Sprintf("%.1f cm", *m.HeightCm)
+		}
+		if m.HeadCircumferenceCm != nil {
+			r.HeadCircumCm = fmt.Sprintf("%.1f cm", *m.HeadCircumferenceCm)
+		}
+		r.ZScores = formatZScores(m)
+		rows = append(rows, r)
+	}
+	return rows
+}
+
+// formatZScores renders whichever z-scores a clinician recorded, labelled so a reader knows
+// which is which, and nothing at all when none were recorded.
+//
+// Only recorded values appear. A missing z-score is not shown as a dash or a zero, both of
+// which read as a measurement, and none is ever computed here -- see GrowthRow.ZScores.
+func formatZScores(m profile.GrowthMeasurement) string {
+	var parts []string
+	for _, z := range []struct {
+		label string
+		value *float64
+	}{
+		{"weight-for-age", m.WeightForAgeZ},
+		{"height-for-age", m.HeightForAgeZ},
+		{"BMI-for-age", m.BMIForAgeZ},
+	} {
+		if z.value != nil {
+			parts = append(parts, fmt.Sprintf("%s %+.1f", z.label, *z.value))
+		}
+	}
+	return strings.Join(parts, "; ")
+}
+
 func profileRows(c ChildSummary) []Row {
 	rows := []Row{
 		{Label: "Child's name", Note: c.DisplayName},
+		{Label: "Date of birth", Note: c.DateOfBirth},
 		{Label: "Age", Note: c.AgeLabel},
+		{Label: "Sex", Note: c.Sex},
+		{Label: "Language", Note: c.Language},
 		{Label: "Allergy status", Note: c.AllergyStatus},
 	}
 

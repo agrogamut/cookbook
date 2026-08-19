@@ -1,0 +1,61 @@
+{{ define "B1-GROWTH-01" }}
+{{/* B1-003, the provider's "Writable monitoring table". Each row is one visit as a clinician
+     recorded it; a measurement not taken at that visit renders as a line to write on rather
+     than a zero or a dash, both of which would read as a measurement that was taken.
+
+     There is no interpretation column beyond the one a clinician wrote. Reading a trend out
+     of these numbers is B1-004, which needs the z-score reference tables this project does
+     not carry, so the table reports and does not conclude. */}}
+<table>
+  <thead>
+    <tr>
+      <th>Date</th><th>Weight</th><th>Height / length</th><th>Head circumference</th>
+      <th>Recorded z-scores</th><th>Clinician note</th><th>Measured by</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{ range .Growth }}
+    <tr>
+      <td class="mono">{{ .MeasuredOn }}</td>
+      <td class="mono">{{ if .WeightKg }}{{ .WeightKg }}{{ else }}<span class="write-line"></span>{{ end }}</td>
+      <td class="mono">{{ if .HeightCm }}{{ .HeightCm }}{{ else }}<span class="write-line"></span>{{ end }}</td>
+      <td class="mono">{{ if .HeadCircumCm }}{{ .HeadCircumCm }}{{ else }}<span class="write-line"></span>{{ end }}</td>
+      <td class="mono">{{ if .ZScores }}{{ .ZScores }}{{ else }}<span class="write-line"></span>{{ end }}</td>
+      <td>{{ if .Interpretation }}{{ .Interpretation }}{{ else }}<span class="write-line"></span>{{ end }}</td>
+      <td>{{ if .MeasuredBy }}{{ .MeasuredBy }}{{ else }}<span class="write-line"></span>{{ end }}</td>
+    </tr>
+    {{ end }}
+    {{/* Blank rows for the next visits. This is stationery, not data: the provider asked for
+         a writable monitoring table, and a table with nowhere to write the next measurement
+         is not one. Nothing is pre-filled, so no row here states anything about the child. */}}
+    <tr>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+    </tr>
+    <tr>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+    </tr>
+    <tr>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+      <td><span class="write-line"></span></td>
+    </tr>
+  </tbody>
+</table>
+{{ with .Callout }}{{ template "callout" . }}{{ end }}
+{{ end }}

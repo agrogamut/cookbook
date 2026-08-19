@@ -12,6 +12,7 @@
          content the wrong visual treatment, which is the failure B1-RED-01 exists to
          prevent. AssembleBook1 has already reported the block as skipped. */}}
     {{ if eq .TemplateID "B1-PROFILE-01" }}{{ template "B1-PROFILE-01" . }}
+    {{ else if eq .TemplateID "B1-GROWTH-01" }}{{ template "B1-GROWTH-01" . }}
     {{ else if eq .TemplateID "B1-VAX-01" }}{{ template "B1-VAX-01" . }}
     {{ else if eq .TemplateID "B1-DEV-01" }}{{ template "B1-DEV-01" . }}
     {{ else if eq .TemplateID "B1-RED-01" }}{{ template "B1-RED-01" . }}
