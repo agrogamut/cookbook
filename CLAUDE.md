@@ -991,8 +991,10 @@ opposite operator responses, so they are never merged.
 Two rules the package enforces and that must not be relaxed:
 
 - **The special-care stop gate blocks both books.** A declared special-care condition
-  returns 409 with the provider's mandatory reviewer, for Book 1 as well as Book 2 - Book 1
-  runs no engine of its own, so the gate is applied in the handler for both.
+  returns 409 with the provider's mandatory reviewer, for Book 1 as well as Book 2. Book 1
+  runs no engine of its own, so `AssembleBook1` queries the gate directly rather than reading
+  a block reason off an engine result; both assemblers return `ErrBlocked` and the handler
+  routes it to the same 409.
 - **Every unit of a book is either rendered or reported.** Block-level and category-level
   omissions carry the `[block] ` and `[meal category] ` markers and are counted against the
   corpus total by the conservation tests. A row left out of a block that did render is

@@ -98,27 +98,51 @@ func TestVaccinationTrackerNeverPrintsADate(t *testing.T) {
 	}
 }
 
-// An unobserved value renders as a writing line, never as a number. B1-DEV-01 is the block
-// that carries the case on paper: this project observed no milestone, so the observation,
-// date and concern columns are the parent's and the clinician's to fill in, and printing a
-// 0 or an "n/a" in any of them would read as a finding nobody made.
-func TestUnobservedValueRendersAsAWritingLine(t *testing.T) {
-	b := Book1{
-		Metadata: Metadata{Language: "en", ReviewStatus: "Draft"},
-		Sections: []Section{{
-			TemplateID: "B1-DEV-01", Title: "Development monitoring",
-			Rows: []Row{{Label: "Gross motor", Reference: "Sits without support"}},
-		}},
+// An unrecorded value renders as a writing line, never as a number or a dash.
+//
+// B1-PROFILE-01 rather than B1-DEV-01: the development table's writing lines are unconditional
+// literals in the template, so a test pointed at it passes whatever the data says and can
+// never fail. The profile table branches on the value, which is the behaviour worth pinning,
+// so this asserts both directions -- a blank renders a line, and a present value renders
+// itself and no line.
+//
+// The element, not the class name: tokens.css defines a .write-line rule and is inlined into
+// every render, so a substring test for "write-line" matches the stylesheet on any input and
+// proves nothing about the row.
+func TestUnrecordedValueRendersAsAWritingLine(t *testing.T) {
+	render := func(t *testing.T, rows []Row) string {
+		t.Helper()
+		b := Book1{
+			Metadata: Metadata{Language: "en", ReviewStatus: "Draft"},
+			Sections: []Section{{
+				TemplateID: "B1-PROFILE-01", Title: "Child profile", Rows: rows,
+			}},
+		}
+		var buf bytes.Buffer
+		if err := RenderHTML(&buf, Kind1, b.Metadata, b); err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		return buf.String()
 	}
-	var buf bytes.Buffer
-	if err := RenderHTML(&buf, Kind1, b.Metadata, b); err != nil {
-		t.Fatalf("render: %v", err)
+
+	const line = `<span class="write-line">`
+
+	blank := render(t, []Row{{Label: "Feeding stage"}})
+	if !strings.Contains(blank, line) {
+		t.Fatal("an unrecorded value must render as a writing line")
 	}
-	if !strings.Contains(buf.String(), "write-line") {
-		t.Fatal("an unobserved value must render as a writing line")
+	if strings.Contains(blank, ">0<") || strings.Contains(blank, "n/a") {
+		t.Fatal("an unrecorded value must never render as zero or as a dash")
 	}
-	if strings.Contains(buf.String(), ">0<") {
-		t.Fatal("an unobserved value must never render as zero")
+
+	// The other direction, without which the assertion above would pass on a template that
+	// prints a writing line unconditionally.
+	filled := render(t, []Row{{Label: "Age", Note: "4 years 3 months"}})
+	if !strings.Contains(filled, "4 years 3 months") {
+		t.Fatal("a recorded value must render itself")
+	}
+	if strings.Contains(filled, line) {
+		t.Fatal("a recorded value must not also render a writing line")
 	}
 }
 

@@ -2,9 +2,6 @@ package book
 
 import "time"
 
-// Metadata carries the three release footer fields the template contract names
-// (book_version, release_id, generation_date). It is not the provider schema's
-// book_metadata object -- see the Book1 doc comment for why.
 // Omission scope markers. An assembler reports two different things through one skip slice:
 // a whole unit of the book that is absent, and a note about rows left out of a unit that did
 // render. The conservation checks count only the first kind, and they match on these
@@ -15,6 +12,9 @@ const (
 	omissionMealCategory = "[meal category] "
 )
 
+// Metadata carries the three release footer fields the template contract names
+// (book_version, release_id, generation_date). It is not the provider schema's
+// book_metadata object -- see the Book1 doc comment for why.
 type Metadata struct {
 	Title          string    `json:"title"`
 	BookVersion    string    `json:"book_version"`
@@ -35,7 +35,6 @@ type ChildSummary struct {
 	DisplayName   string  `json:"display_name"`
 	AgeMonths     int     `json:"age_months"`
 	AgeLabel      string  `json:"age_label"`
-	FeedingStage  string  `json:"feeding_stage,omitempty"`
 	FoodPractice  string  `json:"food_practice,omitempty"`
 	AllergyStatus string  `json:"allergy_status"`
 	WeightKg      *string `json:"weight_kg"`

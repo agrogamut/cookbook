@@ -385,13 +385,17 @@ func globalRedFlagCallout(milestones []developmentMilestoneRow) (Callout, bool) 
 // profileRows builds B1-PROFILE-01's rows from ChildSummary, which is already populated by
 // the time this runs. Label carries the fact name; Note carries the recorded value, or is
 // left empty so the template's own fallback prints a writing line -- an honest gap rather
-// than a fabricated one, for exactly the fields (feeding stage today) that nothing upstream
-// has sourced yet.
+// than a fabricated one, for a measurement nothing upstream has recorded.
+//
+// Feeding stage is deliberately not a row. Nothing populated it, so it printed a permanent
+// blank line on every book -- and unlike weight or height, it is not an observation for a
+// parent to write in: it is a fact the corpus can derive, from age against
+// age_feeding_stage. A blank line invites someone to hand-enter a value the system should
+// already know. It returns as a row when that join is built, not before.
 func profileRows(c ChildSummary) []Row {
 	rows := []Row{
 		{Label: "Child's name", Note: c.DisplayName},
 		{Label: "Age", Note: c.AgeLabel},
-		{Label: "Feeding stage", Note: c.FeedingStage},
 		{Label: "Allergy status", Note: c.AllergyStatus},
 	}
 
