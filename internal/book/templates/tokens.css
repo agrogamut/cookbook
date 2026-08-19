@@ -56,7 +56,7 @@
 
 @page {
   size: A4 portrait;
-  margin: calc(var(--safe-margin) + var(--header-height))
+  margin: calc(var(--safe-margin) + var(--header-height) + 26mm)
           var(--safe-margin)
           calc(var(--safe-margin) + var(--footer-height));
 }
@@ -73,7 +73,7 @@ p, li { max-width: var(--body-measure); }
 /* section_title_style: "large editorial heading + short supportive subtitle", drawn in both
    prototypes as a full-bleed band in the book's brand colour. */
 .section-header {
-  background: var(--brand-deep);
+  background: var(--brand);
   color: #fff;
   padding: 6mm 6mm 5mm;
   margin: 0 0 6mm;
@@ -121,6 +121,10 @@ tbody tr:nth-child(even) { background: var(--zebra); }
 
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
+/* Bengali and Devanagari beside an English name need the conjunct-forming face, not the
+   Latin body font -- this is the one class that carries --font-indic into the page. */
+.indic { font-family: var(--font-indic); }
+
 /* Nothing in the dataset is approved. Every generated book says so on its first page and in
    its running footer; neither is removable by a template. */
 .provisional {
@@ -130,6 +134,31 @@ tbody tr:nth-child(even) { background: var(--zebra); }
   padding: 4mm;
   margin: 6mm 0;
   font-size: var(--caption-size);
+}
+
+/* In print, Chromium repeats a position: fixed element on every page of the paginated
+   output -- the mechanism this rule relies on to put the disclosure on all seven pages
+   instead of just the first. Screen preview keeps the banner in normal flow, which is why
+   this lives in @media print rather than replacing the rule above: preview and print are
+   one document, but pagination only exists at print time.
+   Reserving the room the fixed banner occupies has to happen on @page itself, not as a
+   body padding-top: a body padding only renders on the first fragment of a box that spans
+   several pages (the spec default, box-decoration-break: slice), so it protected the top
+   of a forced section break but not a table or a card list that overflowed naturally onto
+   the next page -- confirmed by printing a 44-row vaccination tracker and finding row text
+   sitting under the banner on every page after the first. @page margin is a true per-page
+   reservation instead, so it holds on every page regardless of why the break happened. The
+   extra 26mm is the banner's own rendered height (3 lines of --caption-size text, 4mm
+   padding top and bottom, plus its border) with a small margin of safety. */
+@media print {
+  .provisional {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    margin: 0;
+    z-index: 10;
+  }
 }
 
 .cover { text-align: center; padding-top: 40mm; }
