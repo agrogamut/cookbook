@@ -1,15 +1,28 @@
 {{ define "B2-COVER-01" }}
+{{/* Set as a book cover is set: everything hung from one left edge, the child's name as the
+     largest thing on the sheet, and the run's facts in a ruled block at the foot. The first
+     version centred five stacked elements in the middle of an otherwise empty page.
+
+     No spacer div after it. There used to be an empty <div class="page-break">, harmless
+     while .page-break meant break-after and a blank page 2 the moment it meant break-before.
+     Whatever follows the cover carries its own break. */}}
 <div class="cover">
-  <div class="brand">MADAMGY</div>
-  <h1>My Child's Personalized Recipe Book</h1>
-  <p class="subtitle">Recipes selected for feeding stage, diet and allergy safety --
-     matched, not written from scratch</p>
-  <div class="name-box">
-    <div class="name">{{ .Child.DisplayName }}</div>
-    <div>Age: {{ .Child.AgeLabel }}</div>
+  <div class="cover-kicker">MadamGY &middot; Personalised Recipe Book</div>
+
+  <div class="cover-main">
+    <h1>Recipes for<br>{{ .Child.DisplayName }}</h1>
+    <p class="cover-sub">Selected against this child's feeding stage, declared food practice
+      and allergy exclusions. Matched from the provider's recipe master, not written for
+      this book.</p>
   </div>
-  <p class="subtitle">Prepared after consultation</p>
+
+  <div class="cover-facts">
+    <div><span class="label">Age at generation</span>
+         <span class="value">{{ .Child.AgeLabel }}</span></div>
+    <div><span class="label">Food practice</span>
+         <span class="value">{{ if .Child.FoodPractice }}{{ .Child.FoodPractice }}{{ else }}not recorded{{ end }}</span></div>
+    <div><span class="label">Recipes in this book</span>
+         <span class="value mono">{{ .RecipeCount }}</span></div>
+  </div>
 </div>
-{{/* No spacer div here. See book1/cover.html: it was harmless while .page-break meant
-     break-after and became a blank page the moment it meant break-before. */}}
 {{ end }}

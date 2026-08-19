@@ -1,28 +1,39 @@
 {{ define "B2-PROFILE-01" }}
 {{/* "why these recipes were selected": the criteria this book was generated against, read
-     straight off the stored profile the same way every other page in this project reads it
-     -- no summary text invented, just the facts that drove the engine's filters. */}}
+     straight off the stored profile the same way every other page in this project reads it --
+     no summary text invented, just the facts that drove the engine's filters. */}}
 <section class="page-break">
-  <div class="section-header">
+  <div class="page-head">
+    <p class="kicker">How this book was made</p>
     <h2>Why these recipes</h2>
-    <p>The profile behind every recipe chosen for {{ .Child.DisplayName }}</p>
+    <p class="standfirst">The recorded profile behind every recipe chosen for
+      {{ .Child.DisplayName }}.</p>
   </div>
+
   <table>
-    <thead>
-      <tr><th>Criterion</th><th>Recorded value</th></tr>
-    </thead>
+    <thead><tr><th>Criterion</th><th>Recorded value</th></tr></thead>
     <tbody>
-      <tr><td>Age</td><td class="mono">{{ .Child.AgeLabel }}</td></tr>
-      <tr><td>Food practice</td>
+      <tr><td class="keycol">Age at generation</td><td class="mono">{{ .Child.AgeLabel }}</td></tr>
+      <tr><td class="keycol">Food practice</td>
           <td>{{ if .Child.FoodPractice }}{{ .Child.FoodPractice }}{{ else }}<span class="write-line"></span>{{ end }}</td></tr>
-      <tr><td>Allergy status</td><td>{{ .Child.AllergyStatus }}</td></tr>
+      <tr><td class="keycol">Allergy status</td><td>{{ .Child.AllergyStatus }}</td></tr>
     </tbody>
   </table>
-  <div class="callout">
-    <h3>Note: how recipes were chosen</h3>
-    <p>Each recipe card in this book states its own selection reasons -- the active
-       nutrition target, the region match and the diet practice -- taken directly from the
-       engine's own step-by-step record rather than summarised here.</p>
+
+  <div class="note">
+    <h3>How to read a recipe page</h3>
+    <p>Each page states its own selection reasons -- the active nutrition target, the region
+      match and the food practice -- taken from the engine's step-by-step record rather than
+      summarised here. The nutrition figures are totals for the ingredients listed, rebuilt
+      from the IFCT 2017 food composition tables, and each one says what proportion of the
+      dish stands on a measured value rather than on a food-group planning figure.</p>
+  </div>
+
+  <div class="note warning">
+    <h3>Safety</h3>
+    <p>Age suitability and allergy exclusion are absolute filters. A recipe excluded for an
+      allergen is not in this book and cannot be put back into it. Nothing on these pages has
+      completed culinary, nutrition or clinical review.</p>
   </div>
 </section>
 {{ end }}

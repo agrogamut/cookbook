@@ -5,30 +5,45 @@
      with a narrow age or diet loses more -- so a contents page built from the master would
      list chapters the book does not contain.
 
-     Recipe names are listed, not just meal names. That is the difference between a contents
-     page and a divider: an operator handing this to a family, or a parent looking for what
-     they cooked last week, is looking for a dish, and a recipe book whose contents page says
-     only "Breakfast, Lunch, Dinner" answers no question anyone has.
+     A ruled table, not a bulleted list: the first version let each recipe's id float wherever
+     its title happened to end, so the right column zig-zagged and nothing lined up.
 
-     No page numbers -- Chromium assigns them at print time and the template cannot know them. */}}
+     The leftmost column is the recipe's number in this book, and it is the navigation key
+     because a page number is not available: Chromium assigns those at print time and no
+     template can learn them. The same number is printed large at the head of the card. */}}
 {{ define "B2-TOC-01" }}
-<section class="page-break contents">
-  <div class="section-header">
+<section class="page-break">
+  <div class="page-head">
+    <p class="kicker">Contents</p>
     <h2>What is in this book</h2>
-    <p>Recipes selected for {{ .Child.DisplayName }}, by meal</p>
+    <p class="standfirst">{{ .RecipeCount }} recipes for {{ .Child.DisplayName }}, in
+      {{ .ChapterCount }} chapter{{ if ne .ChapterCount 1 }}s{{ end }}.</p>
   </div>
-  {{ range .MealSections }}
-    <h3 class="toc-meal">{{ .Title }}</h3>
-    <ol class="toc">
+
+  {{/* An explicit colgroup, because table-layout is fixed (see tokens.css) and fixed layout
+       takes its column widths from the first row -- which here is a chapter heading spanning
+       all three. Without it the three columns divided equally and every recipe title wrapped
+       to two lines beside a 55mm-wide number column. */}}
+  <table class="contents-table">
+    <colgroup><col style="width:14mm"><col><col style="width:32mm"></colgroup>
+    {{ range .MealSections }}
+      <tr><td class="contents-group" colspan="3">
+        {{ printf "%02d" .Number }} &nbsp; {{ .Title }} &nbsp;&middot;&nbsp;
+        {{ len .Recipes }} recipe{{ if ne (len .Recipes) 1 }}s{{ end }}
+      </td></tr>
       {{ range .Recipes }}
-        <li>
-          <span class="toc-title">{{ .Title }}</span>
-          <span class="toc-sub mono">{{ .RecipeID }}</span>
-        </li>
+        <tr>
+          <td class="num">{{ printf "%02d" .Number }}</td>
+          <td>{{ .Title }}</td>
+          <td class="entry-id">{{ .RecipeID }}</td>
+        </tr>
       {{ end }}
-    </ol>
-  {{ end }}
-  <p class="toc-note">Every recipe here passed the age and allergy filters, which are absolute.
-    Recipes left out, and which step removed them, are listed with the generated output.</p>
+    {{ end }}
+  </table>
+
+  <p class="contents-note">Recipes are numbered continuously through the book; the number in
+    the left column is printed at the head of the recipe's own page. Every recipe here passed
+    the age and allergy filters, which are absolute and have no override. Recipes left out,
+    and which step removed them, are listed with the generated output.</p>
 </section>
 {{ end }}

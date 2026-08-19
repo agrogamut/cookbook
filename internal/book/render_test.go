@@ -77,6 +77,9 @@ func TestTableSizingDoesNotLeakOntoProse(t *testing.T) {
 	allowed := map[string]string{
 		"th":          "table header cells",
 		".ref-detail": "the citation string inside a reference-table cell, never used outside one",
+		".tracker th": "a tracker's column headings, which can run to eight columns on a " +
+			"170mm text block and need the table floor to break between words rather than " +
+			"through them",
 	}
 
 	var offenders []string

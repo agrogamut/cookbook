@@ -6,10 +6,9 @@ import (
 
 // defaultTrackerRows is what an unrecognised or absent frequency gets.
 //
-// Six, deliberately modest. The cost of the two errors is not symmetric: too few rows means a
-// parent writes in the margin, too many means blank pages in a book someone printed. Six fits
-// a page beside its reference text either way.
-const defaultTrackerRows = 6
+// Four, deliberately modest. The cost of the two errors is not symmetric: too few rows means a
+// parent writes in the margin, too many means blank pages in a book someone printed.
+const defaultTrackerRows = 4
 
 // trackerRowsByFrequency maps the provider's own frequency vocabulary -- the eighteen distinct
 // values in book1_monitoring_template -- to how many blank rows the grid gets.
@@ -22,35 +21,41 @@ var trackerRowsByFrequency = []struct {
 	match string
 	rows  int
 }{
-	{"selected week", 7}, // one row per day of the week the parent picks
-	{"each vaccine", 8},
-	{"daily", 8},
-	{"weekly", 7},
-	{"monthly", 6},
-	{"routine follow-up", 4}, // a growth parameter recorded at each routine visit
+	{"selected week", 4}, // fewer than the seven days the name suggests: four is what fits
+	// beside a domain, and the grid splits rather than being cut short when a page runs long
+	{"each vaccine", 5},
+	{"daily", 5},
+	{"weekly", 4},
+	{"monthly", 4},
+	{"routine follow-up", 3}, // a growth parameter recorded at each routine visit
 	{"at follow-up", 3},
-	{"routine visit", 4},
-	{"age checkpoint", 6},
-	{"term", 4},
-	{"during illness", 7},
-	{"as needed", 6},
+	{"routine visit", 3},
+	{"age checkpoint", 4},
+	{"term", 3},
+	{"during illness", 4},
+	{"as needed", 4},
 }
 
 // The counts above are also a page budget, not only a usefulness judgement.
 //
-// A domain page carries a section band, the block's purpose, a reference table, a red-flag
-// callout, a referral line and then the grid, in about 130mm before a single row is drawn.
-// The content box is 225mm, so the grid has roughly 90mm. At 6.5mm a row, eight rows and a
-// header fit; at ten the tracker no longer fits beside its domain, and since .tracker is
-// break-inside: avoid it moved whole -- printing every daily-life block as two half-empty
-// pages instead of one full one. At the original fourteen it split mid-grid and stranded two
-// writing lines on a sheet of their own.
+// A domain page carries the page head, the block's purpose and what it covers, a reference
+// table, a red-flag callout, a referral line and a scope note before a single row is drawn --
+// about 175mm of a 255mm content box, leaving roughly 80mm. The tracker's own head (title,
+// reference, threshold callout, reviewer, column headings) takes about 55mm of that, so four
+// rows at 6.5mm is what actually fits beside a domain.
 //
-// Eight rows is therefore a page-fit number as much as a useful-history one, which is why the
-// two are documented together.
+// The earlier numbers were nearly twice these and were measured against a book that was being
+// printed at 79% scale without anyone knowing -- an over-wide table was making Chromium shrink
+// the whole document, so every row was 5.2mm on paper rather than 6.5mm (see the note above
+// td .write-line in tokens.css). Fixing the scale made every tracker overflow its page, which
+// is how these were caught.
 //
-// So these numbers are load-bearing in two directions, and changing one without re-printing a
-// book and looking at it will silently reintroduce that. The row height is .tracker td in
+// A grid that still does not fit now splits and repeats its header rather than moving whole,
+// so an over-long one degrades into a continuation rather than into two half-empty sheets.
+// These numbers keep the common case on one page; the split is the safety net.
+//
+// So they are load-bearing in two directions, and changing one without re-printing a book and
+// looking at it will silently reintroduce the problem. The row height is .tracker td in
 // tokens.css and the two must be considered together.
 
 // TrackerRows is how many blank rows a tracker grid gets for a declared frequency.

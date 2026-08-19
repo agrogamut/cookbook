@@ -1,0 +1,43 @@
+{{ define "B2-IMPRINT-01" }}
+{{/* The run's own identity, printed once at the back rather than on every card.
+
+     The recipe_master content hash is 64 characters and is the same value for every recipe in
+     a book -- it versions the import of the table, not the dish (GAP-024: the provider ships
+     no recipe version column). Thirty copies of it down the book was thirty lines of noise
+     carrying one fact, and it sat directly under each recipe's title where a reader looking
+     for a dish name found a hash instead. */}}
+<section class="page-break">
+  <div class="page-head">
+    <p class="kicker">About this copy</p>
+    <h2>Sources and version</h2>
+  </div>
+
+  <p>Recipes, ingredients, quantities, preparation methods and safety rules on these pages are
+    the provider's own, carried through unchanged. Nutrition figures are recomputed from the
+    Indian Food Composition Tables 2017 (ICMR-NIN, Hyderabad) where an ingredient could be
+    matched to an IFCT food; every recipe page states how much of the dish that covers.</p>
+
+  <p>Nothing in this book has completed culinary, nutrition or clinical review. It supports a
+    consultation and does not replace one.</p>
+
+  <div class="imprint">
+    <dl>
+      <dt>Book</dt><dd>{{ .Metadata.Title }}</dd>
+      <dt>Book version</dt><dd class="mono">{{ .Metadata.BookVersion }}</dd>
+      <dt>Generated</dt><dd class="mono">{{ .Metadata.GenerationDate.Format "2006-01-02" }}</dd>
+      <dt>Review status</dt><dd class="mono">{{ .Metadata.ReviewStatus }}</dd>
+      {{/* Omitted entirely when there is no release id, rather than printing a label with
+           nothing after it: there is no release layer yet, so on every book printed today a
+           blank there is a field a reader has to interpret. */}}
+      {{ with .Metadata.ReleaseID }}<dt>Release</dt><dd class="mono">{{ . }}</dd>{{ end }}
+      {{/* Nested with, because this template takes the whole render context and the book on
+           it can legitimately be absent -- the renderer is called with nil data by the tests
+           that prove the base template carries the provisional banner for every book kind.
+           A single {{ with .Data.RecipeDataVersion }} would still dereference nil. */}}
+      {{ with .Data }}{{ with .RecipeDataVersion }}
+        <dt>Recipe data version</dt><dd class="mono">{{ . }}</dd>
+      {{ end }}{{ end }}
+    </dl>
+  </div>
+</section>
+{{ end }}

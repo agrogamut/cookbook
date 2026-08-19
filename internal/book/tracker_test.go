@@ -12,20 +12,24 @@ func TestTrackerRowsFollowsTheDeclaredFrequency(t *testing.T) {
 		frequency string
 		want      int
 	}{
-		{"Selected week", 7},
-		{"Daily / visit", 8},
-		{"Daily/selected days", 8},
-		{"Weekly", 7},
-		{"Weekly / as needed", 7},
-		{"Monthly/visit", 6},
+		// The counts halved when the type stopped being printed at 79% scale -- an
+		// over-wide table had been making Chromium shrink every page of Book 1, so a
+		// 6.5mm row was really 5.2mm on paper and nearly twice as many fitted. See the
+		// page-budget note in tracker.go.
+		{"Selected week", 4},
+		{"Daily / visit", 5},
+		{"Daily/selected days", 5},
+		{"Weekly", 4},
+		{"Weekly / as needed", 4},
+		{"Monthly/visit", 4},
 		{"At follow-up", 3},
-		{"As advised / routine visit", 4},
-		{"Routine follow-up", 4},
-		{"Age checkpoint", 6},
-		{"Term/follow-up", 4},
-		{"During illness", 7},
-		{"As needed", 6},
-		{"Each vaccine", 8},
+		{"As advised / routine visit", 3},
+		{"Routine follow-up", 3},
+		{"Age checkpoint", 4},
+		{"Term/follow-up", 3},
+		{"During illness", 4},
+		{"As needed", 4},
+		{"Each vaccine", 5},
 		{"", defaultTrackerRows},
 		{"every third blue moon", defaultTrackerRows},
 	} {

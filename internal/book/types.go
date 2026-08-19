@@ -232,6 +232,52 @@ type Callout struct {
 	Body     string `json:"body"`
 }
 
+// ContentsGroup is one heading on Book 1's contents page and the pages under it.
+//
+// The provider's own two levels: book1_content_block.section is the group ("Vaccination",
+// "Common Illness Feeding") and .subsection is the page within it ("IAP-ACVIP 2025 schedule",
+// "Post-vaccination feeding & comfort"). Several blocks share a section, which is why the
+// first version's contents page listed "Vaccination" twice and "Personal Nutrition Target"
+// twice with nothing to tell them apart.
+type ContentsGroup struct {
+	Title string   `json:"title"`
+	Pages []string `json:"pages"`
+}
+
+// Contents groups the rendered sections for the contents page, in book order.
+//
+// Built from the sections that actually rendered, never from the block list: this book omits
+// blocks deliberately -- B1-004 always, the age-inapplicable ones per child, and anything
+// that resolved to no content -- and a contents entry for a page the book does not contain
+// sends a reader hunting for nothing.
+//
+// Consecutive runs, not a map: the sections are already in book_order and grouping by key
+// would reorder them. A section title that recurred after an interruption would correctly
+// open a second group, because in book order it is a second place in the book.
+func (b Book1) Contents() []ContentsGroup {
+	var out []ContentsGroup
+	for _, s := range b.Sections {
+		page := s.Subtitle
+		if page == "" {
+			page = s.Title
+		}
+		if n := len(out); n > 0 && out[n-1].Title == s.Title {
+			out[n-1].Pages = append(out[n-1].Pages, page)
+			continue
+		}
+		out = append(out, ContentsGroup{Title: s.Title, Pages: []string{page}})
+	}
+	return out
+}
+
+// SectionCount is how many sections rendered, for the cover.
+//
+// A method rather than {{ len .Sections }} in the template: html/template's len fails hard on
+// an absent field, and the renderer is deliberately callable with nil data (the provisional
+// banner and palette tests render every book kind with no book at all, to prove the base
+// template carries them). A method on the type degrades to nothing instead of erroring.
+func (b Book1) SectionCount() int { return len(b.Sections) }
+
 // Book1 is the render model for Book 1 -- the shape the templates consume, not the
 // provider's wire format.
 //
@@ -291,6 +337,69 @@ type RecipeCard struct {
 	// MethodIsProviderBoilerplate marks the 6-unique-texts problem (GAP-001) on the card
 	// itself, so a reader is told the steps are generic rather than discovering it.
 	MethodIsProviderBoilerplate bool `json:"method_is_provider_boilerplate"`
+
+	// Number is the recipe's position in the whole book, counted across chapters from 1.
+	//
+	// It exists because a printed contents page here cannot carry page numbers: Chromium
+	// assigns those at print time and the template has no way to learn them. A stable
+	// per-book recipe number is the navigation key instead -- printed large on the card and
+	// beside the entry in the contents -- so "recipe 7" finds the same page for every reader
+	// of the same book. It is a position in this book, never an identifier of the recipe;
+	// RecipeID is that and is printed alongside.
+	Number int `json:"number"`
+
+	// RegionCulture is the recipe's own Region_Culture, printed as the card's kicker. It is
+	// the provider's value, not the family's stated region -- the two agree on most cards in
+	// a region-matched book and a reader is entitled to see which recipe came from where.
+	RegionCulture string `json:"region_culture,omitempty"`
+
+	// Meta is the production strip: prep, cook, serving, cost band, texture. Built by
+	// recipeMeta from the columns above so the template iterates one list instead of
+	// branching on five nullable fields.
+	Meta []RecipeMeta `json:"meta,omitempty"`
+
+	// Nutrition is nil for a recipe with no recomputed row. See RecipeNutrition.
+	Nutrition *RecipeNutrition `json:"nutrition,omitempty"`
+}
+
+// RecipeNutrition is one recipe's per-serving figures, rebuilt from IFCT-corrected
+// ingredient values by recipe_nutrition_recomputed and scaled to the serving the card
+// states. Every field is derived, Formula names the computation, and Coverage says what
+// fraction of the recipe's mass is backed by a measured IFCT value rather than the
+// provider's group placeholder -- so a partly-verified total is never presented as measured.
+//
+// A pointer on the card, because a recipe with no recomputed row prints no figures at all
+// rather than zeros. Zero calories is a claim; an absent panel is the truth.
+type RecipeNutrition struct {
+	EnergyKcal string `json:"energy_kcal"`
+	ProteinG   string `json:"protein_g"`
+	IronMg     string `json:"iron_mg"`
+	CalciumMg  string `json:"calcium_mg"`
+	// Coverage is the fraction of recipe mass on a verified IFCT value, 0..1, and
+	// CoveragePct the same as a whole-number percentage for the page.
+	Coverage      float64 `json:"ingredient_coverage"`
+	CoveragePct   int     `json:"ingredient_coverage_pct"`
+	FullyVerified bool    `json:"fully_verified"`
+	// BasisG is the mass these figures are totals for: the listed ingredients, summed.
+	//
+	// They are deliberately NOT divided down to recipe_master.serving_size_g. On sampled
+	// recipes the stated serving (308 g) exceeds the whole ingredient mass (205 g), because
+	// the serving includes the water the method adds and the ingredient list does not. No
+	// column documents that relationship, so scaling by serving/ingredient-mass would invent
+	// one. The panel states the basis it actually has and lets the serving size stand beside
+	// it as its own separate fact.
+	BasisG  string `json:"basis_g"`
+	Formula string `json:"formula"`
+}
+
+// RecipeMeta is the strip of production facts a cook reads before starting: how long it
+// takes, what it costs, what texture it lands at. Every value is a recipe_master column that
+// loadRecipeCards has always read and the card template never printed.
+type RecipeMeta struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+	// Mono marks a value set in the identity/quantity face rather than in prose.
+	Mono bool `json:"mono"`
 }
 
 type MealSection struct {
@@ -298,6 +407,10 @@ type MealSection struct {
 	Title             string       `json:"title"`
 	TargetRecipeCount int          `json:"target_recipe_count"`
 	Recipes           []RecipeCard `json:"recipes"`
+	// Number is the chapter's position in this book, from 1. Like RecipeCard.Number it is a
+	// position rather than an identity, and it is what the chapter opener prints as its
+	// display numeral.
+	Number int `json:"number"`
 }
 
 // Book2 mirrors MadamGY_Book2_JSON_Schema_V1.json. RotationPlan is nullable there and is
@@ -308,6 +421,34 @@ type Book2 struct {
 	Child        ChildSummary  `json:"child_recipe_profile"`
 	MealSections []MealSection `json:"meal_sections"`
 	RotationPlan *RotationPlan `json:"rotation_plan"`
+}
+
+// RecipeCount is the number of recipes across every chapter. A method rather than a field
+// because it is a count of what is already in the struct, and a stored copy is one more thing
+// that can disagree with the book it describes.
+func (b Book2) RecipeCount() int {
+	n := 0
+	for _, s := range b.MealSections {
+		n += len(s.Recipes)
+	}
+	return n
+}
+
+// ChapterCount is how many meal chapters rendered. A method for the same reason as
+// Book1.SectionCount.
+func (b Book2) ChapterCount() int { return len(b.MealSections) }
+
+// RecipeDataVersion is the import content hash every card was built from, for the imprint
+// page. It is read off the first card rather than stored separately because it is one value
+// for the whole run -- see RecipeCard.RecipeVersion and GAP-024. Empty for a book with no
+// recipes, and the imprint prints nothing rather than a label with a blank after it.
+func (b Book2) RecipeDataVersion() string {
+	for _, s := range b.MealSections {
+		for _, r := range s.Recipes {
+			return r.RecipeVersion
+		}
+	}
+	return ""
 }
 
 type RotationPlan struct {

@@ -164,6 +164,8 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		})
 	}
 
+	numberBook(sections)
+
 	b := Book2{
 		Metadata: Metadata{
 			Title:          "My Child's Personalized Recipe Book",
@@ -361,8 +363,9 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 		       r.age_group, r.texture, r.serving_size_g, r.ingredient_ids, r.ingredient_names,
 		       r.ingredient_quantities_g,
 		       r.safety_rule, r.clinical_tag, r.growth_target, r.prep_time_min, r.cook_time_min,
-		       r.budget_band,
-		       n.ingredient_coverage, n.fully_verified
+		       r.budget_band, r.region_culture,
+		       n.ingredient_coverage, n.fully_verified,
+		       n.energy_kcal, n.protein_g, n.iron_mg, n.calcium_mg, n.total_mass_g, n.formula
 		FROM recipe_method_card c
 		JOIN recipe_master r ON r.recipe_id = c.recipe_id
 		LEFT JOIN recipe_nutrition_recomputed n ON n.recipe_id = c.recipe_id
@@ -379,15 +382,19 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 			ageGroup, texture, safetyRule                 string
 			clinicalTag, growthTarget                     string
 			servingSizeG, prepTimeMin, cookTimeMin        int
-			budgetBand                                    string
+			budgetBand, regionCulture                     string
 			ingredientIDs, ingredientNames, ingredientQty string
 			coverage                                      *float64
 			fullyVerified                                 *bool
+			energyKcal, proteinG, ironMg, calciumMg       *float64
+			totalMassG                                    *float64
+			formula                                       *string
 		)
 		if err := rows.Scan(&recipeID, &recipeName, &method, &reviewStatus,
 			&ageGroup, &texture, &servingSizeG, &ingredientIDs, &ingredientNames, &ingredientQty,
 			&safetyRule, &clinicalTag, &growthTarget, &prepTimeMin, &cookTimeMin,
-			&budgetBand, &coverage, &fullyVerified); err != nil {
+			&budgetBand, &regionCulture, &coverage, &fullyVerified,
+			&energyKcal, &proteinG, &ironMg, &calciumMg, &totalMassG, &formula); err != nil {
 			return nil, nil, fmt.Errorf("scan recipe card: %w", err)
 		}
 
@@ -410,6 +417,10 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 			Safety:                      safetyRule,
 			ReviewStatus:                reviewStatus,
 			MethodIsProviderBoilerplate: boilerplate[method],
+			RegionCulture:               regionCulture,
+			Meta:                        recipeMeta(prepTimeMin, cookTimeMin, servingSizeG, budgetBand, texture),
+			Nutrition: recipeNutrition(energyKcal, proteinG, ironMg, calciumMg,
+				totalMassG, coverage, fullyVerified, formula),
 		}
 		byRecipeID[recipeID] = card
 	}
@@ -524,4 +535,90 @@ func splitMethodSteps(method string) []string {
 		}
 	}
 	return out
+}
+
+// recipeMeta builds the production strip a cook reads before starting.
+//
+// Every value is a recipe_master column that has always been loaded and never printed. A
+// zero or empty column yields no cell at all rather than a cell reading "0 min" or a blank:
+// prep_time_min snaps to four distinct values across the corpus and cook_time_min to six, so
+// a zero there is far more likely to be an unset field than a recipe that takes no time.
+func recipeMeta(prepMin, cookMin, servingG int, budgetBand, texture string) []RecipeMeta {
+	var out []RecipeMeta
+	if prepMin > 0 {
+		out = append(out, RecipeMeta{Label: "Prep", Value: fmt.Sprintf("%d min", prepMin), Mono: true})
+	}
+	if cookMin > 0 {
+		out = append(out, RecipeMeta{Label: "Cook", Value: fmt.Sprintf("%d min", cookMin), Mono: true})
+	}
+	if servingG > 0 {
+		out = append(out, RecipeMeta{Label: "Serving", Value: fmt.Sprintf("%d g", servingG), Mono: true})
+	}
+	if texture != "" {
+		out = append(out, RecipeMeta{Label: "Texture", Value: texture})
+	}
+	if budgetBand != "" {
+		out = append(out, RecipeMeta{Label: "Cost band", Value: budgetBand})
+	}
+	return out
+}
+
+// recipeNutrition formats the recomputed figures for the page, or returns nil.
+//
+// nil rather than a zeroed struct whenever the left join found no row or the view supplied
+// no energy: a recipe with no recomputed nutrition prints no panel, because "0 kcal" is a
+// claim and an absent panel is the truth. The figures are totals for the listed ingredients
+// and are never divided down to a serving -- see RecipeNutrition.BasisG for why.
+func recipeNutrition(energy, protein, iron, calcium, mass, coverage *float64,
+	fullyVerified *bool, formula *string) *RecipeNutrition {
+
+	if energy == nil || mass == nil || coverage == nil {
+		return nil
+	}
+	n := &RecipeNutrition{
+		EnergyKcal:  fmt.Sprintf("%.0f", *energy),
+		BasisG:      fmt.Sprintf("%.0f g", *mass),
+		Coverage:    *coverage,
+		CoveragePct: int(*coverage * 100),
+	}
+	if protein != nil {
+		n.ProteinG = fmt.Sprintf("%.1f", *protein)
+	}
+	if iron != nil {
+		n.IronMg = fmt.Sprintf("%.1f", *iron)
+	}
+	if calcium != nil {
+		n.CalciumMg = fmt.Sprintf("%.0f", *calcium)
+	}
+	if fullyVerified != nil {
+		n.FullyVerified = *fullyVerified
+	}
+	if formula != nil {
+		n.Formula = *formula
+	}
+	// A coverage that rounds up to 100% on a recipe the view did not mark fully verified
+	// would read as measured when it is not. The frontend suite pins the same rule on the
+	// console; it holds here for the same reason and on paper it is the harder one to undo.
+	if !n.FullyVerified && n.CoveragePct >= 100 {
+		n.CoveragePct = 99
+	}
+	return n
+}
+
+// numberBook walks the assembled chapters and stamps the display numbers the pages print:
+// chapters from 1 across the book, recipes from 1 across the whole book rather than
+// restarting per chapter.
+//
+// Continuous rather than per-chapter because the number is the book's navigation key -- the
+// contents page cannot carry page numbers, since Chromium assigns those at print time and no
+// template can learn them -- and "recipe 7" has to name one page, not one page per chapter.
+func numberBook(sections []MealSection) {
+	recipe := 0
+	for i := range sections {
+		sections[i].Number = i + 1
+		for j := range sections[i].Recipes {
+			recipe++
+			sections[i].Recipes[j].Number = recipe
+		}
+	}
 }

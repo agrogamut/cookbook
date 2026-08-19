@@ -1,402 +1,903 @@
-/* Global tokens from MadamGY_PDF_Template_Contract_V1.json. Values are the contract's,
-   not preferences: safe_margin_mm 12, header_height_mm 12, footer_height_mm 10,
-   body_max_line_length_chars 85, minimum_body_pt 9.5, minimum_table_pt 8.5. */
+/* Book stylesheet.
+   ============================================================================================
+
+   Two audiences, two different jobs. The operator console in web/ is a dense internal
+   devtool and CLAUDE.md's frontend rules govern it: tables over cards, thirty rows a screen,
+   provenance in every column. These are the books that reach a family, and the same rules
+   applied to paper produced a document that read as a database dump -- boxes inside boxes,
+   filled colour bands, zebra stripes, a 64-character content hash on every recipe. Nothing
+   about honesty required that; it was the console's idiom on a page that is not a console.
+
+   What does carry over unchanged is the contract's own floors, which are minimums and are
+   never crossed downward: safe_margin_mm 12, minimum_body_pt 9.5, minimum_table_pt 8.5,
+   body_max_line_length_chars 85, table_header_repeat, clinical_warning_visibility high, and
+   avoid_color_only_meaning -- every coloured thing on these pages also says in words what it
+   is. The margins below are wider than the safe margin because a safe margin is a floor for
+   the trim, not a design measure.
+
+   Page geometry, chosen and then verified by printing a book and looking at the sheets:
+
+     A4                       210 x 297 mm
+     margins        top 22 · outer 20 · bottom 20
+     text block               170 x 255 mm
+
+   The top margin holds the running provisional line, the bottom the folio; both are drawn by
+   Chromium's own header/footer templates in pdf.go and those values must match the ones here.
+   The previous geometry reserved 50mm at the head for a three-line warning paragraph repeated
+   on every sheet, which left every page top-heavy with a hand's width of white above the
+   first line and the text crowded at the foot. The disclosure did not get quieter -- it is
+   still on every page and still unremovable -- it got set as a running head instead of a
+   poster.
+   ============================================================================================ */
+
 :root {
-  --safe-margin: 12mm;
-  --header-height: 12mm;
-  --footer-height: 10mm;
-  --body-measure: 85ch;
+  --page-margin-top: 22mm;
+  --page-margin-side: 20mm;
+  --page-margin-bottom: 20mm;
+  --measure: 108mm;          /* prose column: about 72 characters at --body-size, inside the
+                                contract's 85-character ceiling rather than at it */
 
-  /* The contract's accessibility floors. These are minimums, so the values used are at or
-     above them and never below. avoid_color_only_meaning is honoured by pairing every
-     coloured callout with a text label. */
-  --body-size: 10pt;
-  --table-size: 9pt;
-  --small-size: 8.5pt;  /* minimum_table_pt: table content only */
-  /* Every run of text that is not table content is bound by the contract's
-     minimum_body_pt of 9.5, and the contract names no caption exemption. This token sits
-     exactly on that floor -- smaller than body, and no smaller than the contract permits. */
-  --caption-size: 9.5pt;
+  /* Type scale. Ratio ~1.25 from the 10.5pt body, rounded to whole and half points because
+     print rounds anyway and a half point is the smallest difference a reader can see. */
+  --display: 34pt;   /* cover title, chapter numeral */
+  --title: 21pt;     /* page title */
+  --subhead: 13pt;   /* block heading inside a page */
+  --lead: 11.5pt;    /* standfirst */
+  --body-size: 10.5pt;
+  --table-size: 9.5pt;
+  --caption-size: 9.5pt;  /* the contract's body floor exactly; nothing prose-like goes below */
+  --small-size: 8.5pt;    /* minimum_table_pt: table content only, see the allowlist in
+                             render_test.go's TestTableSizingDoesNotLeakOntoProse */
 
-  --font-body: "Noto Sans", "Segoe UI", system-ui, sans-serif;
-  /* Bengali and Devanagari need a font with the conjuncts; Noto covers both scripts and
-     keeps one family across the whole book. Verify the faces are installed in the render
-     environment before trusting output - a missing face renders tofu, not an error. */
-  --font-indic: "Noto Sans Bengali", "Noto Sans Devanagari", var(--font-body);
-  /* Identity and quantity are set in monospace: ids, versions, dates and the provider's
-     review status. A release id read back from proportional type is easy to transcribe
-     wrongly, and the review status is the one string on the page nobody may misread. */
+  --leading: 1.5;
+
+  /* A book is set in a serif and labelled in a sans. The serif carries titles, standfirsts,
+     method steps and every run of prose; the sans carries labels, table content, metadata and
+     anything a reader scans rather than reads. Noto has both families in Latin, Bengali and
+     Devanagari, so a page can change voice without changing script coverage. */
+  --font-serif: "Noto Serif", "Liberation Serif", Georgia, serif;
+  --font-sans: "Noto Sans", "Liberation Sans", "Segoe UI", system-ui, sans-serif;
+  /* Bengali and Devanagari need the conjunct-forming faces. Two tokens, because an ingredient
+     name set beside serif prose and one set inside a sans label are different type. Verify the
+     faces exist in the render environment before trusting output: a missing face renders tofu,
+     not an error. */
+  --font-indic: "Noto Serif Bengali", "Noto Serif Devanagari", "Noto Sans Bengali",
+                "Noto Sans Devanagari", var(--font-serif);
+  --font-indic-sans: "Noto Sans Bengali", "Noto Sans Devanagari", var(--font-sans);
+  /* Identity and quantity: ids, versions, dates, the provider's review status, and every
+     number a reader might transcribe. */
   --font-mono: "Noto Sans Mono", "DejaVu Sans Mono", ui-monospace, monospace;
 
   --warning-strong: #9b2226;   /* warning_palette: deep red */
-  --warning-soft: #fdecea;     /* warning_palette: light warm red */
-  --rule: #d9d9d9;
-  --ink: #1f2933;
-  --ink-soft: #52606d;
-  --zebra: #fafafa;
+  --warning-soft: #fdf1ef;     /* warning_palette: light warm red, softened for a full page */
+  --ink: #1a1a1a;
+  --ink-soft: #5a5a5a;
+  --ink-faint: #8a8a8a;
+  --rule: #d6d2c9;
+  --rule-strong: #1a1a1a;
 }
 
 /* book1_palette: deep navy, teal, warm cream, muted gold */
 .book1 {
   --brand: #0f6466;
   --brand-deep: #123a5f;
-  --surface: #fdf6e6;
-  --accent: #c9922b;
-  --card-fill: #eef6f6;
+  --surface: #f6f1e4;
+  --accent: #a8791d;
+  --tint: #eef4f4;
 }
 
 /* book2_palette: deep plum, warm rose, cream, muted gold */
 .book2 {
-  --brand: #b0688a;
-  --brand-deep: #6b2d5c;
-  --surface: #fdf6e6;
-  --accent: #c9922b;
-  --card-fill: #fbeaf1;
-}
-
-/* The banner's own rendered height (3 lines of --caption-size text, 4mm padding top and
-   bottom, plus its border), with a small margin of safety. @page reserves this much extra
-   top margin so the banner has somewhere to sit; @media print below pulls it back up into
-   that reservation by the same amount, so reservation and offset can never drift apart. */
-:root {
-  --banner-reserve: 26mm;
+  --brand: #8d4a70;
+  --brand-deep: #5c2650;
+  --surface: #f8f1ea;
+  --accent: #a8791d;
+  --tint: #f8eef3;
 }
 
 @page {
   size: A4 portrait;
-  margin: calc(var(--safe-margin) + var(--header-height) + var(--banner-reserve))
-          var(--safe-margin)
-          calc(var(--safe-margin) + var(--footer-height));
+  margin: var(--page-margin-top) var(--page-margin-side)
+          var(--page-margin-bottom) var(--page-margin-side);
 }
 
 body {
-  font-family: var(--font-body);
+  font-family: var(--font-serif);
   font-size: var(--body-size);
+  line-height: var(--leading);
   color: var(--ink);
   margin: 0;
+  /* Hyphenation off. The corpus is full of compound provider strings ("Culinary/Nutrition/
+     Clinical Review Required") and transliterated dish names that no hyphenation dictionary
+     knows how to break, and a wrong break in an ingredient name is a wrong word. */
+  hyphens: none;
 }
 
-p, li { max-width: var(--body-measure); }
+p { margin: 0 0 3.2mm; max-width: var(--measure); }
+li { max-width: var(--measure); }
+h1, h2, h3, h4 { font-family: var(--font-serif); font-weight: 600; }
 
-/* section_title_style: "large editorial heading + short supportive subtitle", drawn in both
-   prototypes as a full-bleed band in the book's brand colour.
-
-   break-inside: avoid, not break-after: avoid. The earlier break-after: avoid asked the
-   print engine to never place a page break directly after this band -- meant to stop the
-   title being orphaned from its content -- but on a Book 2 meal section the next sibling
-   is a whole recipe card carrying its own break-inside: avoid (one to two cards per page,
-   per the contract), which is large enough that it never fits in whatever space is left
-   under the band. Chromium's fragmenter, unable to honour "never break right after me"
-   against a block it also cannot split, resolved the conflict by stretching the band's own
-   fragment to consume the rest of the page -- a solid-colour "Breakfast" page with no card
-   on it, confirmed by rendering to PDF and reading the page image, not by inspecting CSS.
-   break-inside: avoid only protects the title and subtitle from splitting from each other,
-   which is all this band actually needs; it no longer fights the card that follows it, so
-   the first card of a meal now prints on the same page as the band whenever it fits, and
-   the meal-divider page count matches the number of meals, not one extra blank-looking page
-   per meal. */
-.section-header {
-  background: var(--brand);
-  color: #fff;
-  padding: 6mm 6mm 5mm;
-  margin: 0 0 6mm;
-  break-inside: avoid;
+/* --------------------------------------------------------------------------------------
+   Small-caps label. The one piece of furniture used everywhere: chapter kickers, table
+   headers, metadata cells, callout labels. Letterspaced sans at the body floor, so it reads
+   as a label and never as a sentence.
+   -------------------------------------------------------------------------------------- */
+.label {
+  font-family: var(--font-sans);
+  font-size: var(--caption-size);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
 }
-.section-header h2 { margin: 0; font-size: 18pt; }
-.section-header p { margin: 3mm 0 0; font-size: var(--caption-size); opacity: 0.9; }
-
-/* table_header_repeat: true. thead repeating across pages is native to print CSS, which is
-   one of the reasons this renderer is HTML rather than a drawing library. */
-table { width: 100%; border-collapse: collapse; font-size: var(--table-size); }
-thead { display: table-header-group; }
-tr { break-inside: avoid; }
-th {
-  background: var(--brand-deep);
-  color: #fff;
-  text-align: left;
-  padding: 2.5mm 3mm;
-  font-size: var(--small-size);
-}
-td { padding: 2.5mm 3mm; border-bottom: 0.3mm solid var(--rule); vertical-align: top; }
-tbody tr:nth-child(even) { background: var(--zebra); }
-
-.card-row { display: flex; gap: 4mm; margin: 5mm 0; break-inside: avoid; }
-.card {
-  flex: 1;
-  border: 0.3mm solid var(--brand);
-  background: var(--card-fill);
-  padding: 4mm;
-}
-.card h3 { margin: 0 0 2mm; color: var(--brand-deep); font-size: 12pt; }
-.card p { margin: 0; font-size: var(--caption-size); }
-
-/* Three callout severities, drawn in the prototypes. clinical_warning_visibility is "high",
-   and avoid_color_only_meaning means the label carries the severity in words too. */
-.callout { border: 0.3mm solid var(--accent); background: var(--surface); padding: 4mm;
-           margin: 5mm 0; break-inside: avoid; }
-.callout h3 { margin: 0 0 2mm; color: var(--accent); font-size: 11pt; }
-.callout.warning { border-color: var(--warning-strong); background: var(--warning-soft); }
-.callout.warning h3 { color: var(--warning-strong); }
-
-/* A blank the parent writes on. The prototypes use these throughout rather than leaving a
-   cell empty, so the page reads as a form rather than as missing data. */
-.write-line { display: inline-block; min-width: 28mm; border-bottom: 0.3mm solid var(--ink-soft); }
 
 .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
-
-/* Bengali and Devanagari beside an English name need the conjunct-forming face, not the
-   Latin body font -- this is the one class that carries --font-indic into the page. */
 .indic { font-family: var(--font-indic); }
+.sans { font-family: var(--font-sans); }
+.quiet { color: var(--ink-soft); }
 
-/* Nothing in the dataset is approved. Every generated book says so on its first page and in
-   its running footer; neither is removable by a template. */
+/* break-before, not break-after. break-after on every section emitted one after the last
+   section too, and the book ended on a blank sheet. */
+.page-break { break-before: page; }
+
+/* --------------------------------------------------------------------------------------
+   Page head. Replaces the full-bleed colour band the first version drew on every page.
+
+   The band was not only loud, it was structurally hostile: a filled block with
+   break-after: avoid could not be honoured against a recipe card the fragmenter also could
+   not split, and Chromium resolved that by stretching the band's own fragment to fill the
+   page -- a solid-colour "Breakfast" sheet with nothing on it. A rule and a heading have no
+   such failure mode: they are short enough that break-after: avoid is a promise the
+   fragmenter can always keep.
+   -------------------------------------------------------------------------------------- */
+.page-head { margin: 0 0 7mm; break-after: avoid; }
+.page-head .kicker {
+  font-family: var(--font-sans);
+  font-size: var(--caption-size);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brand);
+  margin: 0 0 2.5mm;
+}
+.page-head h2 {
+  font-size: var(--title);
+  line-height: 1.15;
+  margin: 0;
+  color: var(--brand-deep);
+  max-width: 150mm;
+}
+.page-head .standfirst {
+  font-size: var(--lead);
+  font-style: italic;
+  color: var(--ink-soft);
+  margin: 2.5mm 0 0;
+  max-width: var(--measure);
+}
+.page-head::after {
+  content: "";
+  display: block;
+  border-bottom: 0.5mm solid var(--brand);
+  margin-top: 4mm;
+}
+
+/* The block's own content_purpose and parent_facing_output, printed under the head. */
+.block-purpose { color: var(--ink-soft); margin: 0 0 3mm; max-width: var(--measure); }
+.block-covers { margin: 0 0 6mm; max-width: var(--measure); }
+.block-covers .label { display: block; margin-bottom: 1.5mm; }
+
+/* Every bare <h3> inside a page, plus anything that opts in by class. Without a size of its
+   own an <h3> falls back to the browser's 1.17em, which lands a hair under --subhead and a
+   hair over --lead -- close enough to look like a mistake next to the headings that declare
+   one. */
+h3, .subhead {
+  font-size: var(--subhead);
+  color: var(--brand-deep);
+  margin: 6mm 0 2.5mm;
+  break-after: avoid;
+}
+
+/* --------------------------------------------------------------------------------------
+   Tables. A book table is ruled, not filled: a strong rule under the header, hairlines
+   between rows, and nothing else. The filled header and zebra body the console uses are for
+   a screen a reader scans; on paper they turn every table into a block of colour and cost
+   more ink than they return.
+
+   table_header_repeat is native to print CSS, which is one of the reasons this renderer is
+   HTML rather than a drawing library.
+   -------------------------------------------------------------------------------------- */
+table {
+  width: 100%;
+  /* Fixed layout, and it is load-bearing rather than a preference.
+     ========================================================================================
+     With the default `auto` layout a table is as wide as its content needs, and width: 100%
+     is only a minimum. Book 1's reference table -- five columns of citation prose plus a
+     source id like IAP-STG-CONSTIPATION that cannot be broken -- resolved to 191mm inside a
+     170mm text block. Chromium does not clip an over-wide print document and does not report
+     it: it scales the whole document down by whatever factor makes it fit. Book 1 was
+     printing at 79% of its declared type, which put 10.5pt body text at 8.3pt, below the
+     contract's minimum_body_pt of 9.5. Every page of the book, from one table.
+
+     Fixed layout makes width: 100% an actual width, so no table can do that again. Columns
+     divide the space equally unless a cell declares otherwise, which is why the definition
+     tables below carry explicit percentages. Content too long for its column wraps.
+     ======================================================================================== */
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-family: var(--font-sans);
+  font-size: var(--table-size);
+  margin: 0 0 6mm;
+}
+/* table-header-repeat, and a header that is never the last thing on a page. break-after on
+   the header group asks the fragmenter to keep at least one body row with it; without it a
+   grid split immediately after its column headings and printed a page carrying nothing but
+   seven labels and the repeated header overleaf. */
+thead { display: table-header-group; break-after: avoid; break-inside: avoid; }
+tr { break-inside: avoid; }
+th {
+  text-align: left;
+  overflow-wrap: break-word;
+  padding: 0 3mm 1.8mm 0;
+  border-bottom: 0.5mm solid var(--rule-strong);
+  font-family: var(--font-sans);
+  font-size: var(--small-size);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+td {
+  padding: 2mm 3mm 2mm 0;
+  border-bottom: 0.2mm solid var(--rule);
+  vertical-align: top;
+  /* break-word, not anywhere: a long id or url breaks rather than overflowing its column,
+     and ordinary prose still breaks between words. */
+  overflow-wrap: break-word;
+}
+td:last-child, th:last-child { padding-right: 0; }
+tbody tr:last-child td { border-bottom: 0.2mm solid var(--rule); }
+
+/* The label column of a two-column definition table. A percentage rather than a character
+   measure so the value column keeps the same left edge down the page, which is what makes a
+   twenty-row feeding table scannable rather than ragged. */
+.domain-label, .keycol { width: 32%; color: var(--ink-soft); font-weight: 600; }
+
+/* --------------------------------------------------------------------------------------
+   Notes and warnings.
+
+   Three severities, drawn as editorial asides rather than as filled boxes. The first version
+   stacked bordered panels -- two warnings and a note in a row down one page -- and three
+   coloured rectangles in sequence read as a form rejecting input, not as a book telling a
+   parent something. A rule in the margin, a small-caps label and a slightly tighter measure
+   say the same thing with the same authority and let the page breathe.
+
+   clinical_warning_visibility is "high", so a warning keeps a tint as well as a rule. Both
+   severities also name themselves in words, per avoid_color_only_meaning: the label is the
+   carrier of meaning and the colour is reinforcement.
+   -------------------------------------------------------------------------------------- */
+.callout, .note {
+  border-left: 0.8mm solid var(--accent);
+  padding: 0 0 0 5mm;
+  margin: 5mm 0;
+  break-inside: avoid;
+  max-width: 140mm;
+}
+/* Set in sans bold at body size, not in letterspaced capitals. The callout headings in
+   Book 1 are whole clauses -- "Warning: when to seek advice", "Note: when to contact the
+   clinician" -- and a nine-word clause in capitals is slower to read than the sentence it
+   introduces. The short labels that do suit capitals have their own rule (.side-note h3).
+   The severity is carried by the first word either way, which is what
+   avoid_color_only_meaning asks for. */
+.callout h3, .note h3 {
+  font-family: var(--font-sans);
+  font-size: var(--body-size);
+  font-weight: 700;
+  color: var(--accent);
+  margin: 0 0 1.5mm;
+}
+.callout p, .note p { margin: 0 0 2mm; }
+.callout p:last-child, .note p:last-child { margin-bottom: 0; }
+
+.callout.warning, .note.warning {
+  border-left-color: var(--warning-strong);
+  background: var(--warning-soft);
+  padding: 3.5mm 4mm 3.5mm 5mm;
+}
+.callout.warning h3, .note.warning h3 { color: var(--warning-strong); }
+
+/* The provider's ai_limit and the illness blocks' book_engine_limit. Deliberately quiet: it
+   is a constraint on what the page is, not advice to act on, and giving it warning treatment
+   would compete with the red flag directly above it for a reader's attention. */
+.domain-limit {
+  color: var(--ink-faint);
+  font-size: var(--caption-size);
+  font-style: italic;
+  margin: 2mm 0 0;
+  max-width: var(--measure);
+}
+
+/* A blank the parent writes on. Used throughout instead of an empty cell, so a page reads as
+   a form rather than as data that failed to print. */
+.write-line {
+  display: inline-block;
+  min-width: 28mm;
+  border-bottom: 0.25mm solid var(--ink-faint);
+}
+
+/* Inside a table cell the line takes the column's width and asserts none of its own.
+   ==========================================================================================
+   This is not a tidying rule. The 28mm minimum was applying in table cells too, and Book 1's
+   growth table is seven columns of writing lines: 7 x 28mm plus padding is 214mm, on a text
+   block of 170mm. Chromium does not clip an over-wide print document and does not report it
+   -- it shrinks the whole document to fit, silently, by whatever factor is needed. Here that
+   factor was 0.794, and it applied to every page of Book 1: 10.5pt body text printed at
+   8.3pt, below the contract's minimum_body_pt of 9.5, and the 34pt cover title printed at 27.
+
+   It was found by measuring glyph heights in the two PDFs and noticing that the same
+   stylesheet produced a 36.8pt capital in one book and a 46.3pt capital in the other -- not
+   by any check in the suite, which has no way to see a scale factor the print engine applies
+   after layout. Every page still passed every assertion; the book was simply printed at four
+   fifths size.
+
+   Any new table wide enough to overflow 170mm reintroduces it, on every page, invisibly.
+   ========================================================================================== */
+td .write-line, th .write-line { min-width: 0; width: 100%; }
+
+/* --------------------------------------------------------------------------------------
+   The provisional disclosure.
+
+   Nothing in the dataset is approved and every page says so. In print that is Chromium's own
+   repeating header (see pdf.go): an in-document position: fixed banner was tried and
+   rejected, because Chromium's fixed-element page repeat tiles a negative offset onto the
+   BOTTOM of every page instead of into the reserved band above the content -- the banner
+   reappeared overlapping the last table row on every sheet. Confirmed by rendering and
+   opening the page images, not by counting; a banner count would have reported 13 of 13
+   correct.
+
+   The in-flow block below stays in the document so the HTML preview never shows a book with
+   no disclosure, and is suppressed at print time so the page does not carry two.
+   -------------------------------------------------------------------------------------- */
 .provisional {
-  border: 0.4mm solid var(--warning-strong);
+  border-left: 0.8mm solid var(--warning-strong);
   background: var(--warning-soft);
   color: var(--warning-strong);
-  padding: 4mm;
-  margin: 6mm 0;
+  padding: 4mm 5mm;
+  margin: 0 0 8mm;
   font-size: var(--caption-size);
+  max-width: 150mm;
 }
+@media print { .provisional { display: none; } }
 
-/* Two things were tried here and only one survived looking at the rendered PDF.
+/* --------------------------------------------------------------------------------------
+   Cover.
 
-   Attempt 1 (rejected): position: fixed with a negative top, to pull the in-flow banner up
-   into the --banner-reserve band that @page sets aside above the content area. The theory
-   was sound -- fixed in paged media resolves against the page area, so top: 0 painted the
-   banner over the first slice of content instead of above it, and top: -26mm should have
-   moved it into the reserved band. Rendering it and reading the page images showed the
-   opposite: Chromium's headless print engine repeats a fixed element on every page by
-   tiling the element's position at the page-height interval, and a negative top wraps
-   around that tiling rather than extending above page 1 -- the banner reappeared pinned to
-   the BOTTOM of every content page, overlapping the last table row instead of the first.
-   Confirmed by rendering and opening the page images, not by counting; pdftotext would have
-   reported this as a correct 13-of-13 banner count too.
+   Set as a book cover is set: everything hung from a common left edge, the child's name as
+   the largest thing on the sheet, and the facts about the run in a ruled block at the foot.
+   The first version centred five stacked elements in the middle of an otherwise empty page,
+   which is the layout a slide deck uses when it has one thing to say.
 
-   Attempt 2 (kept): stop asking CSS to repeat the banner at all and use the print engine's
-   own repeating header instead. PrintPDF in internal/book/pdf.go sets headerTemplate to the
-   same disclosure markup, and Chromium draws that once per physical page, natively, with no
-   coordinate math to get wrong. That header renders inside the page's own marginTop band --
-   the same --banner-reserve space @page above already carves out -- so nothing here needs
-   to fight the content box for room. The in-flow .provisional div in base.html stays in the
-   document (still visible in the screen/HTML preview, so a viewer never sees a book with no
-   disclosure) but is suppressed at print time so the page doesn't carry two banners. */
-@media print {
-  .provisional {
-    display: none;
-  }
+   Deliberately NOT a fixed-height flex column with the foot block pushed down by flex: 1.
+   That is the obvious construction and it was tried; it works on one book and silently does
+   not on the other. A box declared height: 255mm inside a fragmentainer of exactly 255mm is
+   at the boundary Chromium treats as overflowing, so it fragments the flex container and
+   re-resolves flex: 1 against the fragment -- and the amount it gives back depends on how
+   tall the container's own content is. Measured on the two covers, same stylesheet, same
+   markup shape: Book 2 (two-line title) placed its foot block on the bottom margin, Book 1
+   (one-line title) placed the identical block 51mm higher, in the middle of nowhere. Every
+   assertion in the suite passed for both.
+
+   Two flex constructions were tried before this one and both were abandoned on measurement,
+   not on taste: height: 255mm (the exact fragmentainer) and height: 230mm (comfortably
+   inside it). In each, the two books' identical markup put the foot block 45mm apart, and
+   moving the same cover to a later page moved it again. Whatever the mechanism, a
+   distribution that depends on which sheet the box lands on is not something a book design
+   can stand on.
+
+   Plain block flow with declared distances cannot do that: no distribution to resolve, no
+   fragment to resolve it in. The cover no longer touches the bottom margin, which is a much
+   smaller loss than a foot block that lands somewhere different on every child's book.
+   -------------------------------------------------------------------------------------- */
+.cover { display: block; }
+.cover .cover-kicker {
+  font-family: var(--font-sans);
+  font-size: var(--caption-size);
+  font-weight: 600;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--brand);
+  padding-bottom: 3mm;
+  border-bottom: 0.5mm solid var(--brand);
 }
-
-/* The cover fills its page and centres in it, rather than stacking from the top and leaving
-   the remainder blank. A4 is 297mm and @page already reserves 50mm at the top for the
-   provisional banner plus 12mm at the foot, so the usable box is about 235mm; min-height
-   holds that and justify-content centres within it. Without this the whole cover sat in the
-   upper two-thirds with a hand's width of white space beneath the name. */
-.cover {
-  text-align: center;
-  /* The content box, computed rather than estimated:
-
-       A4 height                       297mm
-       - @page margin-top   12 + 12 + 26 = 50mm  (safe margin, header, banner reserve)
-       - @page margin-bottom     12 + 10 = 22mm  (safe margin, footer)
-       = 225mm
-
-     The previous value was 233mm, from an arithmetic slip that counted the foot as 12mm
-     instead of 22mm -- eight millimetres of overflow that the flex centring absorbed rather
-     than showing, so the cover looked right and sat slightly off-centre.
-
-     An explicit height rather than min-height, because min-height left the flex box shorter
-     than the page and the centring had nothing to centre within. */
-  height: 225mm;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
+/* The middle of the cover grows to fill whatever the title and portrait do not, so the foot
+   block sits on the bottom margin on every book regardless of name length or photograph. */
+/* The drop that carries the title into the lower half of the sheet. A declared distance, for
+   the reason set out above. */
+.cover .cover-main { margin-top: 105mm; }
+.cover h1 {
+  font-size: var(--display);
+  line-height: 1.1;
+  margin: 0 0 4mm;
+  color: var(--brand-deep);
+  max-width: 150mm;
 }
-.cover > * { width: 100%; }
-.cover .brand { color: var(--brand); font-weight: 700; letter-spacing: 0.1em; }
-.cover h1 { color: var(--brand-deep); font-size: 26pt; margin: 4mm 0 2mm; }
-.cover .subtitle { color: var(--ink-soft); font-size: 11pt; margin: 0 auto; max-width: 120mm; }
-.cover .name-box {
-  border: 0.3mm solid var(--accent);
-  background: var(--surface);
-  padding: 8mm;
-  margin: 12mm auto;
-  max-width: 110mm;
+.cover .cover-sub {
+  font-size: var(--lead);
+  font-style: italic;
+  color: var(--ink-soft);
+  margin: 0;
+  max-width: 120mm;
 }
-.cover .name-box .name { color: var(--brand-deep); font-size: 20pt; font-weight: 700; }
+.cover .cover-name {
+  font-size: 26pt;
+  line-height: 1.15;
+  color: var(--ink);
+  margin: 10mm 0 0;
+}
+.cover .cover-name-label { margin-bottom: 1.5mm; }
+.cover .cover-facts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4mm 6mm;
+  border-top: 0.5mm solid var(--rule-strong);
+  padding-top: 4mm;
+  margin-top: 24mm;
+}
+.cover .cover-facts .label { display: block; margin-bottom: 1mm; }
+.cover .cover-facts .value { font-family: var(--font-sans); }
 
-/* Cover portrait. The frame is a fixed square and the image fills it with object-fit: cover,
-   so a portrait and a landscape snapshot both print as the same shape and the page layout
-   does not move with whatever the operator uploaded. Cropping to the centre is the right
-   trade here: a letterboxed photo on a book cover reads as a mistake, and the alternative --
-   reflowing the page per image -- means the cover is a different design for every child.
-
-   The cover has less top padding when a photo is present; 40mm of whitespace above a
-   portrait pushes the name block off the first page. */
-.cover-photo { margin: 10mm auto 2mm; width: 70mm; }
+/* Cover portrait. A fixed frame filled with object-fit: cover, so a portrait and a landscape
+   snapshot print as the same shape and the page does not reflow with whatever the operator
+   uploaded. Cropping to the centre is the right trade: a letterboxed photo on a cover reads
+   as a mistake, and reflowing per image means the cover is a different design for every
+   child. Without a photograph the block is simply absent -- no placeholder silhouette, which
+   would look like a picture that failed to load. */
+.cover-photo { margin: 0 0 8mm; width: 62mm; }
 .cover-photo img {
-  width: 70mm;
-  height: 70mm;
+  width: 62mm;
+  height: 62mm;
   object-fit: cover;
-  border: 0.4mm solid var(--accent);
-  border-radius: 1.5mm;
   display: block;
 }
 .cover-photo figcaption {
+  font-family: var(--font-sans);
   color: var(--ink-soft);
   font-size: var(--caption-size);
   margin-top: 2mm;
 }
 
+/* --------------------------------------------------------------------------------------
+   Contents.
 
-/* ---------------------------------------------------------------------------------------
-   Book 1 content pages: daily-life domains, trackers, illness blocks, feeding stages.
+   A ruled table, not a bulleted list. The first version let each entry's id float wherever
+   its title happened to end, so the right-hand column zig-zagged down the page and nothing
+   lined up with anything.
 
-   These blocks were rendering as omissions until the provider's own four content tables were
-   read, so everything below is new furniture for pages that had none. The shared rule is that
-   a unit -- a domain, an illness situation, a tracker with its threshold callout -- does not
-   split across a page boundary, because the half a reader lands on is the half without the
-   warning.
-   --------------------------------------------------------------------------------------- */
-
-/* The block's own content_purpose, printed under the section band. Set apart from body text
-   so it reads as the page's subject rather than as its first instruction. */
-.block-purpose {
-  color: var(--ink-soft);
-  font-size: var(--caption-size);
-  margin: 0 0 3mm;
-  max-width: var(--body-measure);
+   There are no page numbers, and there is a reason rather than an omission: Chromium assigns
+   page numbers at print time and no template can learn them, so an entry cannot name the
+   sheet it is on. The navigation key is the recipe number instead -- continuous across the
+   whole book, printed large on the card and in the leftmost column here.
+   -------------------------------------------------------------------------------------- */
+.contents-table { font-size: var(--body-size); font-family: var(--font-serif); }
+.contents-table td { padding: 1.7mm 3mm 1.7mm 0; border-bottom: 0.2mm solid var(--rule); }
+.contents-table .num {
+  width: 12mm;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--brand);
+  font-weight: 600;
 }
-.block-covers {
+.contents-table .entry-id {
+  width: 34mm;
+  text-align: right;
+  font-family: var(--font-mono);
   font-size: var(--caption-size);
-  margin: 0 0 5mm;
-  max-width: var(--body-measure);
+  color: var(--ink-faint);
 }
-
-/* Deliberately NOT break-inside: avoid.
-
-   The first version had it, on the reasoning that a domain is one unit and should not split.
-   What it actually produced was a page carrying nothing but a section band and a one-line
-   purpose, with the whole domain -- reference table, fourteen-row tracker, red flag -- pushed
-   onto the next page because it could not fit in what was left. A dental page with no dental
-   content on it, found by rendering the book and looking at the pages; the section was present
-   and correct in every assertion the suite makes.
-
-   A domain is taller than a page routinely, so "never split" is not a promise print can keep.
-   The pieces that must stay whole are small enough to be kept whole individually: the
-   reference table, each tracker row, and the red-flag callout. Tables repeat their headers
-   natively across a break, so a split tracker is still readable. */
-.domain, .illness { margin: 0 0 8mm; }
-
-/* A tracker moves whole or not at all.
-
-   This is safe only because the row counts are capped -- see trackerRowsByFrequency in
-   tracker.go. A tracker is at most ten rows plus a header and a threshold callout, about
-   105mm, so it always fits on a fresh page and "keep together" is a promise the fragmenter
-   can actually keep. The same declaration on .domain could not be kept, because a domain runs
-   taller than a page, and Chromium resolved that by moving the whole domain and leaving a
-   section band alone on its own sheet.
-
-   Without it the grid split at whatever row the page ended on, leaving one or two writing
-   lines and a repeated header stranded on a three-quarters-empty continuation sheet. */
-.tracker { margin: 0 0 8mm; break-inside: avoid; }
-
-/* A grid whose rows come from the data rather than from a row count -- the two dashboards,
-   eighteen monitoring areas each -- is taller than a page, so "keep together" is a promise
-   the fragmenter cannot keep and it responds by leaving the section band alone on its own
-   sheet. These split, repeating their header, which is what a long table should do. */
-.tracker.tall { break-inside: auto; }
-
-/* A prefilled row already carries its label, so it does not need the 6.5mm writing height a
-   blank row does -- only the cells the parent fills do, and a writing line sets its own. At
-   the full height the eighteen dashboard rows ran one row past the page and that single row
-   printed on a sheet of its own. */
-.tracker.tall td { height: auto; padding: 1.8mm 3mm; }
-
-/* A heading is never the last thing on a page. break-after: avoid is safe here in a way it
-   is not on .section-header -- what follows a domain heading is a short definition table
-   that fits in almost any remainder, not a card-sized block the fragmenter cannot place. */
-.domain h3, .illness h3 {
+/* Book 1's contents runs group in one column and page in the other. Book 2's runs a group
+   heading across the row, because there the second column holds a recipe id that has to line
+   up down the page. */
+.contents-table .toc-group {
+  width: 52mm;
+  font-family: var(--font-sans);
+  font-size: var(--caption-size);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--brand-deep);
-  font-size: 13pt;
-  margin: 0 0 1mm;
-  border-bottom: 0.4mm solid var(--brand);
-  padding-bottom: 1.5mm;
+  padding-right: 5mm;
+}
+
+.contents-group {
+  font-family: var(--font-sans);
+  padding-bottom: 1.8mm;
+  font-size: var(--caption-size);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--brand-deep);
+  padding-top: 5mm;
+  border-bottom: 0.5mm solid var(--rule-strong);
   break-after: avoid;
 }
-/* The reference table and the red flag each stay whole. The red flag matters most: half a
-   warning on the foot of a page is the one split with a real cost. */
-.domain > table:first-of-type, .illness > table { break-inside: avoid; }
-.callout { break-inside: avoid; }
-.tracker-title, .tracker h3 { break-after: avoid; }
-.domain-age { color: var(--ink-soft); font-size: var(--caption-size); margin: 0 0 3mm; }
-
-/* The label column of a two-column definition table. A percentage rather than a character
-   measure so the value column keeps the same left edge down the page, which is what makes a
-   twenty-row feeding table scannable rather than ragged. */
-.domain-label { width: 34%; color: var(--ink-soft); }
-
-.domain-referral { font-size: var(--caption-size); margin: 3mm 0 0; }
-
-/* The provider's ai_limit, and the illness blocks' book_engine_limit. Deliberately quiet:
-   it is a constraint on what the page is, not advice to act on, and giving it warning
-   treatment would compete with the red flag directly above it for a reader's attention. */
-.domain-limit {
-  color: var(--ink-soft);
-  font-size: var(--caption-size);
-  font-style: italic;
-  margin: 2mm 0 0;
-}
-
-.tracker h3, .tracker-title {
-  color: var(--brand-deep);
-  font-size: 11.5pt;
-  margin: 4mm 0 1mm;
-}
-.tracker-meta { font-size: var(--caption-size); color: var(--ink-soft); margin: 0 0 2mm; }
-
-/* A tracker row must be tall enough to write in. The default table padding produces about
-   4mm, which prints a form nobody can use; 6.5mm is a line of adult handwriting. It is also
-   half of a page budget -- see trackerRowsByFrequency in tracker.go, which sets the row
-   counts against this height so a domain and its grid fit one page. Change either and
-   re-print a book. */
-.tracker td, .domain td:last-child { height: 6.5mm; }
-.tracker .write-line, .domain .write-line { min-width: 20mm; width: 90%; }
-
-.stage-band {
-  background: var(--card-fill);
-  border-left: 1mm solid var(--brand);
-  padding: 3mm 4mm;
-  margin: 0 0 5mm;
-}
-/* The child's own row in the before/after comparison. Weight rather than colour alone, per
-   the contract's avoid_color_only_meaning, and the row is labelled "(now)" in its own cell. */
-.stage-now { font-weight: 700; background: var(--card-fill) !important; }
-
-.ref-detail { color: var(--ink-soft); font-size: var(--small-size); }
-
-.toc { margin: 0; padding-left: 6mm; }
-.toc li { margin: 0 0 2.5mm; max-width: var(--body-measure); }
-.toc-title { font-weight: 600; }
-.toc-sub { color: var(--ink-soft); }
-.toc-sub::before { content: " - "; }
-.toc-note {
+.contents-note {
   color: var(--ink-soft);
   font-size: var(--caption-size);
   margin-top: 8mm;
-  max-width: var(--body-measure);
+  max-width: var(--measure);
 }
 
-/* break-before, not break-after. See body.html: break-after on every section emitted one
-   after the last section too, and the book ended on a blank sheet. */
-.page-break { break-before: page; }
-
-/* Book 2's contents page groups by meal. break-after: avoid on the meal heading so a meal
-   name is never the last thing on a page with its recipes overleaf. */
-.toc-meal {
+/* --------------------------------------------------------------------------------------
+   Chapter opener. One page per meal category, carrying the chapter numeral, its name and the
+   recipes inside it -- the rhythm that makes a run of recipe pages read as a book rather than
+   as a stack of cards.
+   -------------------------------------------------------------------------------------- */
+/* Block flow with a declared drop, for the reason set out above .cover: a fixed-height flex
+   column in the paged flow redistributes differently depending on which sheet it lands on,
+   and a chapter opener that sits at a different height in each chapter is the same defect
+   the cover had. */
+.chapter { display: block; margin-top: 62mm; }
+.chapter .chapter-num {
+  font-family: var(--font-sans);
+  font-size: 64pt;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--brand);
+  margin: 0 0 4mm;
+}
+.chapter h2 {
+  font-size: var(--display);
+  line-height: 1.1;
+  margin: 0 0 3mm;
   color: var(--brand-deep);
-  font-size: 12pt;
-  margin: 6mm 0 2mm;
+}
+.chapter .chapter-sub {
+  font-size: var(--lead);
+  font-style: italic;
+  color: var(--ink-soft);
+  margin: 0 0 8mm;
+  max-width: var(--measure);
+}
+/* No list numbering. The <ol> counter ran 1..5 down the left while the recipe's own book
+   number ran 01..05 on the right of the same line -- two different numbers for one dish, and
+   only one of them finds the page. The book number leads instead. */
+.chapter ul { list-style: none; margin: 0; padding: 0; max-width: 140mm; }
+.chapter li { margin: 0 0 2mm; }
+.chapter li .n {
+  font-family: var(--font-mono);
+  color: var(--brand);
+  font-weight: 600;
+  margin-right: 3mm;
+}
+
+/* --------------------------------------------------------------------------------------
+   Recipe page.
+
+   One recipe per page. A cook must never turn a page mid-dish with wet hands, which is the
+   oldest rule in cookbook layout and the reason the previous two-and-a-bit cards per page was
+   wrong however well it packed. The page is: number and region, title, rule, production strip,
+   then ingredients against method in the classic narrow/wide pair, then what the figures are
+   worth, then the safety line, then the family's own tracker.
+
+   There are no photographs and none are coming from a dataset (GAP-025): no provider workbook
+   carries an image column, neither loaded external set has one, and the Tier 2 image corpora
+   label dish types rather than the 940 combinatorially-named provider recipes -- a join would
+   reproduce the wrong-match failure already measured on method text, and neither has a use
+   basis for operational output. So the page is built to be worth looking at without one,
+   rather than around a hole where one would go.
+   -------------------------------------------------------------------------------------- */
+.recipe { break-before: page; }
+.recipe-head { display: flex; align-items: baseline; gap: 4mm; margin: 0 0 1mm; }
+.recipe-num {
+  font-family: var(--font-sans);
+  font-size: 22pt;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--brand);
+  font-variant-numeric: tabular-nums;
+}
+.recipe-kicker {
+  font-family: var(--font-sans);
+  font-size: var(--caption-size);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.recipe h2 {
+  font-size: 18pt;
+  line-height: 1.15;
+  margin: 0 0 3mm;
+  color: var(--brand-deep);
+  max-width: 150mm;
   break-after: avoid;
 }
+/* One line, quiet. Set as mono id plus the provider's own review status in sans: the whole
+   line in mono ran to two lines of typewriter text directly under the dish name, where a
+   reader looking for what to cook found a review flag shouting at them instead. The flag is
+   still on every card -- it is the provider's per-row value and CLAUDE.md requires it
+   surfaced -- it is just no longer the second-largest thing on the page. */
+.recipe-id {
+  font-family: var(--font-sans);
+  font-size: var(--caption-size);
+  color: var(--ink-faint);
+  margin: 0;
+  max-width: none;
+}
+.recipe-id .rid { font-family: var(--font-mono); }
+
+/* Production strip: prep, cook, serving, texture, cost. Ruled top and bottom, cells sharing
+   one baseline, the way a recipe page has always carried this. */
+.metastrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6mm;
+  border-top: 0.5mm solid var(--rule-strong);
+  border-bottom: 0.2mm solid var(--rule);
+  padding: 2.5mm 0;
+  margin: 3mm 0 4mm;
+}
+.metacell { min-width: 22mm; }
+.metacell .label { display: block; margin-bottom: 1mm; }
+.metacell .value { font-family: var(--font-sans); font-size: var(--lead); }
+
+/* Ingredients against method. 58mm and the remainder: the narrow column holds a name, its
+   Bengali and a quantity without wrapping on all but the longest provider names, and the wide
+   column keeps the method inside a readable measure. A hairline between them rather than two
+   filled panels -- the boxes-inside-boxes the first version drew came from styling both halves
+   as cards when what separates them is a single rule. */
+.recipe-cols {
+  display: grid;
+  grid-template-columns: 58mm 1fr;
+  gap: 0 8mm;
+  align-items: start;
+}
+.recipe-cols > .method { border-left: 0.2mm solid var(--rule); padding-left: 8mm; }
+.recipe-cols h3 {
+  font-family: var(--font-sans);
+  font-size: var(--caption-size);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--brand-deep);
+  margin: 0 0 3mm;
+  padding-bottom: 1.5mm;
+  border-bottom: 0.2mm solid var(--rule);
+}
+.ing { list-style: none; margin: 0; padding: 0; }
+.ing li {
+  margin: 0 0 2.5mm;
+  font-family: var(--font-sans);
+  font-size: var(--table-size);
+  line-height: 1.35;
+  max-width: none;
+}
+.ing .ing-name { display: block; }
+.ing .ing-bn { display: block; font-family: var(--font-indic-sans); color: var(--ink-soft); }
+.ing .ing-qty { font-family: var(--font-mono); color: var(--ink-soft); }
+.steps { margin: 0; padding-left: 6mm; }
+.steps li { margin: 0 0 1.8mm; max-width: none; }
+
+/* The GAP-001 disclosure sits in the ingredients column rather than across the page. It is a
+   fact about the method, but full width it cost 30mm of a sheet that has to hold a whole
+   recipe, while the narrow column beside a five-step method sat empty below a four-item
+   ingredient list. Same words, no page turn. */
+.side-note {
+  border-left: 0.6mm solid var(--accent);
+  padding-left: 3.5mm;
+  margin: 6mm 0 0;
+  font-size: var(--caption-size);
+  color: var(--ink-soft);
+  max-width: none;
+}
+.side-note h3 {
+  font-family: var(--font-sans);
+  font-size: var(--caption-size);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 1.5mm;
+  border: 0;
+  padding: 0;
+}
+.side-note p { margin: 0; max-width: none; }
+
+/* The tracker is the last thing on a recipe page and a table's trailing margin below it is
+   6mm of nothing. It was also, measured, the exact difference between the tracker fitting
+   under the recipe and starting a sheet of its own -- 41.5mm wanted against 41mm left. */
+.recipe .tracker table { margin-bottom: 0; }
+
+/* Nutrition. Real figures from recipe_nutrition_recomputed, which rebuilds a recipe from
+   IFCT-corrected ingredient values; the meter is ingredient_coverage, the fraction of the
+   recipe's mass standing on a measured value rather than on the provider's food-group
+   placeholder. It is the one bar on these pages, and it is a genuine fraction of a known
+   whole rather than a value drawn against a reference intake this project does not carry. */
+.nutri { margin: 4mm 0 0; break-inside: avoid; }
+.nutri-figures {
+  display: flex;
+  gap: 8mm;
+  border-top: 0.5mm solid var(--rule-strong);
+  padding-top: 3mm;
+}
+.nutri-figures .value {
+  font-family: var(--font-sans);
+  font-size: 13.5pt;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.nutri-figures .unit { font-size: var(--caption-size); color: var(--ink-soft); }
+.nutri-figures .label { display: block; margin-top: 1mm; }
+.nutri-basis {
+  font-family: var(--font-sans);
+  font-size: var(--caption-size);
+  color: var(--ink-soft);
+  margin: 2.5mm 0 0;
+  max-width: 150mm;
+}
+.nutri-figures .cov { margin-left: auto; text-align: right; }
+.nutri-figures .cov .label { color: var(--brand-deep); }
+.meter {
+  margin-left: 2mm;
+  display: inline-block;
+  width: 28mm;
+  height: 1.8mm;
+  background: var(--rule);
+  vertical-align: middle;
+}
+.meter > span { display: block; height: 1.8mm; background: var(--brand); }
+
+/* --------------------------------------------------------------------------------------
+   Book 1 content pages: daily-life domains, trackers, illness blocks, feeding stages.
+
+   The shared rule is that a unit -- a domain's reference table, a tracker with its threshold,
+   a red flag -- does not split across a page boundary, because the half a reader lands on is
+   the half without the warning.
+   -------------------------------------------------------------------------------------- */
+
+/* Deliberately NOT break-inside: avoid.
+
+   The first version had it, on the reasoning that a domain is one unit. What it produced was
+   a page carrying nothing but a heading, with the whole domain -- reference table, tracker,
+   red flag -- pushed to the next page because it could not fit in what was left. A domain
+   runs taller than a page routinely, so "never split" is not a promise print can keep. The
+   pieces that must stay whole are small enough to be kept whole individually. */
+.domain, .illness { margin: 0 0 9mm; }
+.domain h3, .illness h3 {
+  font-size: var(--subhead);
+  color: var(--brand-deep);
+  margin: 0 0 1mm;
+  padding-bottom: 1.5mm;
+  border-bottom: 0.4mm solid var(--brand);
+  break-after: avoid;
+}
+.domain-age {
+  font-family: var(--font-sans);
+  color: var(--ink-soft);
+  font-size: var(--caption-size);
+  margin: 0 0 3.5mm;
+}
+.domain-referral { font-size: var(--caption-size); margin: 3mm 0 0; max-width: var(--measure); }
+.domain > table:first-of-type, .illness > table { break-inside: avoid; }
+
+/* A tracker's head moves whole; its grid does not.
+
+   Both extremes were printed and read. break-inside: avoid on the whole tracker strands the
+   grid: a domain's page ends with 79mm free, a 102mm tracker will not fit in it, and the
+   whole grid goes to the next sheet -- leaving both pages more than half empty, twice per
+   domain, across nine domains. No break control at all strands the head: a title and a
+   threshold warning at the foot of a page with the grid they describe overleaf.
+
+   So the head is one unbreakable unit that must be followed by content (break-after: avoid),
+   and the table is free to split and repeat its own header, which is what a long form should
+   do. A parent who fills three rows on one page and four on the next has a usable form; a
+   parent reading a grid whose threshold is on the previous page does not. */
+.tracker { margin: 0 0 8mm; }
+.tracker-head { break-inside: avoid; break-after: avoid; }
+/* The two dashboards print one row per provider row -- eighteen monitoring areas -- and the
+   row already carries its label, so it does not need the 6.5mm writing height a blank row
+   does. Only the cells the parent fills do, and a writing line sets its own. */
+.tracker.tall td { height: auto; padding: 1.8mm 3mm 1.8mm 0; }
+.tracker-title {
+  font-family: var(--font-sans);
+  font-size: var(--caption-size);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--brand-deep);
+  margin: 3mm 0 1.5mm;
+  break-after: avoid;
+}
+.tracker-meta {
+  font-family: var(--font-sans);
+  font-size: var(--caption-size);
+  color: var(--ink-soft);
+  margin: 0 0 2.5mm;
+}
+/* A tracker row must be tall enough to write in. The default padding produces about 4mm,
+   which prints a form nobody can use; 6.5mm is a line of adult handwriting. It is also half
+   of a page budget -- trackerRowsByFrequency sets the row counts against this height so a
+   domain and its grid share one page. Change either and re-print a book. */
+/* Sentence case in a tracker's header row, not the letterspaced capitals every other table
+   header uses. A tracker can run to seven columns of 24mm, and "STOOL WITHHOLDING" set in
+   capitals with 0.08em of tracking is wider than that -- it broke mid-word, printing
+   "WITHHOLDIN" over "G". The provider's own column names are already written in sentence
+   case; this stops making them longer than they are. */
+/* Sentence case at the table floor, not the letterspaced capitals every other table header
+   uses. A tracker's columns are the provider's declared writable_fields and there can be
+   eight of them on a 170mm block -- 21mm each. "Family/age-appropriate target" in capitals
+   with 0.08em of tracking broke mid-word across four lines; at 8.5pt in sentence case the
+   longest word in the corpus fits its column and the breaks land between words. This is table
+   content and nothing else uses the rule -- see TestTableSizingDoesNotLeakOntoProse. */
+.tracker th { text-transform: none; letter-spacing: 0; font-size: var(--small-size); }
+
+.tracker td, .domain td:last-child { height: 6.5mm; }
+.tracker .write-line, .domain .write-line { min-width: 0; width: 92%; }
+
+.stage-band {
+  border-left: 0.8mm solid var(--brand);
+  background: var(--tint);
+  padding: 3mm 4mm;
+  margin: 0 0 6mm;
+  font-family: var(--font-sans);
+}
+/* The child's own row in the before/after comparison. Weight rather than colour alone, per
+   avoid_color_only_meaning, and the row is labelled "(now)" in its own cell. */
+.stage-now { font-weight: 700; background: var(--tint) !important; }
+
+.ref-detail { color: var(--ink-soft); font-size: var(--small-size); }
+
+/* A pair of side-by-side blocks. Kept for the few pages that genuinely compare two things;
+   it is a grid with a rule between, not two filled cards. */
+.card-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8mm; margin: 5mm 0; break-inside: avoid; }
+.card-row > .card + .card { border-left: 0.2mm solid var(--rule); padding-left: 8mm; }
+.card h3 {
+  font-family: var(--font-sans);
+  font-size: var(--caption-size);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--brand-deep);
+  margin: 0 0 2mm;
+}
+.card p { margin: 0; }
+
+/* The end matter's imprint: the run's own identity, printed once and in full rather than on
+   every recipe card. The content hash is 64 characters and is the same value for every card
+   in a book -- it versions the import of recipe_master, not the dish -- so thirty copies of
+   it was thirty lines of noise for one fact. */
+/* The recipe page's safety line. Same red rule, same tint, same word "Safety" -- the
+   contract's clinical_warning_visibility is high and avoid_color_only_meaning still holds --
+   set on one band rather than as a bordered panel with 4mm of padding on every side, because
+   this warning appears on every recipe in the book and the panel version cost a page turn per
+   dish. */
+.safety-band {
+  border-left: 0.8mm solid var(--warning-strong);
+  background: var(--warning-soft);
+  padding: 2.5mm 4mm;
+  margin: 3.5mm 0 0;
+  font-family: var(--font-sans);
+  font-size: var(--caption-size);
+  break-inside: avoid;
+  max-width: none;
+}
+.safety-band .label { color: var(--warning-strong); margin-right: 2mm; }
+
+.chosen {
+  font-family: var(--font-sans);
+  font-size: var(--caption-size);
+  color: var(--ink-soft);
+  margin: 3mm 0 0;
+  max-width: none;
+}
+
+.imprint {
+  border-top: 0.5mm solid var(--rule-strong);
+  padding-top: 4mm;
+  margin-top: 8mm;
+  font-family: var(--font-sans);
+  font-size: var(--caption-size);
+  color: var(--ink-soft);
+}
+.imprint dl { display: grid; grid-template-columns: 40mm 1fr; gap: 2mm 4mm; margin: 0; }
+.imprint dt { font-weight: 600; color: var(--ink); }
+.imprint dd { margin: 0; word-break: break-all; }

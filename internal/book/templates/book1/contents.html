@@ -5,24 +5,41 @@
      not there, and this book deliberately omits blocks -- B1-004 always, the age-inapplicable
      ones per child, and anything that resolved to no content.
 
+     Grouped on the provider's own two levels: section as the heading, subsection as the page
+     under it. Ungrouped, the list read "Vaccination", "Vaccination", "Personal Nutrition
+     Target", "Personal Nutrition Target" with nothing to tell the pairs apart.
+
      No page numbers. Chromium assigns them at print time and the template cannot know them;
      a contents page with wrong numbers is worse than one with none. The sections print in
      book_order, so the list is the order a reader turns pages in. */}}
 {{ define "B1-TOC-01" }}
-<section class="page-break contents">
-  <div class="section-header">
+<section class="page-break">
+  <div class="page-head">
+    <p class="kicker">Contents</p>
     <h2>What is in this book</h2>
-    <p>In the order the pages appear</p>
+    <p class="standfirst">In the order the pages appear.</p>
   </div>
-  <ol class="toc">
-    {{ range .Sections }}
-      <li>
-        <span class="toc-title">{{ .Title }}</span>
-        {{ with .Subtitle }}<span class="toc-sub">{{ . }}</span>{{ end }}
-      </li>
+
+  {{/* Two columns rather than a heading row above every page: with one row for the group
+       and another for its single page, a book of thirty sections ran the contents onto a
+       second sheet and half of it was the same words twice. The group name prints once, on
+       the first of its pages, which is how a contents page has always carried a hierarchy. */}}
+  {{/* Explicit widths: table-layout is fixed and there is no header row to infer them from.
+       See the same note in book2/contents.html. */}}
+  <table class="contents-table">
+    <colgroup><col style="width:52mm"><col></colgroup>
+    {{ range .Contents }}
+      {{ $group := .Title }}
+      {{ range $i, $page := .Pages }}
+        <tr>
+          <td class="toc-group">{{ if eq $i 0 }}{{ $group }}{{ end }}</td>
+          <td>{{ $page }}</td>
+        </tr>
+      {{ end }}
     {{ end }}
-  </ol>
-  <p class="toc-note">Pages left out of this book, and why, are listed with the generated
+  </table>
+
+  <p class="contents-note">Pages left out of this book, and why, are listed with the generated
     output rather than here: an absence has a reason, and the reason belongs where the
     operator reads it.</p>
 </section>

@@ -6,9 +6,15 @@
      calculation module", "Does not replace clinical assessment", "Individual pages need
      clinical editing". */}}
 {{ define "B1-REFS-01" }}
+{{/* Column widths are declared because table-layout is fixed (see tokens.css) and the five
+     columns are not equal work: the source id is a short token, the two prose columns carry
+     whole sentences. Left to an equal fifth each, the limitation column wrapped to six lines
+     beside a one-word id. */}}
 <table>
   <thead>
-    <tr><th>Source</th><th>Authority</th><th>Topic</th><th>How it is used</th><th>Stated limitation</th></tr>
+    <tr><th style="width:15%">Source</th><th style="width:18%">Authority</th>
+        <th style="width:21%">Topic</th><th style="width:23%">How it is used</th>
+        <th style="width:23%">Stated limitation</th></tr>
   </thead>
   <tbody>
     {{ range .Refs }}

@@ -13,9 +13,18 @@
        conditional version left Child Profile sharing a page with the contents whenever the
        contents happened to be short. */}}
   <section class="page-break">
-    <div class="section-header">
-      <h2>{{ .Title }}</h2>
-      {{ with .Subtitle }}<p>{{ . }}</p>{{ end }}
+    {{/* The provider's own two levels, the right way round: section is the group and goes
+         in the kicker, subsection is this page and is the heading. The first version made
+         section the heading, so four pairs of consecutive pages carried identical titles --
+         "Vaccination" over the schedule and again over post-vaccination feeding -- and the
+         only thing distinguishing them was set smaller underneath. */}}
+    <div class="page-head">
+      {{ if .Subtitle }}
+        <p class="kicker">{{ .Title }}</p>
+        <h2>{{ .Subtitle }}</h2>
+      {{ else }}
+        <h2>{{ .Title }}</h2>
+      {{ end }}
     </div>
 
     {{/* The block's own content_purpose and parent_facing_output, printed before the content.

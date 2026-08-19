@@ -7,9 +7,12 @@
   {{ template "B2-SECTION-01" . }}
 {{ end }}
 {{/* RotationPlan is nullable, and AssembleBook2 never builds one today -- see its own doc
-     comment. This dispatch exists so the page appears automatically the day a real
-     rotation exists, without touching this template again. */}}
+     comment. This dispatch exists so the page appears automatically the day a real rotation
+     exists, without touching this template again. */}}
 {{ with $b.RotationPlan }}
   {{ template "B2-ROTATE-01" . }}
 {{ end }}
+{{/* The imprint takes the whole render context rather than the book, because the release
+     fields it prints live on Metadata. */}}
+{{ template "B2-IMPRINT-01" . }}
 {{ end }}

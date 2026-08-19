@@ -11,7 +11,17 @@
      are capped at ten rows and move whole; see .tracker in tokens.css for why the two need
      opposite treatment. */}}
 <div class="tracker{{ if .Prefilled }} tall{{ end }}">
-  {{ with .Title }}<h3>{{ . }}</h3>{{ end }}
+  {{/* Title, thresholds and reviewer travel together and stay with the first row of the grid
+       -- break-after: avoid on this block. The grid itself is free to split and repeat its
+       header, which is what a long form should do; holding the whole tracker together
+       instead left a domain's page 60% empty and put its grid alone on the next sheet. */}}
+  <div class="tracker-head">
+  {{/* A paragraph with its own class, not an <h3>. `.tracker h3` and `.callout h3` have the
+       same specificity, so inside a tracker the later of the two won and a red-flag callout
+       printed its heading in the tracker's letterspaced capitals while the identical callout
+       outside a tracker printed it in sentence case -- two visual treatments for one severity,
+       on facing pages. */}}
+  {{ with .Title }}<p class="tracker-title">{{ . }}</p>{{ end }}
   {{ if or .Reference .Frequency }}
     <p class="tracker-meta">
       {{ with .Reference }}<strong>Reference:</strong> {{ . }}{{ end }}
@@ -35,6 +45,7 @@
     </div>
   {{ end }}
   {{ with .Review }}<p class="tracker-meta"><strong>Who reviews this:</strong> {{ . }}</p>{{ end }}
+  </div>
   <table>
     <thead><tr>{{ range .Columns }}<th>{{ . }}</th>{{ end }}</tr></thead>
     <tbody>

@@ -1,26 +1,26 @@
 {{ define "B2-SECTION-01" }}
-{{/* Meal opener, page 3-4 of the prototype: a full-bleed band like B1's section-header, but
-     in --brand rather than --brand-deep, so a meal opener and a chapter divider read as
-     visibly different weights on the page. No new token is added -- --brand already exists
-     on .book2 in tokens.css; this only picks the lighter of the two the palette defines. */}}
-{{/* A wrapper that forced the band and the first card to stay together (break-inside:
-     avoid) was tried first and rejected: a band plus one full recipe card runs a few mm
-     taller than a page, so the print engine could never honour "keep together" and instead
-     moved the whole card to the next page anyway, leaving a page with nothing on it but the
-     meal-category title -- confirmed by rendering to PDF and reading the page image, not
-     by inspecting the CSS. The fix that actually closes it is in recipe.html:
-     B2-RECIPE-01-OPENER renders the first card of a section without its own break-inside:
-     avoid, so its content is free to start filling the page directly under the band and
-     spill onto the next page like any other flowing content, rather than being held as one
-     atomic block that has nowhere to go. Every recipe after the first keeps the ordinary
-     one-card-per-fragment B2-RECIPE-01. */}}
+{{/* Chapter opener: one page per meal category, carrying the numeral, the name and the
+     recipes inside it. It gives a run of recipe pages the rhythm of a book rather than a
+     stack of cards, and it answers "what is in this chapter" without a page turn.
+
+     The band this replaced was a full-bleed colour block, and it was structurally hostile as
+     well as loud: with break-after: avoid it could not be honoured against a recipe card the
+     fragmenter also could not split, and Chromium resolved that by stretching the band's own
+     fragment to fill the sheet -- a solid-colour "Breakfast" page with nothing on it. The
+     opener is a whole page on purpose, so there is nothing left for that conflict to be about.
+
+     Every recipe page carries its own break-before, so the opener needs no wrapper. */}}
 <section class="page-break">
-  <div class="section-header" style="background: var(--brand);">
+  <div class="chapter">
+    <p class="chapter-num">{{ printf "%02d" .Number }}</p>
     <h2>{{ .Title }}</h2>
-    <p>{{ len .Recipes }} recipe{{ if ne (len .Recipes) 1 }}s{{ end }} selected for this meal</p>
+    <p class="chapter-sub">{{ len .Recipes }} recipe{{ if ne (len .Recipes) 1 }}s{{ end }}
+      selected for this meal{{ if gt .TargetRecipeCount 0 }}, from a provider target of
+      {{ .TargetRecipeCount }}{{ end }}.</p>
+    <ul>
+      {{ range .Recipes }}<li><span class="n">{{ printf "%02d" .Number }}</span>{{ .Title }}</li>{{ end }}
+    </ul>
   </div>
-  {{ range $i, $r := .Recipes }}
-    {{ if eq $i 0 }}{{ template "B2-RECIPE-01-OPENER" $r }}{{ else }}{{ template "B2-RECIPE-01" $r }}{{ end }}
-  {{ end }}
 </section>
+{{ range .Recipes }}{{ template "B2-RECIPE-01" . }}{{ end }}
 {{ end }}

@@ -178,14 +178,21 @@ func printIn(parent context.Context, htmlDoc []byte, meta Metadata) ([]byte, err
 	ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	header := fmt.Sprintf(`<div style="font-size:7.5pt;line-height:1.4;width:100%%;
-		box-sizing:border-box;padding:5mm 12mm 3mm;margin:0;
-		border:0.4mm solid #9b2226;background:#fdecea;color:#9b2226">
-		<strong>Provisional - not clinically approved.</strong>
-		This book was generated from provider data marked
-		<span style="font-family:'Noto Sans Mono','DejaVu Sans Mono',ui-monospace,monospace">%s</span>.
-		It has not completed culinary, nutrition or clinical review and must not be used as a
-		clinical prescription.</div>`,
+	// A running head, not a poster. The disclosure is on every page and no template can
+	// suppress it, which is the requirement; printing the whole three-line paragraph 42 times
+	// was not. It cost 28mm of every sheet's head, left the top of each page empty and the
+	// foot crowded, and by the fifth page a reader has stopped seeing it -- which is the one
+	// thing a standing warning must not do. The full sentence appears once, in the document's
+	// own .provisional block on the opening page; this line carries the same two facts on
+	// every sheet in the space a running head occupies.
+	header := fmt.Sprintf(`<div style="font-size:7pt;line-height:1.3;width:100%%;
+		box-sizing:border-box;padding:0 20mm;margin:0;
+		display:flex;justify-content:space-between;gap:6mm;
+		font-family:'Noto Sans','Liberation Sans',sans-serif;color:#9b2226">
+		<span><strong>Provisional - not clinically approved.</strong> Not a clinical prescription.</span>
+		<span style="font-family:'Noto Sans Mono','DejaVu Sans Mono',ui-monospace,monospace;
+		      white-space:nowrap;overflow:hidden;text-overflow:ellipsis">%s</span>
+		</div>`,
 		html.EscapeString(meta.ReviewStatus))
 
 	// The release segment is omitted entirely when there is no release id, rather than
@@ -196,10 +203,11 @@ func printIn(parent context.Context, htmlDoc []byte, meta Metadata) ([]byte, err
 	if meta.ReleaseID != "" {
 		release = " | release " + html.EscapeString(meta.ReleaseID)
 	}
-	footer := fmt.Sprintf(`<div style="font-size:7pt;width:100%%;padding:0 12mm;
-		display:flex;justify-content:space-between;color:#52606d">
-		<span>MadamGY | %s%s | generated %s</span>
-		<span class="pageNumber"></span></div>`,
+	footer := fmt.Sprintf(`<div style="font-size:7pt;width:100%%;padding:0 20mm;
+		display:flex;justify-content:space-between;align-items:baseline;
+		font-family:'Noto Sans','Liberation Sans',sans-serif;color:#5a5a5a">
+		<span>MadamGY &middot; %s%s &middot; generated %s</span>
+		<span class="pageNumber" style="font-size:9pt;color:#1a1a1a"></span></div>`,
 		html.EscapeString(meta.BookVersion),
 		release,
 		meta.GenerationDate.Format("2006-01-02"))
@@ -220,10 +228,15 @@ func printIn(parent context.Context, htmlDoc []byte, meta Metadata) ([]byte, err
 				WithPrintBackground(true).
 				WithPaperWidth(8.27). // A4 portrait, inches
 				WithPaperHeight(11.69).
-				WithMarginTop(1.97). // 50mm: safe-margin + header-height + banner-reserve, tokens.css @page
-				WithMarginBottom(0.47).
-				WithMarginLeft(0.47).
-				WithMarginRight(0.47).
+				// These four must match the @page margins in tokens.css, which is where
+				// the page geometry is reasoned about and written down. Chromium's own
+				// values win for the printed sheet, so a disagreement here does not error
+				// -- it silently prints a different book from the one the stylesheet was
+				// laid out for. 22mm head for the running line, 20mm elsewhere.
+				WithMarginTop(0.866).
+				WithMarginBottom(0.787).
+				WithMarginLeft(0.787).
+				WithMarginRight(0.787).
 				WithDisplayHeaderFooter(true).
 				WithHeaderTemplate(header).
 				WithFooterTemplate(footer).

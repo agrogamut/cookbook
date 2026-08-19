@@ -1,27 +1,38 @@
 {{ define "B1-COVER-01" }}
+{{/* Set as a book cover is set: everything hung from one left edge, the child's name as the
+     largest thing on the sheet, the run's facts in a ruled block at the foot.
+
+     No spacer div after it. There used to be an empty <div class="page-break">, harmless
+     while .page-break meant break-after and a blank page 2 the moment it meant break-before:
+     the empty div took a break before itself and the contents page that follows took another.
+     Whatever follows the cover carries its own break. */}}
 <div class="cover">
-  <div class="brand">MADAMGY</div>
-  <h1>My Child's Growth, Nutrition &amp; Development Companion</h1>
-  <p class="subtitle">A personalized working guide for feeding, growth, vaccination,
-     development and everyday care</p>
-  {{/* The portrait sits above the name block so the cover reads as one identification: the
-       face, then the name it belongs to. Without a photograph the block is simply absent --
-       no placeholder silhouette, which would look like a picture that failed to load. */}}
-  {{ with .Child.Photo }}
-  <figure class="cover-photo">
-    <img src="{{ .DataURI }}" alt="Photograph of the child">
-    {{ with .Caption }}<figcaption>{{ . }}</figcaption>{{ end }}
-  </figure>
-  {{ end }}
-  <div class="name-box">
-    <div class="name">{{ .Child.DisplayName }}</div>
-    {{ with .Child.DateOfBirth }}<div>Date of birth: <span class="mono">{{ . }}</span></div>{{ end }}
-    <div>Age: {{ .Child.AgeLabel }}</div>
+  <div class="cover-kicker">MadamGY &middot; Growth, Nutrition &amp; Development</div>
+
+  <div class="cover-main">
+    {{/* The portrait sits above the name so the cover reads as one identification: the face,
+         then the name it belongs to. Without a photograph the block is simply absent -- no
+         placeholder silhouette, which would look like a picture that failed to load. */}}
+    {{ with .Child.Photo }}
+    <figure class="cover-photo">
+      <img src="{{ .DataURI }}" alt="Photograph of the child">
+      {{ with .Caption }}<figcaption>{{ . }}</figcaption>{{ end }}
+    </figure>
+    {{ end }}
+
+    <h1>{{ .Child.DisplayName }}</h1>
+    <p class="cover-sub">A working guide to feeding, growth, vaccination, development and
+      everyday care, personalised to this child's age and recorded profile. Prepared after
+      consultation.</p>
   </div>
-  <p class="subtitle">Prepared after consultation</p>
+
+  <div class="cover-facts">
+    {{ with .Child.DateOfBirth }}<div><span class="label">Date of birth</span>
+         <span class="value mono">{{ . }}</span></div>{{ end }}
+    <div><span class="label">Age at generation</span>
+         <span class="value">{{ .Child.AgeLabel }}</span></div>
+    <div><span class="label">Pages in this book</span>
+         <span class="value mono">{{ .SectionCount }} sections</span></div>
+  </div>
 </div>
-{{/* No spacer div here. There used to be an empty <div class="page-break"> after the cover,
-     which was harmless while .page-break meant break-after and became a blank page the moment
-     it meant break-before: the empty div took a break before itself, and the contents page
-     that follows took another. Whatever follows the cover carries its own break. */}}
 {{ end }}

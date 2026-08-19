@@ -352,7 +352,7 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			}
 
 		case "B1-TRACKER-01":
-			sec.Trackers = trackerGrids(blockID, writable, sectionTitle, src, cp.AgeMonths)
+			sec.Trackers = trackerGrids(blockID, writable, src, cp.AgeMonths)
 
 		case "B1-END-01":
 			// No section content: the template reads Metadata directly (book_version,
@@ -804,7 +804,7 @@ var dashboardBlocks = map[string]bool{"B1-020": true, "B1-031": true}
 // the blocks that declare a form and have no template behind them (B1-002's goal table,
 // B1-010's reaction log). A block with neither returns nothing and is reported as an omission
 // by the caller's SectionHasContent guard.
-func trackerGrids(blockID, writable, title string, src BlockSources, ageMonths int) []TrackerSpec {
+func trackerGrids(blockID, writable string, src BlockSources, ageMonths int) []TrackerSpec {
 	if dashboardBlocks[blockID] {
 		return dashboardGrids(src.AllMonitoring, ageMonths)
 	}
@@ -813,7 +813,12 @@ func trackerGrids(blockID, writable, title string, src BlockSources, ageMonths i
 		out = append(out, trackerFromMonitoring(m))
 	}
 	if len(out) == 0 {
-		if t := trackerFromWritable(title, writable, ""); t != nil {
+		// No title on the fallback grid. It used to take the block's section title, which
+		// the page head already prints two lines above it -- so the page read
+		// "CONSULTATION SUMMARY" as its heading and "CONSULTATION SUMMARY" again as the
+		// caption of the only thing on it. A monitoring template's grid keeps its own
+		// title, because that names a parameter the heading does not.
+		if t := trackerFromWritable("", writable, ""); t != nil {
 			out = append(out, *t)
 		}
 	}

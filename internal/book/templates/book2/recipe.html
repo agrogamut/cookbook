@@ -1,130 +1,165 @@
 {{ define "B2-RECIPE-01" }}
-{{/* Prototype page 3. break-inside: avoid is applied on this wrapper directly rather than
-     through a new CSS class -- tokens.css defines no per-recipe-card class and this task
-     adds none -- to satisfy the contract's "one to two recipe cards per page" literally. */}}
-<div class="card" style="break-inside: avoid; margin: 0 0 6mm;">
-  {{ template "B2-RECIPE-BODY-01" . }}
-</div>
-{{ end }}
+{{/* One recipe, one page.
 
-{{ define "B2-RECIPE-01-OPENER" }}
-{{/* Used only for the first recipe directly under a meal-category band (B2-SECTION-01).
-     Same card, deliberately without break-inside: avoid. A band plus one full recipe card
-     is a few mm taller than a page, so treating the pair as one unbreakable unit meant the
-     browser could never honour it and silently dropped the whole card to the next page,
-     leaving the band alone on an otherwise blank page -- a page a reader turns for nothing,
-     confirmed by rendering to PDF and reading the page image. Letting this one card break
-     keeps its content flowing directly under its own title instead. Every card after the
-     first still gets the atomic break-inside: avoid above. */}}
-<div class="card" style="margin: 0 0 6mm;">
-  {{ template "B2-RECIPE-BODY-01" . }}
-</div>
-{{ end }}
+     A cook must never turn a page mid-dish with wet hands -- the oldest rule in cookbook
+     layout, and the reason the previous two-and-a-bit cards per page was wrong however well
+     it packed. The page breaks before itself and is otherwise free to flow, which is what
+     lets a long ingredient list run over rather than being held as an atomic block the
+     fragmenter has nowhere to put. That failure was measured on the earlier layout: a card
+     with break-inside: avoid under a section band left the band alone on a blank sheet.
 
-{{ define "B2-RECIPE-BODY-01" }}
-  <h3>{{ .Title }}</h3>
-  <p class="mono">{{ .RecipeID }} &middot; version {{ .RecipeVersion }} &middot; {{ .ReviewStatus }}</p>
+     There is no photograph, here or anywhere in this book, and none is coming from a dataset
+     (GAP-025). No provider workbook carries an image column, neither loaded external dataset
+     has one, and the Tier 2 image corpora label dish types rather than the 940
+     combinatorially-named provider recipes -- a join would reproduce the wrong-match failure
+     already measured on method text, and neither has a use basis for operational output.
+     Filling this needs photographs commissioned against the recipe list. */}}
+<div class="recipe">
+  <div class="recipe-head">
+    <span class="recipe-num">{{ printf "%02d" .Number }}</span>
+    <span class="recipe-kicker">{{ with .RegionCulture }}{{ . }}{{ end }}</span>
+  </div>
+  <h2>{{ .Title }}</h2>
+  <p class="recipe-id"><span class="rid">{{ .RecipeID }}</span> &middot; {{ .ReviewStatus }}</p>
 
-  {{/* Reason chips in a bordered strip: a row of cards, the same shape .card-row already
-       draws elsewhere, rather than a new chip style. Each reason is the engine's own
-       recorded decision -- the active nutrition target, a region match, a diet-practice
-       match -- never invented prose. */}}
-  {{ if .SelectionReasons }}
-  <div class="card-row">
-    {{ range .SelectionReasons }}<div class="card"><p>{{ . }}</p></div>{{ end }}
+  {{/* Production strip: prep, cook, serving, texture, cost band. Every value is a
+       recipe_master column that has always been loaded and was never printed. An unset
+       column yields no cell rather than a cell reading zero. */}}
+  {{ if .Meta }}
+  <div class="metastrip">
+    {{ range .Meta }}
+    <div class="metacell">
+      <span class="label">{{ .Label }}</span>
+      <span class="value{{ if .Mono }} mono{{ end }}">{{ .Value }}</span>
+    </div>
+    {{ end }}
   </div>
   {{ end }}
 
-  {{/* GAP-001 surfaced at the point of use: if this method text is one of the six shared
-       across the corpus, the reader is told so directly on the card rather than having to
-       find it in the register. */}}
-  {{ if .MethodIsProviderBoilerplate }}
-  <div class="callout">
-    <h3>Note: shared method text</h3>
-    <p>This preparation method is one of a small number of texts shared across many
-       recipes in the provider's dataset (GAP-001, see the gap register) and is not
-       written specifically for this dish.</p>
-  </div>
-  {{ end }}
-
-  {{/* Cream ingredients panel beside the numbered method -- .card already carries
-     --card-fill (cream on book1, rose-cream on book2), so the existing card styling is
-     what draws the "cream panel" the prototype calls for. */}}
-  <div class="card-row">
-    <div class="card">
+  <div class="recipe-cols">
+    <div class="ingredients">
       <h3>Ingredients</h3>
-      <ul>
-        {{/* Bengali sits in its own span, in --font-indic, beside the English name -- never
-             folded into one string, so the script gets the right face and the name does not
-             need to be parsed back apart to style it. Printed only where ingredient_master
-             actually supplied one; no name here is a transliteration. */}}
+      <ul class="ing">
+        {{/* Bengali sits on its own line under the English name, in the conjunct-forming
+             face -- never folded into one string, so the script gets the right face and the
+             name does not need parsing back apart to style it. Printed only where
+             ingredient_master supplied one; no name here is a transliteration. */}}
         {{ range .Ingredients }}
-        <li class="mono">{{ .Name }}{{ if .Bengali }} <span class="indic">{{ .Bengali }}</span>{{ end }}{{ if .Quantity }} ({{ .Quantity }}){{ end }}</li>
+        <li>
+          <span class="ing-name">{{ .Name }}{{ if .Quantity }} <span class="ing-qty">{{ .Quantity }}</span>{{ end }}</span>
+          {{ if .Bengali }}<span class="ing-bn">{{ .Bengali }}</span>{{ end }}
+        </li>
         {{ end }}
       </ul>
+
+      {{/* GAP-001 surfaced at the point of use: if this method text is one of the six shared
+           across the corpus, the reader is told so on the page rather than having to find it
+           in the register. It sits in this column because the narrow side of a five-step
+           method is empty below a short ingredient list, and full width it cost the page
+           enough height to push the tracker onto a sheet of its own. */}}
+      {{ if .MethodIsProviderBoilerplate }}
+      <div class="side-note">
+        <h3>Shared method</h3>
+        <p>The provider repeats this preparation text across many recipes (GAP-001). It
+          describes the format, not this dish.</p>
+      </div>
+      {{ end }}
     </div>
-    <div class="card">
+    <div class="method">
       <h3>Method</h3>
-      <ol>
+      <ol class="steps">
         {{ range .MethodSteps }}<li>{{ . }}</li>{{ end }}
       </ol>
     </div>
   </div>
 
-  {{ if .NutritionTags }}
-  <p class="mono">{{ range $i, $t := .NutritionTags }}{{ if $i }} &middot; {{ end }}{{ $t }}{{ end }}</p>
+  {{ template "B2-NUTRI-01" . }}
+
+  {{ with .Safety }}
+  <p class="safety-band"><span class="label">Safety</span>{{ . }}</p>
   {{ end }}
 
-  {{/* The serving table and the parent tracker are wrapped as one unbreakable tail.
-
-       Separately, the opener card -- the first in a meal section, which is deliberately
-       splittable so it can start under its own band -- broke immediately before the tracker
-       and left a page carrying nothing but four empty column headings. Three of Book 2's
-       twenty-one pages were that. The two belong together in any case: the tracker records
-       what happened when the serving described directly above it was tried. */}}
-  <div style="break-inside: avoid;">
-  <table>
-    <thead>
-      <tr><th>Texture &amp; serving</th><th>Safety</th><th>Approved swap</th></tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>
-          {{/* The separator belongs to the texture, not to the cell: an empty texture used
-               to leave a bare leading comma, which reads as a value that failed to print
-               rather than as a field the provider does not carry. */}}
-          {{ with .TextureServing }}{{ . }},{{ end }}
-          <span class="mono">{{ .Serving }}</span>
-        </td>
-        <td>{{ .Safety }}</td>
-        {{/* No substitute-ingredient data is joined into the recipe card in this
-             generation, so this column states the gap rather than guessing a swap.
-             Substitute_Ingredient_IDs exists on the ingredient master and is clean; it
-             is the join onto the card that has not been built. */}}
-        <td>not available for this recipe</td>
-      </tr>
-    </tbody>
-  </table>
+  {{/* The engine's own recorded reasons, never prose composed here. Set small and across the
+       page: in the ingredients column they made that side of the grid taller than the method
+       beside it, which pushed the nutrition, safety and tracker blocks onto a second sheet. */}}
+  {{ if .SelectionReasons }}
+  <p class="chosen"><span class="label">Chosen because</span>
+    {{ range $i, $r := .SelectionReasons }}{{ if $i }} &middot; {{ end }}{{ $r }}{{ end }}{{ with .NutritionTags }} &middot;
+    {{ range $i, $t := . }}{{ if $i }} &middot; {{ end }}{{ $t }}{{ end }}{{ end }}</p>
+  {{ end }}
 
   {{ template "B2-TRACK-01" . }}
+</div>
+{{ end }}
+
+{{ define "B2-NUTRI-01" }}
+{{/* Real figures, or no panel at all. recipe_nutrition_recomputed rebuilds a recipe from
+     IFCT-corrected ingredient values; a recipe with no row there prints nothing here,
+     because a zero is a claim and an absent panel is the truth.
+
+     The totals are for the ingredients listed and are deliberately not divided down to the
+     stated serving. On sampled recipes the serving (308 g) exceeds the whole ingredient mass
+     (205 g), because the serving includes water the method adds and the ingredient list does
+     not; no column documents that relationship, so scaling by it would invent one. */}}
+{{ with .Nutrition }}
+<div class="nutri">
+  <div class="nutri-figures">
+    <div><span class="value">{{ .EnergyKcal }}</span> <span class="unit">kcal</span>
+         <span class="label">Energy</span></div>
+    {{ with .ProteinG }}<div><span class="value">{{ . }}</span> <span class="unit">g</span>
+         <span class="label">Protein</span></div>{{ end }}
+    {{ with .IronMg }}<div><span class="value">{{ . }}</span> <span class="unit">mg</span>
+         <span class="label">Iron</span></div>{{ end }}
+    {{ with .CalciumMg }}<div><span class="value">{{ . }}</span> <span class="unit">mg</span>
+         <span class="label">Calcium</span></div>{{ end }}
+    {{/* Coverage as a fifth figure rather than as a sentence under the row. It is the same
+         kind of thing as the four beside it -- a measured quantity about this dish -- and as
+         prose it ran to two extra lines on every recipe page, which was the difference
+         between a recipe ending on its own sheet and its tracker starting another.
+
+         It is the one bar in this book, and it measures a genuine fraction of a known whole:
+         how much of the dish by mass stands on a measured IFCT value rather than on the
+         provider's food-group planning figure. Nothing here is drawn against a reference
+         intake, which this project does not carry and would have to invent. */}}
+    <div class="cov">
+      <span class="value">{{ if .FullyVerified }}100{{ else }}{{ .CoveragePct }}{{ end }}</span>
+      <span class="unit">%</span>
+      <span class="meter"><span style="width: {{ if .FullyVerified }}100{{ else }}{{ .CoveragePct }}{{ end }}%"></span></span>
+      <span class="label">IFCT-verified by mass</span>
+    </div>
   </div>
+  <p class="nutri-basis">Totals for the {{ .BasisG }} of ingredients listed above, rebuilt from
+    IFCT 2017 values.{{ if not .FullyVerified }} The unverified remainder stands on the
+    provider's food-group planning figure, which is shared across a whole food group and is
+    not specific to the ingredient.{{ end }}</p>
+</div>
+{{ end }}
 {{ end }}
 
 {{ define "B2-TRACK-01" }}
-{{/* The parent tracker row: four writing lines, always. This template has no branch that
-     can print a value here -- what happened after the recipe was tried is the family's to
-     record, not this project's to fabricate. */}}
-<table>
-  <thead>
-    <tr><th>Tried on</th><th>Amount accepted</th><th>Response</th><th>Parent note</th></tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><span class="write-line"></span></td>
-      <td><span class="write-line"></span></td>
-      <td><span class="write-line"></span></td>
-      <td><span class="write-line"></span></td>
-    </tr>
-  </tbody>
-</table>
+{{/* The family's own row: four writing lines, always. This template has no branch that can
+     print a value -- what happened after the recipe was tried is the family's to record, not
+     this project's to fabricate. */}}
+<div class="tracker" style="margin-top: 2mm;">
+  <p class="tracker-title">When you cooked this</p>
+  <table>
+    <thead>
+      <tr><th>Tried on</th><th>Amount accepted</th><th>Response</th><th>Parent note</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="write-line"></span></td>
+        <td><span class="write-line"></span></td>
+        <td><span class="write-line"></span></td>
+        <td><span class="write-line"></span></td>
+      </tr>
+      <tr>
+        <td><span class="write-line"></span></td>
+        <td><span class="write-line"></span></td>
+        <td><span class="write-line"></span></td>
+        <td><span class="write-line"></span></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
 {{ end }}
