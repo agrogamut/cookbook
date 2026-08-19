@@ -166,3 +166,43 @@ export async function getBookPdf(childID: string, book: "book1" | "book2"): Prom
   if (!res.ok) throw await bookError(res);
   return res.blob();
 }
+
+/** One generation run: both of a child's books, from one profile read at one instant.
+ *
+ *  Omissions arrive split three ways. A profile omission is a fact about the child and holds
+ *  for both books; a book omission is that book's own corpus coverage. Merging them would
+ *  leave an operator unable to tell which of the two they are looking at. */
+export interface BookSet {
+  childID: string;
+  asOf: string;
+  book1Html: string;
+  book2Html: string;
+  profileOmissions: string[];
+  book1Omissions: string[];
+  book2Omissions: string[];
+}
+
+export async function getBookSet(childID: string): Promise<BookSet> {
+  const res = await fetch(`${BASE_URL}/api/books/${encodeURIComponent(childID)}/preview`);
+  if (!res.ok) throw await bookError(res);
+  const body = await res.json();
+  return {
+    childID: body.child_id,
+    asOf: body.as_of,
+    book1Html: body.book1_html,
+    book2Html: body.book2_html,
+    // Defaulted rather than assumed: the API sends [] for each, and a client that renders a
+    // count must not crash a whole preview over a missing list.
+    profileOmissions: body.profile_omissions ?? [],
+    book1Omissions: body.book1_omissions ?? [],
+    book2Omissions: body.book2_omissions ?? [],
+  };
+}
+
+/** Both books as printed PDFs, in one zip. Two books, two files -- not one merged PDF, which
+ *  would renumber Book 2's pages behind Book 1's. */
+export async function getBookSetZip(childID: string): Promise<Blob> {
+  const res = await fetch(`${BASE_URL}/api/books/${encodeURIComponent(childID)}/books.zip`);
+  if (!res.ok) throw await bookError(res);
+  return res.blob();
+}

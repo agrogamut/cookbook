@@ -19,6 +19,13 @@ import (
 // part of the wire contract fixed here, not an implementation detail.
 const bookOmissionHeader = "X-Book-Omissions"
 
+// joinOmissions renders an omission list into the header value. The "; " separator is part
+// of the wire contract the console parses on, so it is written once here rather than at each
+// call site where one of them could drift.
+func joinOmissions(omissions []string) string {
+	return strings.Join(omissions, "; ")
+}
+
 // loadBookProfile loads the child's stored profile, writing a 404 the same way GetProfile
 // does when none exists. ok is false once the response has already been written, so the
 // caller can just return.
@@ -130,7 +137,7 @@ func (h *Handlers) BookPreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set(bookOmissionHeader, strings.Join(omissions, "; "))
+	w.Header().Set(bookOmissionHeader, joinOmissions(omissions))
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(htmlDoc)
@@ -160,7 +167,7 @@ func (h *Handlers) BookDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set(bookOmissionHeader, strings.Join(omissions, "; "))
+	w.Header().Set(bookOmissionHeader, joinOmissions(omissions))
 	w.Header().Set("Content-Type", "application/pdf")
 	w.Header().Set("Content-Disposition",
 		fmt.Sprintf("attachment; filename=%q", chi.URLParam(r, "childID")+"-"+kind+".pdf"))

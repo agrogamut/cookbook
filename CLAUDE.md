@@ -956,6 +956,8 @@ internal/profile/               stored profile -> engine input: dated growth, th
 internal/profile/profile_test.go  round-trip, age derivation, suspected-allergen and
                                 acute-expiry conversion
 internal/book/                  Book 1 and Book 2 assembly, html/template rendering, PDF print
+internal/book/set.go            one run -> both books, one asOf, omissions partitioned
+internal/book/set_test.go       both books produced, one instant, blocked whole, omission split
 internal/book/templates/        base + tokens.css, 7 Book 1 and 6 Book 2 block templates
 internal/book/assemble_test.go  block and meal-category conservation, allergy status on paper
 internal/book/render_test.go    template dispatch, writing lines, typography floors
@@ -979,20 +981,42 @@ A print that fails with a browser present is `ErrPrintFailed` (HTTP 500) - the t
 opposite operator responses, so they are never merged.
 
 **Printing needs a Chromium on PATH** under any of `google-chrome-stable`, `google-chrome`,
-`chromium` or `chromium-browser`. Without one, `/preview` still works (it returns HTML) and
-`.pdf` returns 503; `pdf_test.go` skips.
+`chromium`, `chromium-browser`, `chrome`, `headless-shell` or the other names chromedp
+resolves - `browserNames` in `pdf.go` mirrors chromedp's own list and must be kept in sync
+when that dependency is bumped. Without one, `/preview` still works (it returns HTML) and
+`.pdf` and `books.zip` return 503; `pdf_test.go` skips.
+
+**A run produces both books.** `AssembleSet` reads the stored profile once, captures one
+`asOf`, and assembles Book 1 and Book 2 from it. Two separate requests can straddle a
+birthday, a growth measurement or an allergy edit and hand a family a Book 1 and a Book 2
+that state different ages for the same child; one run cannot. The set is what the console
+calls, and the per-book routes remain for fetching one book directly.
 
 | Surface | What it is |
 |---|---|
-| `GET /api/books/{childID}/{book1\|book2}/preview` | rendered HTML, omissions in `X-Book-Omissions` |
-| `GET /api/books/{childID}/{book1\|book2}.pdf` | printed PDF, same header |
-| `/books` in the console | profile picker, iframe preview, download, omission list |
+| `GET /api/books/{childID}/preview` | **one run, both books** - JSON, both rendered, omissions split three ways |
+| `GET /api/books/{childID}/books.zip` | both printed PDFs, named `{childID}-book1.pdf` and `-book2.pdf` |
+| `GET /api/books/{childID}/{book1\|book2}/preview` | one book as HTML, omissions in `X-Book-Omissions` |
+| `GET /api/books/{childID}/{book1\|book2}.pdf` | one printed PDF, same header |
+| `/books` in the console | one Generate action, tabs over the two generated books, both downloads |
+
+A zip rather than one merged PDF: they are two books with their own covers and their own page
+numbering, and merging would renumber Book 2's pages behind Book 1's so that a page reference
+printed inside either book stops matching the page it is on.
+
+Set omissions are split into `profile_omissions`, `book1_omissions` and `book2_omissions`. An
+omission both assemblers reported is a fact about the child's stored profile rather than about
+either book - a suspected allergen, an expired acute condition - and is listed once, so an
+operator is never left deciding whether a repeated line is one finding or two.
 
 Two rules the package enforces and that must not be relaxed:
 
-- **The special-care stop gate blocks both books.** A declared special-care condition
-  returns 409 with the provider's mandatory reviewer, for Book 1 as well as Book 2. Book 1
-  runs no engine of its own, so `AssembleBook1` queries the gate directly rather than reading
+- **The special-care stop gate blocks both books, and a set is all-or-nothing.** A declared
+  special-care condition returns 409 with the provider's mandatory reviewer, for Book 1 as
+  well as Book 2 and for the set routes. There is no partial run handing over the daily-life
+  book while the recipe book is withheld, which would read as though the clinician's stop
+  applied only to food. Book 1 runs no engine of its own, so `AssembleBook1` queries the gate
+  directly rather than reading
   a block reason off an engine result; both assemblers return `ErrBlocked` and the handler
   routes it to the same 409.
 - **Every unit of a book is either rendered or reported.** Block-level and category-level

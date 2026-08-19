@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import {
-  getBookPreview, getBookPdf, BookBlockedError, RendererUnavailableError,
-  PrintFailedError,
+  getBookSet, getBookSetZip, getBookPdf, BookSet,
+  BookBlockedError, RendererUnavailableError, PrintFailedError,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,11 +18,14 @@ type PrintFailed = { kind: "print-failed"; message: string };
 type Failed = { kind: "failed"; message: string };
 type Problem = Blocked | Unavailable | PrintFailed | Failed;
 
+type Which = "book1" | "book2";
+
 export function BookGenerator() {
   const [childID, setChildID] = useState("");
-  const [book, setBook] = useState<"book1" | "book2">("book1");
-  const [html, setHtml] = useState<string | null>(null);
-  const [omissions, setOmissions] = useState<string[]>([]);
+  // The tab selects which of the two generated books is on screen. It is a view control, not
+  // a generation control: a run always produces both, so switching tabs never refetches.
+  const [shown, setShown] = useState<Which>("book1");
+  const [set, setSet] = useState<BookSet | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -39,15 +42,12 @@ export function BookGenerator() {
     return { kind: "failed", message: err instanceof Error ? err.message : String(err) };
   }
 
-  async function preview() {
+  async function generate() {
     setBusy(true);
     setProblem(null);
-    setHtml(null);
-    setOmissions([]);
+    setSet(null);
     try {
-      const result = await getBookPreview(childID, book);
-      setHtml(result.html);
-      setOmissions(result.omissions);
+      setSet(await getBookSet(childID));
     } catch (err) {
       setProblem(classify(err));
     } finally {
@@ -55,23 +55,43 @@ export function BookGenerator() {
     }
   }
 
-  async function download() {
+  function save(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function downloadBoth() {
     setBusy(true);
     setProblem(null);
     try {
-      const blob = await getBookPdf(childID, book);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${childID}-${book}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
+      save(await getBookSetZip(childID), `${childID}-books.zip`);
     } catch (err) {
       setProblem(classify(err));
     } finally {
       setBusy(false);
     }
   }
+
+  async function downloadOne(book: Which) {
+    setBusy(true);
+    setProblem(null);
+    try {
+      save(await getBookPdf(childID, book), `${childID}-${book}.pdf`);
+    } catch (err) {
+      setProblem(classify(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const html = set === null ? null : shown === "book1" ? set.book1Html : set.book2Html;
+  const bookOmissions =
+    set === null ? [] : shown === "book1" ? set.book1Omissions : set.book2Omissions;
+  const profileOmissions = set?.profileOmissions ?? [];
 
   return (
     <div className="space-y-4">
@@ -86,17 +106,36 @@ export function BookGenerator() {
             placeholder="C-0001"
           />
         </div>
-        <Tabs value={book} onValueChange={(v) => setBook(v as "book1" | "book2")}>
-          <TabsList>
-            <TabsTrigger value="book1">Book 1 &middot; daily life</TabsTrigger>
-            <TabsTrigger value="book2">Book 2 &middot; recipes</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <Button onClick={preview} disabled={!childID || busy}>Preview</Button>
-        {html !== null && (
-          <Button variant="outline" onClick={download} disabled={busy}>Download PDF</Button>
+        <Button onClick={generate} disabled={!childID || busy}>
+          {busy ? "Generating…" : "Generate both books"}
+        </Button>
+        {set !== null && (
+          <>
+            <Button variant="outline" onClick={downloadBoth} disabled={busy}>
+              Download both (.zip)
+            </Button>
+            <Button variant="ghost" onClick={() => downloadOne(shown)} disabled={busy}>
+              Download {shown === "book1" ? "Book 1" : "Book 2"} only
+            </Button>
+          </>
         )}
       </div>
+
+      {set !== null && (
+        <div className="flex flex-wrap items-center gap-3">
+          <Tabs value={shown} onValueChange={(v) => setShown(v as Which)}>
+            <TabsList>
+              <TabsTrigger value="book1">Book 1 &middot; daily life</TabsTrigger>
+              <TabsTrigger value="book2">Book 2 &middot; recipes</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {/* The run's identity, so an operator comparing two printed books can tell whether
+              they came from the same generation. */}
+          <span className="font-mono text-xs text-muted-foreground">
+            {set.childID} &middot; generated {set.asOf}
+          </span>
+        </div>
+      )}
 
       {problem?.kind === "blocked" && (
         <Alert className="border-[var(--color-blocked,theme(colors.amber.600))]">
@@ -105,7 +144,8 @@ export function BookGenerator() {
             <p>{problem.message}</p>
             {problem.reviewer && <p className="font-mono text-xs">Reviewer: {problem.reviewer}</p>}
             <p className="text-xs text-muted-foreground">
-              This is the provider&apos;s stop gate, not a fault. There is no override.
+              This is the provider&apos;s stop gate, not a fault. There is no override, and it
+              withholds both books rather than only the recipe book.
             </p>
           </AlertDescription>
         </Alert>
@@ -143,23 +183,42 @@ export function BookGenerator() {
         </Alert>
       )}
 
-      {omissions.length > 0 && (
+      {/* Profile omissions hold for both books, so they stay on screen as the tab changes.
+          Book omissions are that book's own coverage and follow the tab. Keeping them apart
+          is the whole reason the API splits them. */}
+      {profileOmissions.length > 0 && (
         <div className="rounded border p-3">
           <div className="mb-2 flex items-center gap-2">
-            <Badge variant="outline">{omissions.length} omitted</Badge>
+            <Badge variant="outline">{profileOmissions.length} profile</Badge>
             <span className="text-xs text-muted-foreground">
-              Facts the book does not contain, reported by the assembler.
+              Facts about this child that apply to both books.
             </span>
           </div>
           <ul className="space-y-1 font-mono text-xs">
-            {omissions.map((o) => <li key={o}>{o}</li>)}
+            {profileOmissions.map((o) => <li key={o}>{o}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {bookOmissions.length > 0 && (
+        <div className="rounded border p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <Badge variant="outline">
+              {bookOmissions.length} omitted from {shown === "book1" ? "Book 1" : "Book 2"}
+            </Badge>
+            <span className="text-xs text-muted-foreground">
+              Facts this book does not contain, reported by the assembler.
+            </span>
+          </div>
+          <ul className="space-y-1 font-mono text-xs">
+            {bookOmissions.map((o) => <li key={o}>{o}</li>)}
           </ul>
         </div>
       )}
 
       {html !== null && (
         <iframe
-          title="Book preview"
+          title={shown === "book1" ? "Book 1 preview" : "Book 2 preview"}
           sandbox=""
           srcDoc={html}
           className="h-[80vh] w-full rounded border bg-white"

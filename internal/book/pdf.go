@@ -44,6 +44,11 @@ var browserNames = []string{
 	"/usr/bin/google-chrome", "/usr/local/bin/chrome", "/snap/bin/chromium", "chrome",
 }
 
+// BrowserAvailable reports whether a browser is installed for PrintPDF to launch. Exported
+// so tests in other packages skip rather than fail on a machine with no Chromium, without
+// keeping their own copy of the name list -- one such copy had already gone stale.
+func BrowserAvailable() bool { return browserOnPath() }
+
 // browserOnPath reports whether chromedp will find a browser to launch.
 //
 // It lives here rather than in the test file so production and test cannot disagree about
