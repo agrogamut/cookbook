@@ -160,9 +160,14 @@ func TestEngineInputReportsDroppedFacts(t *testing.T) {
 // region_culture and cuisine_code do not surface at all -- they produce a successful book
 // ranked against a region the corpus does not carry, with nothing reported as omitted.
 //
+// The constraint-backed fields belong here for the same reason, one step earlier: sex,
+// allergen status, severity and source are CHECK constraints, so a bad value reached the
+// database and came back as a 500 quoting a constraint name. That is the same defect wearing
+// a different status code -- the operator still cannot see which field they mistyped.
+//
 // Each row changes exactly one field of an otherwise valid body, so a 400 can only be about
 // that field, and the message has to name it: an operator retyping a profile needs to know
-// which of the four was wrong.
+// which one was wrong.
 func TestPutProfileRejectsValuesTheCorpusDoesNotCarry(t *testing.T) {
 	r, h := profileRouter(t)
 	cleanupProfile(t, h)
@@ -193,6 +198,33 @@ func TestPutProfileRejectsValuesTheCorpusDoesNotCarry(t *testing.T) {
 			name:  "budget band that does not exist",
 			field: "budget_band",
 			body:  `{"child_id":"TEST-CHILD-001","date_of_birth":"2023-08-18","budget_band":"cheap"}`,
+		},
+		{
+			name:  "sex outside the constraint",
+			field: "sex",
+			body:  `{"child_id":"TEST-CHILD-001","date_of_birth":"2023-08-18","sex":"F"}`,
+		},
+		{
+			// status is not a label: confirmed filters, suspected ranks down and flags for
+			// review, resolved does neither. A mistyped one asks for different safety
+			// behaviour than it gets, so it must never reach the database.
+			name:  "allergen status outside the constraint",
+			field: "status",
+			body: `{"child_id":"TEST-CHILD-001","date_of_birth":"2023-08-18",` +
+				`"allergens":[{"group":"Peanut","status":"maybe","source":"parent_reported"}]}`,
+		},
+		{
+			name:  "allergen severity outside the constraint",
+			field: "severity",
+			body: `{"child_id":"TEST-CHILD-001","date_of_birth":"2023-08-18","allergens":` +
+				`[{"group":"Peanut","status":"confirmed","severity":"severe",` +
+				`"source":"parent_reported"}]}`,
+		},
+		{
+			name:  "allergen source outside the constraint",
+			field: "source",
+			body: `{"child_id":"TEST-CHILD-001","date_of_birth":"2023-08-18",` +
+				`"allergens":[{"group":"Peanut","status":"confirmed","source":"parent-report"}]}`,
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {

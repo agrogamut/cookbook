@@ -150,6 +150,24 @@ var profileVocabularies = []struct {
 	},
 }
 
+// sexValues mirrors child_profile's CHECK constraint in migration 0014. Kept beside the
+// validator rather than read from the database because a CHECK is not a provider vocabulary:
+// it cannot drift with a re-import, and there is no table to query for it.
+var sexValues = []string{"male", "female", "other"}
+
+// allergenStatusValues, allergenSeverityValues and allergenSourceValues mirror
+// child_allergen's CHECK constraints in migration 0014, for the same reason as sexValues.
+//
+// status carries real weight rather than being a label: "confirmed" filters recipes out,
+// "suspected" ranks them down and raises a review flag, and "resolved" does neither. An
+// operator who mistypes it is asking for a different safety behaviour than they get, so it
+// is rejected at the write rather than silently coerced.
+var (
+	allergenStatusValues   = []string{"confirmed", "suspected", "resolved"}
+	allergenSeverityValues = []string{"mild", "systemic"}
+	allergenSourceValues   = []string{"parent_reported", "clinician_documented"}
+)
+
 // validateProfileVocabularies returns a message naming the first field whose non-empty value
 // the corpus does not recognise, and the values it does.
 //
@@ -160,6 +178,34 @@ var profileVocabularies = []struct {
 // cuisine_code do not fail at all, they quietly produce a book ranked against nothing with
 // no omission reported.
 func (h *Handlers) validateProfileVocabularies(ctx context.Context, s profile.Stored) (string, error) {
+	// sex is the one write-validated field whose vocabulary is not a corpus table. It is a
+	// CHECK constraint in migration 0014 (`sex IN ('male', 'female', 'other')`), so the
+	// constraint is the authority and this mirrors it rather than querying for it. Without
+	// this, an operator entering "F" gets a 500 from a constraint violation instead of being
+	// told the three values -- the same failure mode the vocabularies above exist to close.
+	if s.Sex != "" && !slices.Contains(sexValues, s.Sex) {
+		return fmt.Sprintf("sex %q is not a recognised value; accepted values are: %s",
+			s.Sex, strings.Join(sexValues, ", ")), nil
+	}
+
+	for _, a := range s.Allergens {
+		if !slices.Contains(allergenStatusValues, a.Status) {
+			return fmt.Sprintf("allergen %q status %q is not a recognised value; accepted "+
+				"values are: %s", a.Group, a.Status,
+				strings.Join(allergenStatusValues, ", ")), nil
+		}
+		if a.Severity != "" && !slices.Contains(allergenSeverityValues, a.Severity) {
+			return fmt.Sprintf("allergen %q severity %q is not a recognised value; accepted "+
+				"values are: %s", a.Group, a.Severity,
+				strings.Join(allergenSeverityValues, ", ")), nil
+		}
+		if !slices.Contains(allergenSourceValues, a.Source) {
+			return fmt.Sprintf("allergen %q source %q is not a recognised value; accepted "+
+				"values are: %s", a.Group, a.Source,
+				strings.Join(allergenSourceValues, ", ")), nil
+		}
+	}
+
 	for _, v := range profileVocabularies {
 		value := v.value(s)
 		if value == "" {
