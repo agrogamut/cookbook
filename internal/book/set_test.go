@@ -1,6 +1,7 @@
 package book
 
 import (
+	"bytes"
 	"context"
 	"slices"
 	"strings"
@@ -274,7 +275,7 @@ func TestGrowthTablePrintsWhatWasMeasuredAndOnlyThat(t *testing.T) {
 			{
 				// An earlier visit that recorded head circumference but no weight: the
 				// weight cell must be a writing line, not a zero.
-				MeasuredOn: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC),
+				MeasuredOn:          time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC),
 				HeadCircumferenceCm: &head,
 			},
 		},
@@ -330,5 +331,47 @@ func TestGrowthTablePrintsWhatWasMeasuredAndOnlyThat(t *testing.T) {
 	}
 	if strings.Contains(page, "0.0 kg") {
 		t.Fatal("an unrecorded measurement must never print as zero")
+	}
+}
+
+// Both books print from one browser. Launching Chromium is most of the cost of a print, and
+// paying it twice is what pushed a set past the request budget in production while every
+// local test passed -- startup is a fraction of a second on a developer's machine and about
+// twenty on a small instance.
+func TestPrintPDFAllPrintsEveryDocument(t *testing.T) {
+	if !BrowserAvailable() {
+		t.Skip("no chromium on PATH")
+	}
+	meta := Metadata{
+		Title: "Set", BookVersion: "V1", ReviewStatus: "Draft",
+		GenerationDate: time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC), Language: "en",
+	}
+
+	out, err := PrintPDFAll(context.Background(), []PrintJob{
+		{Name: "book1", HTML: []byte("<html><body><h1>Book one</h1></body></html>"), Metadata: meta},
+		{Name: "book2", HTML: []byte("<html><body><h1>Book two</h1></body></html>"), Metadata: meta},
+	})
+	if err != nil {
+		t.Fatalf("PrintPDFAll: %v", err)
+	}
+	if len(out) != 2 {
+		t.Fatalf("got %d documents, want 2", len(out))
+	}
+	for i, pdf := range out {
+		if !bytes.HasPrefix(pdf, []byte("%PDF-")) {
+			t.Fatalf("document %d is not a PDF: %.16q", i, pdf)
+		}
+	}
+	// Two different documents, so a batch cannot quietly print the first one twice.
+	if bytes.Equal(out[0], out[1]) {
+		t.Fatal("both documents are byte-identical; each job must print its own HTML")
+	}
+}
+
+// An empty batch is not an error and must not launch a browser.
+func TestPrintPDFAllOnNoDocuments(t *testing.T) {
+	out, err := PrintPDFAll(context.Background(), nil)
+	if err != nil || out != nil {
+		t.Fatalf("empty batch: got %v, %v; want nil, nil", out, err)
 	}
 }

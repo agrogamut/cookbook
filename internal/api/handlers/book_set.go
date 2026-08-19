@@ -109,31 +109,24 @@ func (h *Handlers) BookSetDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pdfs := make([][]byte, 0, 2)
-	for _, b := range []struct {
-		name string
-		html string
-		meta book.Metadata
-	}{
-		{"book1", resp.Book1, set.Book1.Metadata},
-		{"book2", resp.Book2, set.Book2.Metadata},
-	} {
-		pdf, err := book.PrintPDF(r.Context(), []byte(b.html), b.meta)
-		if err != nil {
-			// Same split the single-book download makes: a missing browser is an install
-			// problem an operator cannot fix by retrying, a failed print may be about this
-			// document. Reported against the book that failed, since the two books print
-			// separately and only one of them may be at fault.
-			if errors.Is(err, book.ErrChromiumUnavailable) {
-				writeError(w, http.StatusServiceUnavailable,
-					"pdf renderer unavailable: "+err.Error())
-				return
-			}
-			writeError(w, http.StatusInternalServerError,
-				fmt.Sprintf("pdf render failed for %s: %v", b.name, err))
+	// One browser for both books. Launching Chromium is most of the cost of a print, and
+	// paying it twice overran the request budget on a small instance while passing every
+	// local test, where startup is a fraction of a second.
+	pdfs, err := book.PrintPDFAll(r.Context(), []book.PrintJob{
+		{Name: "book1", HTML: []byte(resp.Book1), Metadata: set.Book1.Metadata},
+		{Name: "book2", HTML: []byte(resp.Book2), Metadata: set.Book2.Metadata},
+	})
+	if err != nil {
+		// The same split the single-book download makes: a missing browser is an install
+		// problem an operator cannot fix by retrying, a failed print may be about this
+		// document. PrintPDFAll names the book that failed, since only one of the two may
+		// be at fault.
+		if errors.Is(err, book.ErrChromiumUnavailable) {
+			writeError(w, http.StatusServiceUnavailable, "pdf renderer unavailable: "+err.Error())
 			return
 		}
-		pdfs = append(pdfs, pdf)
+		writeError(w, http.StatusInternalServerError, "pdf render failed for "+err.Error())
+		return
 	}
 
 	// Built in memory and written whole, so a print failure on the second book cannot leave

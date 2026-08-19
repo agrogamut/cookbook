@@ -65,6 +65,32 @@ func browserOnPath() bool {
 	return false
 }
 
+// allocatorFor builds the browser allocator, applying the container-only flags when the
+// environment asks for them.
+//
+// Shared by the single and batch entry points so the two cannot disagree about how the
+// browser is launched -- a sandbox flag that applied to one book and not to the other would
+// mean a set where one book prints and the other does not.
+func allocatorFor(ctx context.Context) (context.Context, context.CancelFunc) {
+	// In a container the browser runs as root with user namespaces unavailable, where
+	// Chrome's sandbox cannot initialise and the process exits before it prints anything.
+	//
+	// Off by default, so a developer's machine keeps the sandbox it can actually use. It is
+	// safe where it is set and not in general: the browser here only ever loads a document
+	// this service just rendered from its own database, never a remote page, so there is no
+	// untrusted content for the sandbox to contain.
+	if os.Getenv("CHROMIUM_NO_SANDBOX") == "" {
+		return context.WithCancel(ctx)
+	}
+	return chromedp.NewExecAllocator(ctx,
+		append(chromedp.DefaultExecAllocatorOptions[:],
+			chromedp.NoSandbox,
+			// Chrome sizes its shared memory from /dev/shm, which containers default to
+			// 64 MB. A book of 22 pages exhausts it and the renderer crashes mid-print.
+			chromedp.Flag("disable-dev-shm-usage", true),
+		)...)
+}
+
 // PrintPDF renders one already-generated HTML document to PDF.
 //
 // A4 portrait with the contract's margins. Chrome's own header and footer templates carry
@@ -90,28 +116,64 @@ func PrintPDF(ctx context.Context, htmlDoc []byte, meta Metadata) ([]byte, error
 		return nil, fmt.Errorf("%w: no chromium build found on PATH", ErrChromiumUnavailable)
 	}
 
-	// In a container the browser runs as root with user namespaces unavailable, where
-	// Chrome's sandbox cannot initialise and the process exits before it prints anything.
-	// CHROMIUM_NO_SANDBOX drops the sandbox for exactly that case.
-	//
-	// Off by default, so a developer's machine keeps the sandbox it can actually use. It is
-	// safe where it is set and not in general: the browser here only ever loads a document
-	// this service just rendered from its own database, never a remote page, so there is no
-	// untrusted content for the sandbox to contain. Setting it in an environment that also
-	// browses the web would not be safe.
-	if os.Getenv("CHROMIUM_NO_SANDBOX") != "" {
-		allocCtx, allocCancel := chromedp.NewExecAllocator(ctx,
-			append(chromedp.DefaultExecAllocatorOptions[:],
-				chromedp.NoSandbox,
-				// Chrome sizes its shared memory from /dev/shm, which containers default to
-				// 64 MB. A book of 22 pages exhausts it and the renderer crashes mid-print.
-				chromedp.Flag("disable-dev-shm-usage", true),
-			)...)
-		defer allocCancel()
-		ctx = allocCtx
-	}
+	allocCtx, allocCancel := allocatorFor(ctx)
+	defer allocCancel()
+	ctx = allocCtx
 
 	ctx, cancel := chromedp.NewContext(ctx)
+	defer cancel()
+
+	return printIn(ctx, htmlDoc, meta)
+}
+
+// PrintPDFAll prints several documents in one browser.
+//
+// Launching Chromium dominates the cost of a print: on a small cloud instance a book takes
+// about twenty seconds, nearly all of it startup, so printing a set as two separate calls
+// paid that twice and overran the request budget. One browser, two documents, and the second
+// print costs only its own layout.
+//
+// All or nothing: a set of books is one deliverable, so the first failure returns rather than
+// handing back a partial set the caller has to reason about. Errors name the document that
+// failed, since the caller knows which book that is and the browser does not.
+func PrintPDFAll(ctx context.Context, docs []PrintJob) ([][]byte, error) {
+	if len(docs) == 0 {
+		return nil, nil
+	}
+	if !browserOnPath() {
+		return nil, fmt.Errorf("%w: no chromium build found on PATH", ErrChromiumUnavailable)
+	}
+
+	ctx, cancel := allocatorFor(ctx)
+	defer cancel()
+	ctx, cancel = chromedp.NewContext(ctx)
+	defer cancel()
+
+	out := make([][]byte, 0, len(docs))
+	for _, d := range docs {
+		pdf, err := printIn(ctx, d.HTML, d.Metadata)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", d.Name, err)
+		}
+		out = append(out, pdf)
+	}
+	return out, nil
+}
+
+// PrintJob is one document in a batch. Name identifies it in an error and is never printed
+// into the document itself.
+type PrintJob struct {
+	Name     string
+	HTML     []byte
+	Metadata Metadata
+}
+
+// printIn prints one document in an existing browser context.
+//
+// Each document gets its own tab and its own timeout, so one slow book cannot consume the
+// budget of the next and a crashed tab does not take the browser with it.
+func printIn(parent context.Context, htmlDoc []byte, meta Metadata) ([]byte, error) {
+	ctx, cancel := chromedp.NewContext(parent)
 	defer cancel()
 	ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
