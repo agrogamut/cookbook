@@ -119,4 +119,10 @@ VALUES
    27, 'seed',
    'The page prints the heading and a writing line. No advice is drafted to fill it.',
    'Provider supplies the red-flag and doctor-approach text per block, or a clinical editor writes it through the reviewed path.',
+   now()),
+  ('GAP-027', 'minor', 'book1', 'age_feeding_stage_master', 'age_to_months',
+   'age_feeding_stage_master covers 0-216 months without a gap (AF00 through AF09, ending at eighteen years exactly), but several book1_content_block rows declare an age range of 0-228. A child between eighteen and nineteen years therefore matches content blocks that have no feeding stage behind them.',
+   12, 'seed',
+   'The four feeding blocks (B1-005 to B1-008) are reported as omissions for that child rather than printing an empty stage table.',
+   'Provider extends the stage master past eighteen years, or narrows the affected block age ranges to 216 so the two masters agree.',
    now());
