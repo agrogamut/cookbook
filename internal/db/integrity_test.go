@@ -352,14 +352,14 @@ func TestGapRegisterCountMatchesTheDocumentedCount(t *testing.T) {
 	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM gap_register`).Scan(&n); err != nil {
 		t.Fatalf("count: %v", err)
 	}
-	// Twenty-four after migration 0017. The build-up: twelve seeded in migration 0002, four
+	// Twenty-seven after migration 0018. The build-up: twelve seeded in migration 0002, four
 	// that internal/enrich/gaps.go upserts on every enrichment run, four added by 0012, two
-	// by 0015, one by 0016, one by 0017. The enrich four are easy to miss because no
-	// migration writes them, which is exactly why this count is asserted rather than left
-	// in prose. If a gap is added or retired, change this number and the documents that
-	// quote it in the same commit.
-	if n != 24 {
-		t.Fatalf("gap_register holds %d rows, want 24", n)
+	// by 0015, one by 0016, one by 0017, three by 0018. The enrich four are easy to miss
+	// because no migration writes them, which is exactly why this count is asserted rather
+	// than left in prose. If a gap is added or retired, change this number and the documents
+	// that quote it in the same commit.
+	if n != 27 {
+		t.Fatalf("gap_register holds %d rows, want 27", n)
 	}
 }
 

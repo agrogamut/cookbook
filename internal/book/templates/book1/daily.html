@@ -1,0 +1,53 @@
+{{/* B1-DAILY-01: one everyday domain -- sleep, screens, teeth, toilet training, activity,
+     school, self-care, adolescent self-management.
+
+     Every sentence on this page is a book1_daily_life_module column, printed verbatim. The
+     page writes nothing of its own: no advice, no explanation, no summary. What it adds is
+     the arrangement -- reference and goal above the form the parent fills in, the red flag
+     and the referral below it -- and the arrangement is the provider's too, declared in
+     book1_display and the ideal_vs_actual flag.
+
+     ai_limit prints on the page it constrains. It is the provider telling this system what
+     the page may not become ("Do not diagnose sleep disorder"), and a reader who can see it
+     can also see that the page has not become that. */}}
+{{ define "B1-DAILY-01" }}
+{{ range .Domains }}
+  <div class="domain">
+    <h3>{{ .Domain }}</h3>
+    {{ with .AgeContext }}<p class="domain-age">{{ . }}</p>{{ end }}
+
+    <table>
+      <tbody>
+        {{ with .Reference }}<tr><td class="domain-label">What is typical</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .Goal }}<tr><td class="domain-label">Goal</td><td>{{ . }}</td></tr>{{ end }}
+        {{/* The parent's own observation. The workbook ships this column blank on all
+             thirteen rows because it is theirs to fill, so it is a writing line and never
+             an empty cell -- an empty cell reads as data nobody had. */}}
+        <tr><td class="domain-label">Where this child is now</td><td><span class="write-line"></span></td></tr>
+      </tbody>
+    </table>
+
+    {{ with .Tracker }}
+      {{ with .Title }}<h4 class="tracker-title">{{ . }}</h4>{{ end }}
+      <table>
+        <thead><tr>{{ range .Columns }}<th>{{ . }}</th>{{ end }}</tr></thead>
+        <tbody>
+          {{ $cols := .Columns }}
+          {{ range $i, $_ := rows .Rows }}
+            <tr>{{ range $cols }}<td><span class="write-line"></span></td>{{ end }}</tr>
+          {{ end }}
+        </tbody>
+      </table>
+    {{ end }}
+
+    {{ with .RedFlag }}
+      <div class="callout warning">
+        <h3>Warning: when to seek advice</h3>
+        <p>{{ . }}</p>
+      </div>
+    {{ end }}
+    {{ with .Referral }}<p class="domain-referral"><strong>Who to approach:</strong> {{ . }}</p>{{ end }}
+    {{ with .AILimit }}<p class="domain-limit">Scope of this page: {{ . }}</p>{{ end }}
+  </div>
+{{ end }}
+{{ end }}

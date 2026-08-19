@@ -1,0 +1,54 @@
+{{/* B1-TRACKER-01: a blank form whose columns the provider declared.
+
+     The grid holds no data and is not supposed to: these blocks are the writable half of the
+     workbook, and the parent fills them in. Every column heading is either a monitoring
+     template's own reference/actual/date/notes column or an item from the block's
+     writable_fields. None is chosen here.
+
+     The alarm and review lines print under the grid rather than as columns. A parent
+     comparing a filled row against a threshold needs to read the threshold; an empty box
+     labelled "Chest pain/syncope" is a box to tick, which is the wrong shape entirely. */}}
+{{ define "B1-TRACKER-01" }}
+{{ range .Trackers }}
+  <div class="tracker">
+    {{ with .Title }}<h3>{{ . }}</h3>{{ end }}
+    {{ if or .Reference .Frequency }}
+      <p class="tracker-meta">
+        {{ with .Reference }}<strong>Reference:</strong> {{ . }}{{ end }}
+        {{ if and .Reference .Frequency }} &middot; {{ end }}
+        {{ with .Frequency }}<strong>Record:</strong> {{ . }}{{ end }}
+      </p>
+    {{ end }}
+    <table>
+      <thead><tr>{{ range .Columns }}<th>{{ . }}</th>{{ end }}</tr></thead>
+      <tbody>
+        {{ $cols := .Columns }}
+        {{ if .Prefilled }}
+          {{/* Rows whose leading cells the provider supplies. The remaining columns are the
+               parent's to fill, so they get writing lines -- the row is a labelled blank,
+               not a blank. */}}
+          {{ range $row := .Prefilled }}
+            <tr>
+              {{ range $c, $_ := $cols }}
+                {{ if lt $c (len $row) }}<td>{{ index $row $c }}</td>
+                {{ else }}<td><span class="write-line"></span></td>{{ end }}
+              {{ end }}
+            </tr>
+          {{ end }}
+        {{ else }}
+          {{ range $i, $_ := rows .Rows }}
+            <tr>{{ range $cols }}<td><span class="write-line"></span></td>{{ end }}</tr>
+          {{ end }}
+        {{ end }}
+      </tbody>
+    </table>
+    {{ with .Alarm }}
+      <div class="callout warning">
+        <h3>Warning: when this needs attention</h3>
+        <p>{{ . }}</p>
+      </div>
+    {{ end }}
+    {{ with .Review }}<p class="tracker-meta"><strong>Who reviews this:</strong> {{ . }}</p>{{ end }}
+  </div>
+{{ end }}
+{{ end }}

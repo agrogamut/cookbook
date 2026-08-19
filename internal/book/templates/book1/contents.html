@@ -1,0 +1,29 @@
+{{/* B1-TOC-01: what is in this book.
+
+     Built from the sections that actually rendered, never from the block list. A contents
+     entry for a page the book does not contain sends a reader hunting for something that is
+     not there, and this book deliberately omits blocks -- B1-004 always, the age-inapplicable
+     ones per child, and anything that resolved to no content.
+
+     No page numbers. Chromium assigns them at print time and the template cannot know them;
+     a contents page with wrong numbers is worse than one with none. The sections print in
+     book_order, so the list is the order a reader turns pages in. */}}
+{{ define "B1-TOC-01" }}
+<section class="page-break contents">
+  <div class="section-header">
+    <h2>What is in this book</h2>
+    <p>In the order the pages appear</p>
+  </div>
+  <ol class="toc">
+    {{ range .Sections }}
+      <li>
+        <span class="toc-title">{{ .Title }}</span>
+        {{ with .Subtitle }}<span class="toc-sub">{{ . }}</span>{{ end }}
+      </li>
+    {{ end }}
+  </ol>
+  <p class="toc-note">Pages left out of this book, and why, are listed with the generated
+    output rather than here: an absence has a reason, and the reason belongs where the
+    operator reads it.</p>
+</section>
+{{ end }}

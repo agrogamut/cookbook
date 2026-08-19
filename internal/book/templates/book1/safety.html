@@ -1,0 +1,65 @@
+{{/* B1-SAFETY-01: this child's own exclusions. The block's own content_purpose is "Make
+     exclusions obvious", which is the whole design brief for the page.
+
+     Confirmed and suspected are two lists and stay two lists. Merged, a parent cannot tell
+     which exclusions are diagnosed and which are being ruled out, and the two carry different
+     instructions -- one is avoided, the other is discussed with the clinician.
+
+     Nothing here offers a way to include an excluded food. Age and allergy are hard filters
+     with no operator override anywhere in this system, and a printed page does not get to
+     soften that by suggesting an exception. */}}
+{{ define "B1-SAFETY-01" }}
+{{ with .Safety }}
+  <div class="callout warning">
+    <h3>Warning: foods to avoid for this child</h3>
+    {{ if .Confirmed }}
+      <p><strong>Confirmed:</strong> {{ range $i, $a := .Confirmed }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}</p>
+    {{ else }}
+      <p><strong>Confirmed:</strong> none recorded on this child's profile.</p>
+    {{ end }}
+    {{ with .Suspected }}
+      <p><strong>Suspected, not confirmed:</strong>
+         {{ range $i, $a := . }}{{ if $i }}, {{ end }}{{ $a }}{{ end }}.
+         These are excluded from recipe selection and need a clinician's assessment to
+         confirm or clear.</p>
+    {{ end }}
+  </div>
+
+  {{ with .Rules }}
+    <h3>Safety rules that apply</h3>
+    <table>
+      <thead><tr><th>Allergen or rule</th><th>What it means</th><th>Note</th></tr></thead>
+      <tbody>
+        {{ range . }}
+          <tr><td>{{ .Label }}</td><td>{{ .Reference }}</td><td>{{ .Note }}</td></tr>
+        {{ end }}
+      </tbody>
+    </table>
+  {{ end }}
+
+  {{ with .Choking }}
+    <h3>Choking safety at this age</h3>
+    <table>
+      <thead><tr><th>Food or texture</th><th>Risk</th><th>Rule</th><th>Applies to</th></tr></thead>
+      <tbody>
+        {{ range . }}
+          <tr><td>{{ .Food }}</td><td>{{ .Risk }}</td><td>{{ .Rule }}</td><td>{{ .AgeFor }}</td></tr>
+        {{ end }}
+      </tbody>
+    </table>
+  {{ end }}
+
+  {{ with .ReactionLog }}
+    <h3>{{ if .Title }}{{ .Title }}{{ else }}Reaction record{{ end }}</h3>
+    <table>
+      <thead><tr>{{ range .Columns }}<th>{{ . }}</th>{{ end }}</tr></thead>
+      <tbody>
+        {{ $cols := .Columns }}
+        {{ range $i, $_ := rows .Rows }}
+          <tr>{{ range $cols }}<td><span class="write-line"></span></td>{{ end }}</tr>
+        {{ end }}
+      </tbody>
+    </table>
+  {{ end }}
+{{ end }}
+{{ end }}

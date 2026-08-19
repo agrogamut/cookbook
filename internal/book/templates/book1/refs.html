@@ -1,0 +1,25 @@
+{{/* B1-REFS-01: what this book was built from.
+
+     important_limitation prints beside every citation and is the reason the page is a table
+     rather than a list. A source named without its stated limitation reads as an endorsement
+     of whatever page cites it, and these limitations say the opposite: "Use validated z-score
+     calculation module", "Does not replace clinical assessment", "Individual pages need
+     clinical editing". */}}
+{{ define "B1-REFS-01" }}
+<table>
+  <thead>
+    <tr><th>Source</th><th>Authority</th><th>Topic</th><th>How it is used</th><th>Stated limitation</th></tr>
+  </thead>
+  <tbody>
+    {{ range .Refs }}
+      <tr>
+        <td class="mono">{{ .SourceID }}</td>
+        <td>{{ .Authority }}</td>
+        <td>{{ .Topic }}{{ with .Reference }}<br><span class="ref-detail">{{ . }}</span>{{ end }}</td>
+        <td>{{ if .HowUsed }}{{ .HowUsed }}{{ else }}not stated{{ end }}</td>
+        <td>{{ if .Limitation }}{{ .Limitation }}{{ else }}not stated{{ end }}</td>
+      </tr>
+    {{ end }}
+  </tbody>
+</table>
+{{ end }}
