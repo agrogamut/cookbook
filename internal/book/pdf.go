@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"os/exec"
 	"time"
 
 	"github.com/chromedp/cdproto/page"
@@ -14,7 +15,37 @@ import (
 // ErrChromiumUnavailable means no browser was found. Reported plainly rather than falling
 // back to a lesser renderer: a fallback that cannot shape Bengali would produce a book whose
 // ingredient names are subtly wrong, which is worse than producing none.
+//
+// It means exactly "no renderer is installed" and nothing else. Everything a present browser
+// can still fail at is ErrPrintFailed.
 var ErrChromiumUnavailable = errors.New("book: headless chromium unavailable")
+
+// ErrPrintFailed means a browser was found and the print itself failed -- a timeout, a
+// renderer crash, HTML the print engine choked on.
+//
+// Distinct from ErrChromiumUnavailable because the two need opposite responses. A missing
+// browser is an install problem: retrying changes nothing and nothing about the child's data
+// is implicated. A failed print may well be about this document, and telling an operator
+// "nothing about this child changed" would have them retry a data problem forever.
+var ErrPrintFailed = errors.New("book: pdf print failed")
+
+// browserOnPath reports whether any Chromium build is installed under any of the names the
+// common distributions use. Arch packages the browser as google-chrome-stable, Debian as
+// google-chrome, and the open-source builds as chromium or chromium-browser.
+//
+// chromedp finds the browser itself; this only separates "not installed" from "installed and
+// broken", and it lives here rather than in the test file so production and test cannot
+// disagree about what counts as installed.
+func browserOnPath() bool {
+	for _, name := range []string{
+		"google-chrome-stable", "google-chrome", "chromium", "chromium-browser",
+	} {
+		if _, err := exec.LookPath(name); err == nil {
+			return true
+		}
+	}
+	return false
+}
 
 // PrintPDF renders one already-generated HTML document to PDF.
 //
@@ -33,6 +64,14 @@ var ErrChromiumUnavailable = errors.New("book: headless chromium unavailable")
 // already carves out of @page for exactly this banner, so the header has room to render
 // without clipping.
 func PrintPDF(ctx context.Context, htmlDoc []byte, meta Metadata) ([]byte, error) {
+	// Probed before the run, so the two failures stay distinguishable. Wrapping every
+	// chromedp failure as "renderer unavailable" told an operator a 60-second timeout, a
+	// crash and malformed HTML were all a missing install, which is a 503 they can only
+	// retry.
+	if !browserOnPath() {
+		return nil, fmt.Errorf("%w: no chromium build found on PATH", ErrChromiumUnavailable)
+	}
+
 	ctx, cancel := chromedp.NewContext(ctx)
 	defer cancel()
 	ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
@@ -48,12 +87,20 @@ func PrintPDF(ctx context.Context, htmlDoc []byte, meta Metadata) ([]byte, error
 		clinical prescription.</div>`,
 		html.EscapeString(meta.ReviewStatus))
 
+	// The release segment is omitted entirely when there is no release id, rather than
+	// printing the label with nothing after it. There is no release layer yet, so on every
+	// book printed today "release " followed by blank is a field a reader has to interpret;
+	// end.html already draws a write-line in that case for the same reason.
+	release := ""
+	if meta.ReleaseID != "" {
+		release = " | release " + html.EscapeString(meta.ReleaseID)
+	}
 	footer := fmt.Sprintf(`<div style="font-size:7pt;width:100%%;padding:0 12mm;
 		display:flex;justify-content:space-between;color:#52606d">
-		<span>MadamGY | %s | release %s | generated %s</span>
+		<span>MadamGY | %s%s | generated %s</span>
 		<span class="pageNumber"></span></div>`,
 		html.EscapeString(meta.BookVersion),
-		html.EscapeString(meta.ReleaseID),
+		release,
 		meta.GenerationDate.Format("2006-01-02"))
 
 	var out []byte
@@ -84,7 +131,7 @@ func PrintPDF(ctx context.Context, htmlDoc []byte, meta Metadata) ([]byte, error
 		}),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrChromiumUnavailable, err)
+		return nil, fmt.Errorf("%w: %v", ErrPrintFailed, err)
 	}
 	return out, nil
 }

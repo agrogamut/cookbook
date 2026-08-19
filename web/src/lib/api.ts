@@ -120,7 +120,8 @@ export class BookBlockedError extends Error {
   }
 }
 
-/** Thrown when the print pipeline has no browser. An operational fault, not a clinical one. */
+/** Thrown when the print pipeline has no browser. An operational fault, not a clinical one.
+ *  Retrying changes nothing until a browser is installed. */
 export class RendererUnavailableError extends Error {
   constructor(message: string) {
     super(message);
@@ -128,10 +129,23 @@ export class RendererUnavailableError extends Error {
   }
 }
 
+/** Thrown when a browser was present and the print itself failed. Kept separate from
+ *  RendererUnavailableError because this one may well be about the document: telling an
+ *  operator nothing about the child changed would have them retry a data problem forever. */
+export class PrintFailedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PrintFailedError";
+  }
+}
+
 async function bookError(res: Response): Promise<Error> {
   const body = await res.json().catch(() => ({ error: res.statusText }));
   if (res.status === 409) return new BookBlockedError(body.error ?? res.statusText, body.reviewer);
   if (res.status === 503) return new RendererUnavailableError(body.error ?? res.statusText);
+  if (res.status === 500 && typeof body.error === "string" && body.error.startsWith("pdf render failed")) {
+    return new PrintFailedError(body.error);
+  }
   return new ApiError(res.status, body.error ?? res.statusText);
 }
 

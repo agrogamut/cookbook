@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"os/exec"
 	"testing"
 	"time"
 )
@@ -40,18 +39,4 @@ func TestPrintPDFProducesAPDF(t *testing.T) {
 	if !bytes.HasPrefix(out, []byte("%PDF-")) {
 		t.Fatalf("output is not a PDF, first bytes: %q", out[:min(8, len(out))])
 	}
-}
-
-// browserOnPath reports whether any Chromium build is installed under any of the names the
-// common distributions use. chromedp finds the browser itself; this only decides whether to
-// skip, and getting it wrong in the conservative direction hides a broken print pipeline.
-func browserOnPath() bool {
-	for _, name := range []string{
-		"google-chrome-stable", "google-chrome", "chromium", "chromium-browser",
-	} {
-		if _, err := exec.LookPath(name); err == nil {
-			return true
-		}
-	}
-	return false
 }

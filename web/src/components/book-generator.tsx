@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   getBookPreview, getBookPdf, BookBlockedError, RendererUnavailableError,
+  PrintFailedError,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,8 +14,9 @@ import { Badge } from "@/components/ui/badge";
 
 type Blocked = { kind: "blocked"; message: string; reviewer?: string };
 type Unavailable = { kind: "unavailable"; message: string };
+type PrintFailed = { kind: "print-failed"; message: string };
 type Failed = { kind: "failed"; message: string };
-type Problem = Blocked | Unavailable | Failed;
+type Problem = Blocked | Unavailable | PrintFailed | Failed;
 
 export function BookGenerator() {
   const [childID, setChildID] = useState("");
@@ -30,6 +32,9 @@ export function BookGenerator() {
     }
     if (err instanceof RendererUnavailableError) {
       return { kind: "unavailable", message: err.message };
+    }
+    if (err instanceof PrintFailedError) {
+      return { kind: "print-failed", message: err.message };
     }
     return { kind: "failed", message: err instanceof Error ? err.message : String(err) };
   }
@@ -113,6 +118,19 @@ export function BookGenerator() {
             <p>{problem.message}</p>
             <p className="text-xs">
               An operational fault in the print pipeline. Nothing about this child changed.
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {problem?.kind === "print-failed" && (
+        <Alert variant="destructive">
+          <AlertTitle>Print failed</AlertTitle>
+          <AlertDescription>
+            <p>{problem.message}</p>
+            <p className="text-xs">
+              A browser was available and the print itself failed. This may be about this
+              document rather than the pipeline, so a retry may not clear it.
             </p>
           </AlertDescription>
         </Alert>
