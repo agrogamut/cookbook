@@ -172,3 +172,96 @@ func TestAssemblyStepsRecordTheMissingRange(t *testing.T) {
 			"GAP-014 and this test together.", n)
 	}
 }
+
+// TestBlockSourceSeedResolvesBothWays holds the hand-written block-to-source map to the same
+// standard as culture_region_map: every seed row must name a provider row that exists, and
+// every provider row must be reachable from some block.
+//
+// Both directions matter and they fail differently. A dangling seed row is a page that
+// renders its heading over nothing -- the defect migration 0018 exists to close, reintroduced
+// one row at a time. An unreachable source row is content the provider wrote and the book
+// silently drops, which is invisible from inside the book: nothing counts what was never
+// asked for.
+func TestBlockSourceSeedResolvesBothWays(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	for _, tc := range []struct{ table, idCol string }{
+		{"book1_daily_life_module", "dailylife_id"},
+		{"book1_monitoring_template", "template_id"},
+		{"book1_illness_feeding_block", "illness_block_id"},
+		// book1_evidence_source is deliberately absent. B1-022 takes every row of it by rule
+		// rather than by seed (see migration 0018), so it has no seed rows to dangle and its
+		// reachability is asserted where the rule lives -- TestLoadBlockSources in
+		// internal/book, against the loader that applies it.
+	} {
+		t.Run(tc.table+"/no dangling seed rows", func(t *testing.T) {
+			var missing []string
+			rows, err := pool.Query(ctx, `
+				SELECT s.block_id || ' -> ' || s.source_row_id
+				FROM book1_block_source s
+				WHERE s.source_table = $1
+				  AND NOT EXISTS (
+				    SELECT 1 FROM `+tc.table+` t WHERE t.`+tc.idCol+` = s.source_row_id)
+				ORDER BY 1`, tc.table)
+			if err != nil {
+				t.Fatalf("query: %v", err)
+			}
+			defer rows.Close()
+			for rows.Next() {
+				var s string
+				if err := rows.Scan(&s); err != nil {
+					t.Fatalf("scan: %v", err)
+				}
+				missing = append(missing, s)
+			}
+			if len(missing) != 0 {
+				t.Errorf("%d seed row(s) name a %s row that does not exist, so the block "+
+					"would render empty: %v", len(missing), tc.table, missing)
+			}
+		})
+
+		t.Run(tc.table+"/no unreachable source rows", func(t *testing.T) {
+			var orphans []string
+			rows, err := pool.Query(ctx, `
+				SELECT t.`+tc.idCol+` FROM `+tc.table+` t
+				WHERE NOT EXISTS (
+				  SELECT 1 FROM book1_block_source s
+				  WHERE s.source_table = $1 AND s.source_row_id = t.`+tc.idCol+`)
+				ORDER BY 1`, tc.table)
+			if err != nil {
+				t.Fatalf("query: %v", err)
+			}
+			defer rows.Close()
+			for rows.Next() {
+				var s string
+				if err := rows.Scan(&s); err != nil {
+					t.Fatalf("scan: %v", err)
+				}
+				orphans = append(orphans, s)
+			}
+			if len(orphans) != 0 {
+				t.Errorf("%d %s row(s) are reachable from no block and would never print: %v",
+					len(orphans), tc.table, orphans)
+			}
+		})
+	}
+}
+
+// TestBlockSourceOnlyNamesRealBlocks: the FK covers block existence, but not the thing that
+// actually goes wrong -- seeding a source against B1-004, the one block that must stay
+// unmapped because interpreting a growth trend needs WHO reference tables this project does
+// not carry. A source row there would give it content and quietly render it.
+func TestBlockSourceOnlyNamesRealBlocks(t *testing.T) {
+	pool := testPool(t)
+	var n int
+	if err := pool.QueryRow(context.Background(),
+		`SELECT count(*) FROM book1_block_source WHERE block_id = 'B1-004'`).Scan(&n); err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("B1-004 (growth trend interpretation) has %d source row(s). It must stay "+
+			"unmapped: its declared input is a z-score/percentile engine, and a trend stated "+
+			"without the WHO reference tables is a clinical finding with no source.", n)
+	}
+}
