@@ -187,7 +187,23 @@ tbody tr:nth-child(even) { background: var(--zebra); }
   }
 }
 
-.cover { text-align: center; padding-top: 40mm; }
+/* The cover fills its page and centres in it, rather than stacking from the top and leaving
+   the remainder blank. A4 is 297mm and @page already reserves 50mm at the top for the
+   provisional banner plus 12mm at the foot, so the usable box is about 235mm; min-height
+   holds that and justify-content centres within it. Without this the whole cover sat in the
+   upper two-thirds with a hand's width of white space beneath the name. */
+.cover {
+  text-align: center;
+  /* A4 is 297mm; @page reserves 50mm at the head for the provisional banner and 12mm at the
+     foot, leaving 235mm. An explicit height rather than min-height, because min-height left
+     the flex box shorter than the page and the centring had nothing to centre within. */
+  height: 233mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+.cover > * { width: 100%; }
 .cover .brand { color: var(--brand); font-weight: 700; letter-spacing: 0.1em; }
 .cover h1 { color: var(--brand-deep); font-size: 26pt; margin: 4mm 0 2mm; }
 .cover .subtitle { color: var(--ink-soft); font-size: 11pt; margin: 0 auto; max-width: 120mm; }
@@ -199,5 +215,28 @@ tbody tr:nth-child(even) { background: var(--zebra); }
   max-width: 110mm;
 }
 .cover .name-box .name { color: var(--brand-deep); font-size: 20pt; font-weight: 700; }
+
+/* Cover portrait. The frame is a fixed square and the image fills it with object-fit: cover,
+   so a portrait and a landscape snapshot both print as the same shape and the page layout
+   does not move with whatever the operator uploaded. Cropping to the centre is the right
+   trade here: a letterboxed photo on a book cover reads as a mistake, and the alternative --
+   reflowing the page per image -- means the cover is a different design for every child.
+
+   The cover has less top padding when a photo is present; 40mm of whitespace above a
+   portrait pushes the name block off the first page. */
+.cover-photo { margin: 10mm auto 2mm; width: 70mm; }
+.cover-photo img {
+  width: 70mm;
+  height: 70mm;
+  object-fit: cover;
+  border: 0.4mm solid var(--accent);
+  border-radius: 1.5mm;
+  display: block;
+}
+.cover-photo figcaption {
+  color: var(--ink-soft);
+  font-size: var(--caption-size);
+  margin-top: 2mm;
+}
 
 .page-break { break-after: page; }

@@ -216,6 +216,75 @@ export async function getBookSet(childID: string): Promise<BookSet> {
   };
 }
 
+/** Everything a book needs about one child, supplied inline.
+ *
+ *  No child id: generation does not require a saved profile, so an operator fills the form
+ *  once and gets the books, and nothing about the child is written down. */
+export interface GenerateInput {
+  display_name?: string;
+  date_of_birth: string;
+  sex?: string;
+  language_id?: string;
+  region_culture?: string;
+  cuisine_code?: string;
+  diet_type?: string;
+  budget_band?: string;
+  allergens: { group: string; status: string; source: string }[];
+  conditions?: { trigger_field: string; flag_value: string; class?: string }[];
+  growth?: {
+    measured_on: string;
+    weight_kg?: number; height_cm?: number; head_circumference_cm?: number;
+    weight_for_age_z?: number; height_for_age_z?: number; bmi_for_age_z?: number;
+    interpretation?: string; measured_by?: string;
+  }[];
+  photo_data_uri?: string;
+  photo_caption?: string;
+}
+
+/** One generation run from inline inputs. Returns both books. */
+export async function generateBooks(input: GenerateInput): Promise<BookSet> {
+  const res = await fetch(`${BASE_URL}/api/books/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw await bookError(res);
+  const body = await res.json();
+  return {
+    childID: body.child_id,
+    asOf: body.as_of,
+    book1Html: body.book1_html,
+    book2Html: body.book2_html,
+    profileOmissions: body.profile_omissions ?? [],
+    book1Omissions: body.book1_omissions ?? [],
+    book2Omissions: body.book2_omissions ?? [],
+  };
+}
+
+/** The same run, printed: both books as PDFs in one zip. */
+export async function generateBooksZip(input: GenerateInput): Promise<Blob> {
+  const res = await fetch(`${BASE_URL}/api/books/generate.zip`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw await bookError(res);
+  return res.blob();
+}
+
+/** One book of the same generation, printed. Same inputs, same assembly, one print. */
+export async function generateBookPdf(
+  input: GenerateInput, book: "book1" | "book2",
+): Promise<Blob> {
+  const res = await fetch(`${BASE_URL}/api/books/generate/${book}.pdf`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw await bookError(res);
+  return res.blob();
+}
+
 /** Both books as printed PDFs, in one zip. Two books, two files -- not one merged PDF, which
  *  would renumber Book 2's pages behind Book 1's. */
 export async function getBookSetZip(childID: string): Promise<Blob> {

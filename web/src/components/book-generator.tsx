@@ -2,12 +2,11 @@
 
 import { useState } from "react";
 import {
-  getBookSet, getBookSetZip, getBookPdf, BookSet,
+  generateBooks, generateBooksZip, generateBookPdf, BookSet, GenerateInput,
   BookBlockedError, RendererUnavailableError, PrintFailedError,
 } from "@/lib/api";
+import { ChildInputForm } from "@/components/child-input-form";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +20,10 @@ type Problem = Blocked | Unavailable | PrintFailed | Failed;
 type Which = "book1" | "book2";
 
 export function BookGenerator() {
-  const [childID, setChildID] = useState("");
+  // The inputs that produced the books on screen. Held so a download re-sends exactly what
+  // was generated: re-reading the form would let an edit made after Generate slip into a PDF
+  // that does not match the preview beside it.
+  const [submitted, setSubmitted] = useState<GenerateInput | null>(null);
   // The tab selects which of the two generated books is on screen. It is a view control, not
   // a generation control: a run always produces both, so switching tabs never refetches.
   const [shown, setShown] = useState<Which>("book1");
@@ -42,12 +44,14 @@ export function BookGenerator() {
     return { kind: "failed", message: err instanceof Error ? err.message : String(err) };
   }
 
-  async function generate() {
+  async function generate(input: GenerateInput) {
     setBusy(true);
     setProblem(null);
     setSet(null);
+    setSubmitted(null);
     try {
-      setSet(await getBookSet(childID));
+      setSet(await generateBooks(input));
+      setSubmitted(input);
     } catch (err) {
       setProblem(classify(err));
     } finally {
@@ -64,11 +68,18 @@ export function BookGenerator() {
     URL.revokeObjectURL(url);
   }
 
+  function fileStem() {
+    const name = (submitted?.display_name ?? "").toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    return name || "books";
+  }
+
   async function downloadBoth() {
+    if (!submitted) return;
     setBusy(true);
     setProblem(null);
     try {
-      save(await getBookSetZip(childID), `${childID}-books.zip`);
+      save(await generateBooksZip(submitted), `${fileStem()}-books.zip`);
     } catch (err) {
       setProblem(classify(err));
     } finally {
@@ -76,11 +87,14 @@ export function BookGenerator() {
     }
   }
 
+  // One book on its own. The server runs the same assembly and prints only the half that was
+  // asked for, so a single download costs one print instead of two.
   async function downloadOne(book: Which) {
+    if (!submitted) return;
     setBusy(true);
     setProblem(null);
     try {
-      save(await getBookPdf(childID, book), `${childID}-${book}.pdf`);
+      save(await generateBookPdf(submitted, book), `${fileStem()}-${book}.pdf`);
     } catch (err) {
       setProblem(classify(err));
     } finally {
@@ -95,37 +109,27 @@ export function BookGenerator() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
-          <Label htmlFor="child-id" className="text-xs uppercase tracking-wide">Child ID</Label>
-          <Input
-            id="child-id"
-            className="w-56 font-mono"
-            value={childID}
-            onChange={(e) => setChildID(e.target.value)}
-            placeholder="C-0001"
-          />
+      <ChildInputForm busy={busy} onGenerate={generate} />
+
+      {set !== null && (
+        <div className="flex flex-wrap items-center gap-3 border-t pt-4">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Download
+          </span>
+          <Button variant="outline" onClick={downloadBoth} disabled={busy}>
+            Both books (.zip)
+          </Button>
+          {/* Both single downloads are always offered, not only the tab that happens to be
+              open: the run produced both books, so reaching one should not require switching
+              tabs first. */}
+          <Button variant="outline" onClick={() => downloadOne("book1")} disabled={busy}>
+            Book 1 PDF
+          </Button>
+          <Button variant="outline" onClick={() => downloadOne("book2")} disabled={busy}>
+            Book 2 PDF
+          </Button>
         </div>
-        <Button onClick={generate} disabled={!childID || busy}>
-          {busy ? "Generating…" : "Generate both books"}
-        </Button>
-        {set !== null && (
-          <>
-            <Button variant="outline" onClick={downloadBoth} disabled={busy}>
-              Download both (.zip)
-            </Button>
-            {/* Both single downloads are always offered, not just the tab that happens to be
-                open: a run produced both books, so an operator who wants one of them should
-                not have to switch tabs to reach it. */}
-            <Button variant="ghost" onClick={() => downloadOne("book1")} disabled={busy}>
-              Book 1 PDF
-            </Button>
-            <Button variant="ghost" onClick={() => downloadOne("book2")} disabled={busy}>
-              Book 2 PDF
-            </Button>
-          </>
-        )}
-      </div>
+      )}
 
       {set !== null && (
         <div className="flex flex-wrap items-center gap-3">

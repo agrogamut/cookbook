@@ -45,6 +45,9 @@ type ChildSummary struct {
 	// page as identity, not as an input to any selection.
 	Sex      string `json:"sex,omitempty"`
 	Language string `json:"language,omitempty"`
+	// Photo is the cover portrait, when one was supplied. A pointer because most books have
+	// none and the cover lays out differently rather than leaving a hole where one would be.
+	Photo *ChildPhoto `json:"photo,omitempty"`
 	FoodPractice  string  `json:"food_practice,omitempty"`
 	AllergyStatus string  `json:"allergy_status"`
 	WeightKg      *string `json:"weight_kg"`

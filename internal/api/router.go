@@ -64,6 +64,9 @@ func NewRouter(pool *pgxpool.Pool) http.Handler {
 	r.Get("/api/profiles/{childID}/engine-input", h.GetProfileEngineInput)
 	// The set is the primary surface: one run, both books, one profile read. The per-book
 	// routes below remain for fetching one book directly.
+	// Generation from inline inputs: no child id, nothing persisted. This is what the
+	// console calls. The {childID} routes below serve a profile already in the database.
+	r.Post("/api/books/generate", h.BookGenerate)
 	r.Get("/api/books/{childID}/preview", h.BookSetPreview)
 	r.Get("/api/books/{childID}/{book}/preview", h.BookPreview)
 
@@ -78,6 +81,8 @@ func NewRouter(pool *pgxpool.Pool) http.Handler {
 	// endpoint still fails in 30s instead of holding a connection for three minutes.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Timeout(printTimeout))
+		r.Post("/api/books/generate.zip", h.BookGenerateZip)
+		r.Post("/api/books/generate/{book}.pdf", h.BookGenerateOne)
 		r.Get("/api/books/{childID}/books.zip", h.BookSetDownload)
 		r.Get("/api/books/{childID}/{book}.pdf", h.BookDownload)
 	})

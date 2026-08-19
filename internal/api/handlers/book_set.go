@@ -39,6 +39,15 @@ type bookSetResponse struct {
 // both books, and an assembly failure in either one fails the run rather than serving half a
 // deliverable an operator might mistake for the whole thing.
 func (h *Handlers) renderSet(w http.ResponseWriter, r *http.Request, s profile.Stored) (bookSetResponse, book.Set, bool) {
+	return h.renderSetWithPhoto(w, r, s, nil)
+}
+
+// renderSetWithPhoto is renderSet with an optional cover portrait.
+//
+// The photo is attached after assembly rather than carried through it. It is not an input to
+// any decision -- it changes no recipe, no filter and no omission -- so threading it through
+// the assemblers would put a decoration in the path of the clinical logic.
+func (h *Handlers) renderSetWithPhoto(w http.ResponseWriter, r *http.Request, s profile.Stored, photo *book.ChildPhoto) (bookSetResponse, book.Set, bool) {
 	ctx := r.Context()
 	asOf := time.Now().UTC()
 
@@ -50,6 +59,12 @@ func (h *Handlers) renderSet(w http.ResponseWriter, r *http.Request, s profile.S
 		}
 		writeError(w, http.StatusInternalServerError, "book set assembly failed: "+err.Error())
 		return bookSetResponse{}, book.Set{}, false
+	}
+
+	// Book 1 only. Book 2 is a recipe book; its cover carries the child's name and food
+	// practice, and a portrait there would be decoration on a working document.
+	if photo != nil {
+		set.Book1.Child.Photo = photo
 	}
 
 	var buf1, buf2 bytes.Buffer
@@ -108,6 +123,15 @@ func (h *Handlers) BookSetDownload(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	h.writeBookZip(w, r, childID, resp, set)
+}
+
+// writeBookZip prints both books and serves them as one archive named for the child.
+//
+// Shared by the stored-profile route and the inline-generate route: the two differ only in
+// where the profile came from, and a second copy of the printing and archiving would be a
+// second place for the error mapping to drift.
+func (h *Handlers) writeBookZip(w http.ResponseWriter, r *http.Request, name string, resp bookSetResponse, set book.Set) {
 
 	// One browser for both books. Launching Chromium is most of the cost of a print, and
 	// paying it twice overran the request budget on a small instance while passing every
@@ -133,8 +157,8 @@ func (h *Handlers) BookSetDownload(w http.ResponseWriter, r *http.Request) {
 	// a half-written archive already streamed to the operator with a 200 on it.
 	var archive bytes.Buffer
 	zw := zip.NewWriter(&archive)
-	for i, name := range []string{"book1", "book2"} {
-		f, err := zw.Create(fmt.Sprintf("%s-%s.pdf", childID, name))
+	for i, which := range []string{"book1", "book2"} {
+		f, err := zw.Create(fmt.Sprintf("%s-%s.pdf", name, which))
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "zip create failed: "+err.Error())
 			return
@@ -162,7 +186,7 @@ func (h *Handlers) BookSetDownload(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set(bookOmissionHeader, joinOmissions(all))
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition",
-		fmt.Sprintf("attachment; filename=%q", childID+"-books.zip"))
+		fmt.Sprintf("attachment; filename=%q", name+"-books.zip"))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(archive.Bytes())
 }

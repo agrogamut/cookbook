@@ -994,7 +994,10 @@ calls, and the per-book routes remain for fetching one book directly.
 
 | Surface | What it is |
 |---|---|
-| `GET /api/books/{childID}/preview` | **one run, both books** - JSON, both rendered, omissions split three ways |
+| `POST /api/books/generate` | **the console's action** - a whole child inline, both books back, nothing stored |
+| `POST /api/books/generate.zip` | the same run, both books printed, one archive |
+| `POST /api/books/generate/{book1\|book2}.pdf` | the same run, one book printed |
+| `GET /api/books/{childID}/preview` | one run from a **stored** profile, both books, omissions split three ways |
 | `GET /api/books/{childID}/books.zip` | both printed PDFs, named `{childID}-book1.pdf` and `-book2.pdf` |
 | `GET /api/books/{childID}/{book1\|book2}/preview` | one book as HTML, omissions in `X-Book-Omissions` |
 | `GET /api/books/{childID}/{book1\|book2}.pdf` | one printed PDF, same header |
@@ -1003,6 +1006,30 @@ calls, and the per-book routes remain for fetching one book directly.
 A zip rather than one merged PDF: they are two books with their own covers and their own page
 numbering, and merging would renumber Book 2's pages behind Book 1's so that a page reference
 printed inside either book stops matching the page it is on.
+
+**Generation does not need a stored child.** `POST /api/books/generate` takes the whole child
+in the request - name, date of birth, sex, language, food practice, allergies, conditions,
+growth measurements and an optional cover photograph - and returns both books. Nothing is
+written to the database. That is one step instead of two for an operator, and it means a
+consultation that produces a book does not also produce a stored record of a child; the
+`{childID}` routes remain for a profile that genuinely is stored.
+
+The same vocabulary and constraint checks run either way. A profile that would be rejected as
+a saved row is rejected as a generated book too, because the failure being prevented - a
+region the corpus does not carry, silently producing a book ranked against nothing - is about
+the book rather than the row.
+
+**The cover photograph** is uploaded with the form and embedded in Book 1 as a data URI. It is
+never stored, never written to disk, and never appears in Book 2, which is a working recipe
+document. `internal/book/photo.go` validates it: the media type must be `image/png`,
+`image/jpeg` or `image/webp` from an allowlist, and the payload must be base64 that decodes.
+SVG is refused deliberately - it is a document that can carry script, and it would be embedded
+into a page this service renders in a real browser.
+
+`ChildPhoto.DataURI` is `template.URL`, not `string`, and the type is load-bearing:
+`html/template` refuses to emit a `data:` URI in a `src` attribute and silently rewrites it to
+`#ZgotmplZ`, so a plain string produced a cover with a broken image and no error anywhere.
+That escape hatch is only sound because `ParsePhoto` is the only way to build one.
 
 Set omissions are split into `profile_omissions`, `book1_omissions` and `book2_omissions`. An
 omission both assemblers reported is a fact about the child's stored profile rather than about

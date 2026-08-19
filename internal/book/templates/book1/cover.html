@@ -4,8 +4,18 @@
   <h1>My Child's Growth, Nutrition &amp; Development Companion</h1>
   <p class="subtitle">A personalized working guide for feeding, growth, vaccination,
      development and everyday care</p>
+  {{/* The portrait sits above the name block so the cover reads as one identification: the
+       face, then the name it belongs to. Without a photograph the block is simply absent --
+       no placeholder silhouette, which would look like a picture that failed to load. */}}
+  {{ with .Child.Photo }}
+  <figure class="cover-photo">
+    <img src="{{ .DataURI }}" alt="Photograph of the child">
+    {{ with .Caption }}<figcaption>{{ . }}</figcaption>{{ end }}
+  </figure>
+  {{ end }}
   <div class="name-box">
     <div class="name">{{ .Child.DisplayName }}</div>
+    {{ with .Child.DateOfBirth }}<div>Date of birth: <span class="mono">{{ . }}</span></div>{{ end }}
     <div>Age: {{ .Child.AgeLabel }}</div>
   </div>
   <p class="subtitle">Prepared after consultation</p>
