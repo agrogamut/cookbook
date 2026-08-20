@@ -1,28 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { BookGenerator } from "./book-generator";
-
-// The form loads its option lists on mount. Those calls share this mock, so it answers a
-// reference request with an empty list and the generate request with the body under test --
-// otherwise every test would be exercising a form whose selects failed to populate.
-function mockFetch(init: { status: number; body?: string }) {
-  return vi.fn().mockImplementation((url: string) => {
-    if (!String(url).includes("/api/books/")) {
-      return Promise.resolve({
-        ok: true, status: 200, headers: { get: () => null },
-        text: async () => "[]", json: async () => [],
-      });
-    }
-    return Promise.resolve({
-      ok: init.status >= 200 && init.status < 300,
-      status: init.status,
-      headers: { get: () => null },
-      text: async () => init.body ?? "",
-      json: async () => JSON.parse(init.body ?? "{}"),
-    });
-  });
-}
 
 /** A set response as the API sends it. Both books always present: that is the product rule
  *  the endpoint exists to carry, so a fixture that omits one would not be testing the app. */
@@ -42,6 +21,65 @@ function setBody(over: Partial<{
   });
 }
 
+function jsonResponse(status: number, body: string) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: () => null },
+    text: async () => body,
+    json: async () => JSON.parse(body || "{}"),
+  };
+}
+
+/** A printed-PDF response. `blob()` is what generateBookPdf actually reads; the mock's body is
+ *  otherwise irrelevant content, since no test inspects PDF bytes -- only which URL the
+ *  component ends up holding for it. */
+function pdfResponse(status: number, errorBody?: string) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: { get: () => null },
+    text: async () => errorBody ?? "",
+    json: async () => JSON.parse(errorBody ?? "{}"),
+    blob: async () => new Blob(["%PDF-mock"], { type: "application/pdf" }),
+  };
+}
+
+/** Routes fetch calls by URL shape: reference-data calls the form loads on mount get an empty
+ *  list so the form itself renders; /api/books/generate is the set; the two .../generate/*.pdf
+ *  calls are the printed books fetched alongside it. Each leg's status is independently
+ *  configurable, because task 13's whole point is that a PDF can fail while the set does not. */
+function mockFetch(opts: {
+  generateStatus?: number;
+  generateBody?: string;
+  book1Status?: number;
+  book2Status?: number;
+  book1Body?: string;
+  book2Body?: string;
+} = {}) {
+  const {
+    generateStatus = 200,
+    generateBody = setBody(),
+    book1Status = 200,
+    book2Status = 200,
+    book1Body,
+    book2Body,
+  } = opts;
+  return vi.fn().mockImplementation((url: string) => {
+    const u = String(url);
+    if (!u.includes("/api/books/")) {
+      return Promise.resolve(jsonResponse(200, "[]"));
+    }
+    if (u.includes("/generate/book1.pdf")) {
+      return Promise.resolve(pdfResponse(book1Status, book1Body));
+    }
+    if (u.includes("/generate/book2.pdf")) {
+      return Promise.resolve(pdfResponse(book2Status, book2Body));
+    }
+    return Promise.resolve(jsonResponse(generateStatus, generateBody));
+  });
+}
+
 // The form takes the child's details inline; date of birth is the only required one, and the
 // Generate button stays disabled without it.
 async function generate(dob = "2022-05-01") {
@@ -50,32 +88,52 @@ async function generate(dob = "2022-05-01") {
   await userEvent.click(screen.getByRole("button", { name: /generate both books/i }));
 }
 
-beforeEach(() => { vi.stubGlobal("fetch", mockFetch({ status: 200, body: setBody() })); });
-afterEach(() => { vi.unstubAllGlobals(); });
+let objectUrlSeq = 0;
+let createObjectURLSpy: ReturnType<typeof vi.fn>;
+let revokeObjectURLSpy: ReturnType<typeof vi.fn>;
+
+beforeEach(() => {
+  objectUrlSeq = 0;
+  vi.stubGlobal("fetch", mockFetch());
+  // jsdom does not implement the object URL registry at all (createObjectURL is not a
+  // function), so every test that reaches the PDF-embedding path needs it stubbed regardless
+  // of what that test is asserting.
+  createObjectURLSpy = vi.fn(() => `blob:mock-${++objectUrlSeq}`);
+  revokeObjectURLSpy = vi.fn();
+  URL.createObjectURL = createObjectURLSpy as unknown as typeof URL.createObjectURL;
+  URL.revokeObjectURL = revokeObjectURLSpy as unknown as typeof URL.revokeObjectURL;
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("BookGenerator", () => {
   it("produces both books from one run and switches between them without refetching", async () => {
-    const fetchMock = mockFetch({ status: 200, body: setBody() });
+    const fetchMock = mockFetch();
     vi.stubGlobal("fetch", fetchMock);
     await generate();
 
+    // Both books print alongside the set, so the printed PDF -- not the HTML -- is what is on
+    // screen for the active tab by the time generation settles.
     const frame = await screen.findByTitle("Book 1 preview");
-    expect(frame.getAttribute("srcdoc")).toContain("daily life");
+    await waitFor(() => expect(frame.getAttribute("src")).toMatch(/^blob:mock-/));
+
     const bookCalls = () =>
       fetchMock.mock.calls.filter((c) => String(c[0]).includes("/api/books/")).length;
-    expect(bookCalls()).toBe(1);
+    // One call for the set plus one print per book: generating never re-runs on a tab switch.
+    expect(bookCalls()).toBe(3);
 
-    // The tab is a view control over an already-generated pair, not a second generation.
     await userEvent.click(screen.getByRole("tab", { name: /book 2/i }));
-    expect((await screen.findByTitle("Book 2 preview")).getAttribute("srcdoc"))
-      .toContain("recipes");
-    expect(bookCalls()).toBe(1);
+    const book2Frame = await screen.findByTitle("Book 2 preview");
+    await waitFor(() => expect(book2Frame.getAttribute("src")).toMatch(/^blob:mock-/));
+    expect(bookCalls()).toBe(3);
   });
 
   it("renders a clinical stop, not an error, when the engine blocks the child", async () => {
     vi.stubGlobal("fetch", mockFetch({
-      status: 409,
-      body: JSON.stringify({
+      generateStatus: 409,
+      generateBody: JSON.stringify({
         error: "Down syndrome is a STOP-REVIEW condition",
         reviewer: "Pediatrician + dietitian",
       }),
@@ -91,8 +149,8 @@ describe("BookGenerator", () => {
 
   it("distinguishes an unavailable renderer from a clinical stop", async () => {
     vi.stubGlobal("fetch", mockFetch({
-      status: 503,
-      body: JSON.stringify({ error: "headless chromium unavailable" }),
+      generateStatus: 503,
+      generateBody: JSON.stringify({ error: "headless chromium unavailable" }),
     }));
     await generate();
 
@@ -107,8 +165,7 @@ describe("BookGenerator", () => {
 
   it("separates omissions that are facts about the child from omissions of one book", async () => {
     vi.stubGlobal("fetch", mockFetch({
-      status: 200,
-      body: setBody({
+      generateBody: setBody({
         profile_omissions: ["Peanut is suspected, not confirmed"],
         book1_omissions: ["[block] B1-009 vaccination schedule: no drafted text permitted"],
         book2_omissions: ["[meal category] MC-04 has no recipes mapped to it at all"],
@@ -126,5 +183,95 @@ describe("BookGenerator", () => {
     expect(await screen.findByText(/MC-04/)).toBeInTheDocument();
     expect(screen.getByText(/Peanut is suspected/)).toBeInTheDocument();
     expect(screen.queryByText(/B1-009/)).toBeNull();
+  });
+
+  it("embeds the printed PDF, not the HTML", async () => {
+    await generate();
+
+    const frame = await screen.findByTitle("Book 1 preview");
+    await waitFor(() => expect(frame.getAttribute("src")).toMatch(/^blob:mock-/));
+    // The HTML iframe and the PDF iframe share a title, so the only reliable way to tell which
+    // one rendered is that a PDF iframe never carries srcdoc.
+    expect(frame.getAttribute("srcdoc")).toBeNull();
+    expect(frame).not.toHaveAttribute("sandbox");
+  });
+
+  it("falls back to the HTML preview when no browser is available, and says so", async () => {
+    vi.stubGlobal("fetch", mockFetch({
+      book1Status: 503,
+      book1Body: JSON.stringify({ error: "headless chromium unavailable" }),
+      book2Status: 503,
+      book2Body: JSON.stringify({ error: "headless chromium unavailable" }),
+    }));
+    await generate();
+
+    const frame = await screen.findByTitle("Book 1 preview");
+    expect(frame.getAttribute("srcdoc")).toContain("daily life");
+    expect(frame.getAttribute("src")).toBeFalsy();
+
+    // Explained as an approximation, not raised as an error: the set itself printed fine and
+    // the HTML preview genuinely works, so this is not the same situation as generation itself
+    // failing.
+    expect(screen.getByText(/approximates the printed page/i)).toBeInTheDocument();
+    expect(screen.queryByText(/renderer unavailable/i)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    // Nothing to open for a book with no printed PDF.
+    expect(screen.getByRole("button", { name: /open book 1 pdf/i })).toBeDisabled();
+  });
+
+  it("surfaces a non-503 print failure as an error, unlike the renderer-unavailable case", async () => {
+    vi.stubGlobal("fetch", mockFetch({
+      book1Status: 500,
+      book1Body: JSON.stringify({ error: "pdf render failed: context deadline exceeded" }),
+    }));
+    await generate();
+
+    // A browser was available and the print itself failed -- this is not the same as no
+    // browser being installed, and must not be absorbed into the quiet HTML fallback.
+    expect(await screen.findByText(/print failed/i)).toBeInTheDocument();
+    expect(screen.queryByText(/approximates the printed page/i)).toBeNull();
+  });
+
+  it("opens the tab from the blob it already has, without printing again", async () => {
+    const fetchMock = mockFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    const fakeTab = { closed: false } as unknown as Window;
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(fakeTab);
+
+    await generate();
+    const button = await screen.findByRole("button", { name: /open book 1 pdf/i });
+    await waitFor(() => expect(button).toBeEnabled());
+
+    const bookCalls = () =>
+      fetchMock.mock.calls.filter((c) => String(c[0]).includes("/generate/book1.pdf")).length;
+    expect(bookCalls()).toBe(1);
+
+    await userEvent.click(button);
+
+    // No second print: the tab is opened directly on the object URL already resolved while
+    // generating the set.
+    expect(bookCalls()).toBe(1);
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    const [openedUrl] = openSpy.mock.calls[0];
+    expect(openedUrl).toMatch(/^blob:mock-/);
+
+    openSpy.mockRestore();
+  });
+
+  it("revokes the previous object URLs when a new set is generated", async () => {
+    await generate();
+    await waitFor(() => expect(createObjectURLSpy).toHaveBeenCalledTimes(2));
+    const firstRunUrls = createObjectURLSpy.mock.results.map((r) => r.value as string);
+
+    await userEvent.click(screen.getByRole("button", { name: /generate both books/i }));
+
+    await waitFor(() => expect(createObjectURLSpy).toHaveBeenCalledTimes(4));
+    // The first run's two PDF URLs are released once the second run's replace them; the second
+    // run's own URLs are not touched by this generation.
+    const revoked = revokeObjectURLSpy.mock.calls.map((c) => c[0]);
+    expect(revoked).toEqual(expect.arrayContaining(firstRunUrls));
+    const secondRunUrls = createObjectURLSpy.mock.results.slice(2).map((r) => r.value as string);
+    expect(revoked).not.toEqual(expect.arrayContaining(secondRunUrls));
   });
 });
