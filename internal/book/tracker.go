@@ -131,6 +131,10 @@ func trackerFromMonitoring(m MonitoringTemplate) TrackerSpec {
 		Rows:      TrackerRows(m.Frequency),
 		Alarm:     m.Alarm,
 		Review:    m.Review,
+		// No cells: every column is a writing line, so the headers are the whole demand. That
+		// is exactly the case that was breaking words -- "HEAD CIRCUMFER / ENCE" is a header,
+		// not data.
+		Widths: ColumnWidths(cols, nil),
 	}
 }
 
@@ -146,6 +150,7 @@ func trackerFromWritable(title, writableFields, frequency string) *TrackerSpec {
 		Frequency: frequency,
 		Columns:   cols,
 		Rows:      TrackerRows(frequency),
+		Widths:    ColumnWidths(cols, nil),
 	}
 }
 

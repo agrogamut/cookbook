@@ -896,7 +896,13 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 /* The two dashboards print one row per provider row -- eighteen monitoring areas -- and the
    row already carries its label, so it does not need the 6.5mm writing height a blank row
    does. Only the cells the parent fills do, and a writing line sets its own. */
-.tracker.tall td { height: auto; padding: 1.8mm 3mm 1.8mm 0; }
+/* The dashboard rows carry their own labels, so they do not need the 6.5mm writing height a
+   blank row does -- only the cells the parent fills do, and a writing line sets its own.
+   
+   1.5mm rather than 1.8: at 1.8 the eighteen monitoring areas measured about 3mm past the sheet
+   and spilled a single row onto a page of its own. The row set is the same eighteen for every
+   child, so this fits deterministically rather than happening to fit for one profile. */
+.tracker.tall td { height: auto; padding: 1.5mm 3mm 1.5mm 0; }
 .tracker-title {
   font-family: var(--font-sans);
   font-size: var(--caption-size);

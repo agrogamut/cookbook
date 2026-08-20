@@ -104,6 +104,10 @@ type Section struct {
 	// of its blocks did render. Only the final, post-omission slice knows which those are, and
 	// the template never sees the blocks that were dropped.
 	StartsPart bool `json:"starts_part,omitempty"`
+
+	// Widths is one percentage per column for the block's own table, where it has one -- the
+	// milestone tables of B1-011 and B1-014. Same reason as TrackerSpec.Widths.
+	Widths []int `json:"widths,omitempty"`
 }
 
 // DailyDomain is one daily-life module ready for the page. Every text field is the
@@ -162,6 +166,10 @@ type TrackerSpec struct {
 	// empty box to tick.
 	Alarm  string `json:"alarm,omitempty"`
 	Review string `json:"review,omitempty"`
+	// Widths is one percentage per column, computed from what the column holds. Fixed table
+	// layout gives every column the same width otherwise, and a uniform column narrower than
+	// the longest word in it breaks that word. See colwidth.go.
+	Widths []int `json:"widths,omitempty"`
 }
 
 // FlowRows and TailRows split a tracker's blank rows into the part that may break anywhere and

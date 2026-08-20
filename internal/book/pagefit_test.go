@@ -57,7 +57,10 @@ const underfillThreshold = 0.62
 //	24  after breaking on parts, protecting form tails, and binding warnings to their subject
 //	    -- the last two cost fill and bought the two defects a count cannot see: a sheet
 //	    holding three writing lines, and four sheets opening on a warning about nothing
-const maxUnderfilledPages = 24
+//	21  after sizing table columns from their content: Book 1 loses four sheets outright,
+//	    because a column wide enough for its longest word is also a column whose rows are two
+//	    lines rather than four, and a row is unbreakable
+const maxUnderfilledPages = 21
 
 // maxPagesOpeningOnAnOrphan is the same kind of budget for the other half of the problem: a
 // sheet whose first line is a warning belonging to the previous page's topic, or a bare column
@@ -474,5 +477,42 @@ func TestTheCoverTitleIsCentredOnThePage(t *testing.T) {
 	if off := centre - pageWidthPt/2; off > 6 || off < -6 {
 		t.Errorf("the cover title %q is centred at %.1fpt, the page centre is %.1fpt (%.1fmm off)",
 			tallest.Text, centre, pageWidthPt/2, off*25.4/72)
+	}
+}
+
+// brokenWordFragments are line-end fragments read off printed sheets before table columns were
+// sized from their content. Each is the front half of a word that fixed table layout split
+// because the column was narrower than the word:
+//
+//	HEAD CIRCUMFER / ENCE                 Book 1 p6, the growth table
+//	Language/cognitiv / e                 p14, the milestone table
+//	Social/communicati / on               p18, the same table
+//	IAP-STG-CONSTIPATIO / N               p46, the evidence table
+//	Reference z-score/interpretatio / n   p43, the weekly dashboard
+//
+// A broken identifier is a wrong identifier, which is why this is a guard and not a preference.
+// Matched with a trailing space or as a whole word so the fragment cannot match the intact word
+// it came from.
+var brokenWordFragments = []string{
+	"CIRCUMFER ", "cognitiv ", "communicati ", "CONSTIPATIO ", "interpretatio ",
+}
+
+// TestNoWordBreaksInsideItself reads both printed books for the fragments above.
+//
+// pdftotext joins a hard-wrapped cell with a space, so a word Chromium split across two lines
+// comes back as "CIRCUMFER ENCE" -- which is exactly what makes this checkable from the PDF
+// rather than from the HTML, where the break does not exist yet.
+func TestNoWordBreaksInsideItself(t *testing.T) {
+	set := printableSet(t)
+	for _, b := range set.bothBooks() {
+		text, err := pdfText(t, b.PDF)
+		if err != nil {
+			t.Skipf("pdftotext unavailable: %v", err)
+		}
+		for _, frag := range brokenWordFragments {
+			if strings.Contains(text, frag) {
+				t.Errorf("%s breaks a word: %q appears at a line end", b.Name, frag)
+			}
+		}
 	}
 }

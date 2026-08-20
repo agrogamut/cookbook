@@ -288,6 +288,14 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 						"and was not rendered", blockID, sectionTitle, cp.AgeMonths))
 				continue
 			}
+			// The milestone table's own column widths. Only the domain and skill columns carry
+			// text -- observation, date and concern are writing lines -- so an equal fifth each
+			// squeezed the skill into four-line cells while three columns sat empty. Rows are
+			// unbreakable, so every tall row wasted its own height at a page boundary.
+			sec.Widths = ColumnWidths(
+				[]string{"Domain", "Age-referenced skill from approved master",
+					"Actual observation", "Observed date", "Concern / action"},
+				milestoneWidthCells(sec.Rows))
 
 		case "B1-RED-01":
 			callout, ok := globalRedFlagCallout(milestones)
@@ -381,6 +389,16 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 	markSheetStarts(b.Sections)
 
 	return b, skipped, nil
+}
+
+// milestoneWidthCells is the milestone table's text content in the shape ColumnWidths wants:
+// the two columns that carry text, and empty strings for the three the parent fills.
+func milestoneWidthCells(rows []Row) [][]string {
+	out := make([][]string, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, []string{r.Label, r.Reference, "", "", ""})
+	}
+	return out
 }
 
 // markSheetStarts decides where Book 1 breaks: once per provider part, plus the blocks
@@ -892,10 +910,12 @@ func dashboardGrids(all []MonitoringTemplate, ageMonths int) []TrackerSpec {
 		}
 		rows = append(rows, []string{area, m.Reference})
 	}
+	cols := []string{"Area", "Reference", "Actual", "Date", "Note"}
 	return []TrackerSpec{{
 		Title:     "Every area, one page",
 		Frequency: "At each review",
-		Columns:   []string{"Area", "Reference", "Actual", "Date", "Note"},
+		Columns:   cols,
+		Widths:    ColumnWidths(cols, rows),
 		Prefilled: rows,
 		Review:    "Bring this page to the follow-up visit.",
 	}}

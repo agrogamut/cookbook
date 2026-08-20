@@ -1,5 +1,11 @@
 {{ define "B1-DEV-01" }}
 <table>
+  {{/* Five equal columns squeezed the skill text into four-line cells while three writing
+       columns sat mostly empty, and rows are unbreakable -- so every page boundary wasted up to
+       a four-line row. It also broke words: "Language/cognitiv / e" and
+       "Social/communicati / on" were both read off printed sheets. Widths come from what the
+       columns hold; see colwidth.go. */}}
+  {{ with .Widths }}<colgroup>{{ range . }}<col style="width: {{ . }}%">{{ end }}</colgroup>{{ end }}
   <thead>
     <tr>
       <th>Domain</th><th>Age-referenced skill from approved master</th>

@@ -47,6 +47,10 @@
   {{ with .Review }}<p class="tracker-meta"><strong>Who reviews this:</strong> {{ . }}</p>{{ end }}
   </div>
   <table>
+    {{/* Widths computed from what each column holds -- see colwidth.go. Fixed table layout gives
+         every column an equal share otherwise, and an equal share narrower than the longest word
+         in a header breaks that word: "HEAD CIRCUMFER / ENCE" was a column heading, not data. */}}
+    {{ with .Widths }}<colgroup>{{ range . }}<col style="width: {{ . }}%">{{ end }}</colgroup>{{ end }}
     <thead><tr>{{ range .Columns }}<th>{{ . }}</th>{{ end }}</tr></thead>
       {{ $cols := .Columns }}
       {{ if .Prefilled }}
