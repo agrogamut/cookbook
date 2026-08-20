@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 )
@@ -74,24 +75,55 @@ func browserOnPath() bool {
 // of how this service launches a browser -- a sandbox flag that applied to one path and not
 // another would mean a set where one book prints and the other does not.
 func allocatorFor(ctx context.Context) (context.Context, context.CancelFunc) {
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		// No network, at all. Every document this browser prints is self-contained by
+		// construction -- the stylesheet is inlined by RenderHTML and the only image a book
+		// can carry is the cover photograph, embedded as a data: URI -- so a subresource
+		// fetch is never something a correct book does. Resolving every host to nothing
+		// makes that invariant something the browser enforces rather than something the
+		// templates are trusted to honour.
+		//
+		// It matters because a book is built partly from request input: the child's name and
+		// that cover photograph arrive in the POST body. html/template escapes the text and
+		// ParsePhoto restricts the image to a base64 png/jpeg/webp, so there is no route from
+		// input to a fetch today -- this is the second lock, for the day a template grows an
+		// attribute someone forgets to think about. A print browser that cannot reach the
+		// network cannot be turned into an SSRF pivot from inside the document.
+		chromedp.Flag("host-resolver-rules", "MAP * ~NOTFOUND"),
+		chromedp.Flag("disable-background-networking", true),
+		chromedp.Flag("disable-component-update", true),
+	)
+
 	// In a container the browser runs as root with user namespaces unavailable, where
 	// Chrome's sandbox cannot initialise and the process exits before it prints anything.
 	//
-	// Off by default, so a developer's machine keeps the sandbox it can actually use. It is
-	// safe where it is set and not in general: the browser here only ever loads a document
-	// this service just rendered from its own database, never a remote page, so there is no
-	// untrusted content for the sandbox to contain.
-	if os.Getenv("CHROMIUM_NO_SANDBOX") == "" {
-		return context.WithCancel(ctx)
-	}
-	return chromedp.NewExecAllocator(ctx,
-		append(chromedp.DefaultExecAllocatorOptions[:],
+	// Off by default, so a developer's machine keeps the sandbox it can actually use.
+	if os.Getenv("CHROMIUM_NO_SANDBOX") != "" {
+		opts = append(opts,
 			chromedp.NoSandbox,
 			// Chrome sizes its shared memory from /dev/shm, which containers default to
 			// 64 MB. A book of 22 pages exhausts it and the renderer crashes mid-print.
 			chromedp.Flag("disable-dev-shm-usage", true),
-		)...)
+		)
+	}
+	return chromedp.NewExecAllocator(ctx, opts...)
 }
+
+// maxConcurrentPrints bounds how many tabs can be laying out a book at once.
+//
+// The browser is now process-wide, so without a bound one client can hold open as many tabs
+// as it can open connections -- and a print tab laying out a 47-page book is the most
+// expensive thing this service does. On the deployed free instance, which has 512 MB for
+// Chromium and everything else, a handful of concurrent prints is an out-of-memory kill
+// rather than a slow response.
+//
+// Two rather than one: a single slot makes a second operator wait out a whole print before
+// their own starts, and the zip route prints two books back to back. Two is also strictly
+// better than what the per-request browser did, which was to allow unbounded concurrent
+// *browsers* -- the bound is new, and at any value it is an improvement.
+const maxConcurrentPrints = 2
+
+var printSlots = make(chan struct{}, maxConcurrentPrints)
 
 // PrintPDF renders one already-generated HTML document to PDF.
 //
@@ -118,7 +150,7 @@ func PrintPDF(ctx context.Context, htmlDoc []byte, meta Metadata) ([]byte, error
 	if err != nil {
 		return nil, err
 	}
-	return printIn(browser, htmlDoc, meta)
+	return printIn(ctx, browser, htmlDoc, meta)
 }
 
 // browser holds the one Chromium this process launches, and the cancel that stops it.
@@ -235,7 +267,7 @@ func PrintPDFAll(ctx context.Context, docs []PrintJob) ([][]byte, error) {
 
 	out := make([][]byte, 0, len(docs))
 	for _, d := range docs {
-		pdf, err := printIn(browser, d.HTML, d.Metadata)
+		pdf, err := printIn(ctx, browser, d.HTML, d.Metadata)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", d.Name, err)
 		}
@@ -258,9 +290,30 @@ type PrintJob struct {
 // budget of the next and a crashed tab does not take the browser with it. The tab is closed
 // on the way out, which matters more now that the browser outlives the request: a leaked tab
 // per print would grow the process until the instance's memory cap killed it.
-func printIn(parent context.Context, htmlDoc []byte, meta Metadata) ([]byte, error) {
-	ctx, cancel := chromedp.NewContext(parent)
+func printIn(caller, browser context.Context, htmlDoc []byte, meta Metadata) ([]byte, error) {
+	// Wait for a slot, or give up if the caller has gone. A queued request whose client
+	// disconnected must not go on to occupy a tab.
+	select {
+	case printSlots <- struct{}{}:
+		defer func() { <-printSlots }()
+	case <-caller.Done():
+		return nil, fmt.Errorf("%w: %v", ErrPrintFailed, caller.Err())
+	}
+
+	// The tab must descend from the browser, because that is what makes it a tab in the
+	// shared browser rather than a new one. But it also has to die when the caller does, and
+	// a context has one parent -- so the caller's cancellation is wired across by hand.
+	//
+	// Without this the ctx argument was decorative: when the browser became process-wide the
+	// tab stopped descending from the request, so a disconnected client left a print running
+	// to its own 60-second timeout and the route's 180-second budget could not stop it
+	// either. Every abandoned request held a tab for a full print.
+	//
+	ctx, cancel := chromedp.NewContext(browser)
 	defer cancel()
+	stopPropagating := context.AfterFunc(caller, cancel)
+	defer stopPropagating()
+
 	ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
@@ -301,6 +354,28 @@ func printIn(parent context.Context, htmlDoc []byte, meta Metadata) ([]byte, err
 	var out []byte
 	err := chromedp.Run(ctx,
 		chromedp.Navigate("about:blank"),
+		// No scripting in the print tab.
+		//
+		// The browser outlives the request now, so two children's books are two families'
+		// data passing through one process. The per-request browser they used to get made
+		// isolation free; this buys it back by removing the capability rather than
+		// partitioning it. Storage only carries between prints if a document writes storage,
+		// and writing storage takes script -- so a tab that cannot execute script cannot
+		// leave anything behind for the next child's book to find. It closes fetch,
+		// service workers, localStorage and cookies in one move.
+		//
+		// It costs nothing: no template in this package emits a <script>, an event handler or
+		// a javascript: URL, and the running head and folio are drawn by Chromium's own print
+		// engine rather than by the page. A book that needed script to render would be a book
+		// whose content was computed in the browser, which this project forbids for its own
+		// reasons -- the figures on the page have to come from the database.
+		//
+		// Preferred over chromedp.WithNewBrowserContext, which the CDP suggestion names and
+		// which is the textbook answer: against this Chromium it fails the print outright
+		// with "Failed to open new tab - no browser is open (-32000)". Disabling script is a
+		// stronger guarantee anyway -- a storage partition still lets a document act, it just
+		// gives it a private place to act in.
+		emulation.SetScriptExecutionDisabled(true),
 		chromedp.ActionFunc(func(ctx context.Context) error {
 			frame, err := page.GetFrameTree().Do(ctx)
 			if err != nil {

@@ -5,6 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -302,4 +305,97 @@ func widestBook2() Book2 {
 			}},
 		}},
 	}
+}
+
+// TestPrintStopsWhenTheCallerGivesUp pins the cancellation path.
+//
+// When the browser became process-wide, the tab stopped descending from the request context
+// and the ctx argument to PrintPDF became decorative: a client that disconnected left a print
+// running to its own 60-second timeout, and the route's 180-second budget could not stop it
+// either. Every abandoned request held a tab for a full print, which on a memory-capped
+// instance is how one impatient operator takes the service down.
+func TestPrintStopsWhenTheCallerGivesUp(t *testing.T) {
+	if !browserOnPath() {
+		t.Skip("no chromium on PATH")
+	}
+
+	meta := Metadata{Title: "t", Language: "en", ReviewStatus: "Draft", GenerationDate: time.Now()}
+	var doc bytes.Buffer
+	if err := RenderHTML(&doc, Kind1, meta, widestBook1()); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+
+	// Already cancelled: the print must refuse rather than run to completion.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	start := time.Now()
+	if _, err := PrintPDF(ctx, doc.Bytes(), meta); err == nil {
+		t.Fatal("a print whose caller has already given up must not return a PDF")
+	}
+	// The point is that it gave up promptly, not that it eventually timed out. The tab's own
+	// budget is 60s, so anything near that means cancellation is not reaching the print.
+	if elapsed := time.Since(start); elapsed > 20*time.Second {
+		t.Fatalf("cancelled print took %s to return; the caller's cancellation is not "+
+			"reaching the tab", elapsed)
+	}
+}
+
+// TestPrintTabCannotExecuteScript pins the isolation control.
+//
+// The browser outlives the request, so two children's books are two families' data passing
+// through one process. Script is what would let one book leave anything behind for the next
+// -- storage, a service worker, a fetch -- so the print tab runs with script execution
+// disabled and this proves it, by printing a document that would write its own body if it
+// could and checking the page kept the text it was given.
+func TestPrintTabCannotExecuteScript(t *testing.T) {
+	if !browserOnPath() {
+		t.Skip("no chromium on PATH")
+	}
+
+	// Not routed through RenderHTML: no template in this package emits a script, which is
+	// the point, so the probe has to be built by hand.
+	const probe = `<!doctype html><html><body><p id="p">SCRIPT-DID-NOT-RUN</p>` +
+		`<script>document.getElementById('p').textContent = 'SCRIPT-RAN';</script>` +
+		`</body></html>`
+
+	meta := Metadata{Title: "t", Language: "en", ReviewStatus: "Draft", GenerationDate: time.Now()}
+	out, err := PrintPDF(context.Background(), []byte(probe), meta)
+	if err != nil {
+		if errors.Is(err, ErrChromiumUnavailable) {
+			t.Skipf("chromium present but not runnable here: %v", err)
+		}
+		t.Fatalf("PrintPDF: %v", err)
+	}
+	if !bytes.HasPrefix(out, []byte("%PDF-")) {
+		t.Fatal("output is not a PDF")
+	}
+
+	text, err := pdfText(t, out)
+	if err != nil {
+		t.Skipf("cannot read the PDF back (%v); install poppler's pdftotext to run this", err)
+	}
+	if strings.Contains(text, "SCRIPT-RAN") {
+		t.Fatal("the print tab executed script. A book needs none, and a scripting tab in a " +
+			"browser shared across requests can write storage one child's print leaves for " +
+			"the next.")
+	}
+	if !strings.Contains(text, "SCRIPT-DID-NOT-RUN") {
+		t.Fatalf("probe text missing from the PDF, so the check proved nothing; got: %q", text)
+	}
+}
+
+// pdfText extracts a PDF's text with poppler's pdftotext, which is how the printed books were
+// read back while this package was being written. Absent, the caller skips.
+func pdfText(t *testing.T, pdf []byte) (string, error) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "probe.pdf")
+	if err := os.WriteFile(path, pdf, 0o600); err != nil {
+		return "", err
+	}
+	out, err := exec.Command("pdftotext", path, "-").Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }
