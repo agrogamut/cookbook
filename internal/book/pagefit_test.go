@@ -352,3 +352,112 @@ func pageOpeners(t *testing.T, pdf []byte) []string {
 	}
 	return out
 }
+
+// coverFixture is the printed Book 1 cover, with and without a portrait.
+//
+// A separate print from printableSet because the whole question is what the optional portrait
+// does to the sheet below it, and the shared fixture carries no photograph.
+func printBook1Cover(t *testing.T, photo bool) []byte {
+	t.Helper()
+	base := printableSet(t) // establishes the skips, and gives us an assembled book to vary
+	b := base.Set.Book1
+	if photo {
+		p, err := ParsePhoto("data:image/png;base64,"+onePixelPNG, "Ananya, August 2026")
+		if err != nil {
+			t.Fatalf("parse fixture photo: %v", err)
+		}
+		b.Child.Photo = p
+	} else {
+		b.Child.Photo = nil
+	}
+
+	var doc strings.Builder
+	if err := RenderHTML(&doc, Kind1, b.Metadata, b); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	pdf, err := PrintPDF(context.Background(), []byte(doc.String()), b.Metadata)
+	if err != nil {
+		t.Fatalf("print: %v", err)
+	}
+	return pdf
+}
+
+// TestTheCoverIsOnePageWithAndWithoutAPhotograph.
+//
+// It was not. The drop that carries the title down the sheet was a single 105mm constant while
+// the band above it was 75mm taller whenever a portrait was present, so the cover with a
+// photograph measured 262mm into a 255mm text block: the facts row printed alone on page 2
+// above 250mm of white and the contents page moved to page 3. Without a photograph the same
+// stack measured 201mm and left the foot floating 54mm above the bottom margin.
+//
+// Both halves matter. A cover that fits but stops two thirds of the way down is the other
+// failure, and only checking for the spill would accept it.
+func TestTheCoverIsOnePageWithAndWithoutAPhotograph(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		photo bool
+	}{{"with a photograph", true}, {"without one", false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			fills := pageFills(t, printBook1Cover(t, tc.photo))
+			if len(fills) < 2 {
+				t.Fatalf("book printed %d pages", len(fills))
+			}
+			// Page 2 is the contents page. If the cover spilled, it holds the three facts cells
+			// and ends in the first fifth of the sheet.
+			if fills[1] < 0.30 {
+				t.Errorf("page 2 ends at %.0f%% of the text block: the cover spilled onto it", fills[1]*100)
+			}
+			// And the cover reaches the foot of its own sheet rather than stopping in the middle.
+			if fills[0] < 0.80 {
+				t.Errorf("the cover ends at %.0f%%: the facts row should sit near the foot", fills[0]*100)
+			}
+		})
+	}
+}
+
+// TestTheCoverTitleIsCentredOnThePage.
+//
+// tokens.css set the auto side margins on one line and threw them away two rules later with a
+// `margin` shorthand, so the title printed about 15mm left of the page centre and the standfirst
+// about 27mm left, each with its text centred inside a box hard against the left edge. Centred
+// text in a left-hung box is the specific thing that reads as "everything is left aligned".
+func TestTheCoverTitleIsCentredOnThePage(t *testing.T) {
+	pdf := printBook1Cover(t, false)
+	pages := pageBoxes(t, pdf)
+	if len(pages) == 0 {
+		t.Fatal("no pages")
+	}
+
+	// The title is the widest run of words on the cover's own line. Locate it by the display
+	// size: nothing else on the sheet is set at 34pt, so the tallest word is part of the title.
+	var tallest bboxWord
+	for _, w := range pages[0].Words {
+		if !w.inTextBlock() {
+			continue
+		}
+		if w.YMax-w.YMin > tallest.YMax-tallest.YMin {
+			tallest = w
+		}
+	}
+	if tallest.Text == "" {
+		t.Fatal("no text found on the cover")
+	}
+
+	// Every word on the title's line, so the measurement is of the line and not of one word.
+	lineMin, lineMax := tallest.XMin, tallest.XMax
+	for _, w := range pages[0].Words {
+		if w.YMin != tallest.YMin {
+			continue
+		}
+		lineMin = min(lineMin, w.XMin)
+		lineMax = max(lineMax, w.XMax)
+	}
+
+	centre := (lineMin + lineMax) / 2
+	// 6pt is about 2mm: tighter than any misalignment a reader would notice, looser than the
+	// sub-point drift of a centred line whose trailing space is measured differently.
+	if off := centre - pageWidthPt/2; off > 6 || off < -6 {
+		t.Errorf("the cover title %q is centred at %.1fpt, the page centre is %.1fpt (%.1fmm off)",
+			tallest.Text, centre, pageWidthPt/2, off*25.4/72)
+	}
+}

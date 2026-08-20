@@ -6,7 +6,12 @@
      while .page-break meant break-after and a blank page 2 the moment it meant break-before:
      the empty div took a break before itself and the contents page that follows took another.
      Whatever follows the cover carries its own break. */}}
-<div class="cover">
+{{/* The variant class tells the stylesheet whether a portrait sits above the title. The drop
+     that carries the title down the sheet is a declared distance -- see .cover in tokens.css for
+     why it is not a flex distribution -- and a portrait adds about 75mm above it, so one
+     constant cannot be right for both covers. It was one constant, and the cover with a
+     photograph spilled its facts row onto a second sheet. */}}
+<div class="cover {{ if .Child.Photo }}with-photo{{ else }}no-photo{{ end }}">
   <div class="cover-kicker">MadamGY &middot; Growth, Nutrition &amp; Development</div>
 
   <div class="cover-main">

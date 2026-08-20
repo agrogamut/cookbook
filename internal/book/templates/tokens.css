@@ -401,7 +401,11 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    fragment to resolve it in. The cover no longer touches the bottom margin, which is a much
    smaller loss than a foot block that lands somewhere different on every child's book.
    -------------------------------------------------------------------------------------- */
-.cover { display: block; text-align: center; }
+/* A little under the 255mm text block, deliberately: a box declared at exactly the
+   fragmentainer height is at the boundary Chromium treats as overflowing, which is what
+   fragmented the earlier flex covers. 248mm is inside it with room to spare and still puts the
+   foot block on the bottom margin. */
+.cover { display: block; text-align: center; position: relative; height: 248mm; }
 .cover .cover-kicker {
   font-family: var(--font-sans);
   font-size: var(--caption-size);
@@ -415,17 +419,42 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 /* Centred blocks need their own measure and their own centring: text-align does nothing for
    a block whose width is already the full column, so each of these caps its width and takes
    auto margins. Without the cap a centred paragraph runs the full 170mm and the centring is
-   invisible on the long lines and ragged on the short ones. */
-.cover h1, .cover .cover-sub { margin-left: auto; margin-right: auto; }
-/* The middle of the cover grows to fill whatever the title and portrait do not, so the foot
-   block sits on the bottom margin on every book regardless of name length or photograph. */
-/* The drop that carries the title into the lower half of the sheet. A declared distance, for
-   the reason set out above. */
-.cover .cover-main { margin-top: 105mm; }
+   invisible on the long lines and ragged on the short ones.
+
+   The auto side margins live in the same rule as the vertical ones, and are never set by a
+   separate earlier declaration. They were, and the `margin: 0 0 5mm` shorthand two rules below
+   silently reset them: every cover printed with its title about 15mm left of the page centre
+   and its standfirst about 27mm left, each with its text centred inside a box sitting hard
+   against the left edge of the column. A shorthand that resets a longhand set elsewhere is
+   invisible in review and obvious on paper -- this is what "everything is left aligned" turned
+   out to be, and TestTheCoverTitleIsCentredOnThePage is what keeps it fixed. */
+
+/* The drop that carries the title into the lower half of the sheet, and it is now the only
+   number on this cover that anyone may choose freely -- because the foot block below is pinned
+   rather than pushed.
+
+   The foot used to be pushed, by a 24mm top margin at the end of a block-flow stack, and that
+   made the whole cover a sum that had to come out right. It did not: the band above the title
+   is about 75mm taller when a portrait is present, so the one constant that fitted the cover
+   without a photograph overflowed the one with it by 7mm. The facts row printed alone on page 2
+   above 250mm of white and the contents page moved to page 3.
+
+   Pinning removes the arithmetic. `.cover` is a relative box a little shorter than the text
+   block and `.cover-facts` is absolutely positioned at its foot, so the foot lands on the
+   bottom margin whatever happens above it -- one line of title or three, portrait or none.
+
+   Absolute positioning rather than the flex column the comment above rejects: there is no
+   distribution to resolve, so there is nothing for the fragmenter to re-resolve differently on
+   one book than on the other. That was the whole failure mode of both flex attempts.
+
+   The two drops below are therefore aesthetic. They put the title in the lower half of the
+   sheet on each variant and can be moved without anything else needing to be recomputed. */
+.cover.no-photo .cover-main { margin-top: 96mm; }
+.cover.with-photo .cover-main { margin-top: 26mm; }
 .cover h1 {
   font-size: var(--display);
   line-height: 1.15;
-  margin: 0 0 5mm;
+  margin: 0 auto 5mm;
   color: var(--brand-deep);
   max-width: 140mm;
 }
@@ -433,7 +462,7 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   font-size: var(--lead);
   font-style: italic;
   color: var(--ink-soft);
-  margin: 0;
+  margin: 0 auto;
   max-width: 116mm;
 }
 .cover .cover-name {
@@ -443,13 +472,18 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   margin: 10mm 0 0;
 }
 .cover .cover-name-label { margin-bottom: 1.5mm; }
+/* Pinned to the foot of the cover box, not pushed there by a margin. See the note above the
+   two drops for why. */
 .cover .cover-facts {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 4mm 6mm;
   border-top: 0.5mm solid var(--rule-strong);
   padding-top: 4mm;
-  margin-top: 24mm;
 }
 .cover .cover-facts .label { display: block; margin-bottom: 1mm; }
 .cover .cover-facts > div { text-align: center; }
