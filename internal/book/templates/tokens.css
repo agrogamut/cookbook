@@ -684,7 +684,11 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 .dish-mark svg { width: 22mm; height: 22mm; display: block; }
 .dish-mark-caption {
   font-family: var(--font-sans);
-  font-size: var(--small-size);
+  /* --caption-size, which is the contract's 9.5pt body floor exactly, not --small-size. The
+     caption is prose a reader reads -- it is what makes the drawing checkable against the title
+     -- so it takes the prose floor rather than the table floor. TestTableSizingDoesNotLeakOntoProse
+     caught this set at 8.5pt. */
+  font-size: var(--caption-size);
   color: var(--ink-soft);
   text-align: center;
   margin-top: 1.5mm;
