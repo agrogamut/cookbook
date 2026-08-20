@@ -120,6 +120,18 @@ var gapMeasures = []gapMeasure{
 	// GAP-024 visibly non-zero rather than to shrink toward it, since it only reaches
 	// zero if the provider adds a real revision column.
 	{"GAP-024", `SELECT count(*) FROM recipe_master`},
+
+	// Recipes with no photograph. Zero rows exist in recipe_photo today and none is coming
+	// from a dataset -- see marks.go for why the one external corpus carrying image URLs is
+	// not a source -- so this counts every in-scope recipe.
+	//
+	// Measured rather than seeded, which is the point of migration 0021. The gap was a static
+	// 940 written into the register by migration 0018; now it is a count against a real table,
+	// so the day photographs are commissioned the register shrinks on the next import instead
+	// of needing someone to remember to edit it. A gap that cannot notice being filled is a
+	// gap that stays open on paper after it has closed in fact.
+	{"GAP-025", `SELECT count(*) FROM recipe_master r
+	             WHERE NOT EXISTS (SELECT 1 FROM recipe_photo p WHERE p.recipe_id = r.recipe_id)`},
 }
 
 // measureGaps refreshes the counted gaps inside the import transaction.

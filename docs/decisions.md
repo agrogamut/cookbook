@@ -98,6 +98,20 @@ iteration.
 
 ---
 
+## 2026-08-20 - Book layout and imagery
+
+| Decision | Where |
+|---|---|
+| No external photographs on recipe pages: wrong dish, unstated licence, remote fetch, blocked network | `internal/book/marks.go`, spec 3.2 |
+| Recipe illustration is line art of the provider-recorded dish format, captioned with it | `internal/book/marks.go` |
+| `recipe_photo` exists empty, and GAP-025 is counted against it rather than seeded | migration `0021`, `internal/importer/gaps.go` |
+| The composition band is computed and not printed; one recipe on one page wins | migration `0020`'s own note |
+| Book 1 breaks once per provider part, not once per block; single-block parts run on | `internal/book/book1.go`, `pagepolicy.go` |
+| Printed page fill, near-blank sheets and orphaned openers are budgeted guards | `internal/book/pagefit_test.go` |
+| Table column widths are computed from content; `table-layout: fixed` stays | `internal/book/colwidth.go` |
+| A blank form protects only its last four rows, not every group of four | `internal/book/types.go` |
+| The console embeds the printed PDF; the HTML preview is the no-Chromium fallback | `web/src/components/book-generator.tsx` |
+
 ## Earlier decisions
 
 These predate this file and are recorded in `CLAUDE.md` rather than here. Summarised so

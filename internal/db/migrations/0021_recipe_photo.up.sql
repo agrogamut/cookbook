@@ -26,6 +26,10 @@ COMMENT ON TABLE recipe_photo IS
     'Commissioned recipe photographs. Empty by design; see GAP-025. Every row must carry a '
     'credit, licence and the operator who added it -- never populated by a scrape or a join.';
 
+-- DONE: gapMeasures in internal/importer/gaps.go now carries GAP-025 and the register row below
+-- is flipped to measured_by = 'importer'. The note that follows records why, and is kept because
+-- it is the reasoning, not a task.
+--
 -- GAP-025 was seeded in migration 0018 as measured_by = 'seed' with affected_rows = 940, which
 -- is still exactly correct the moment this table is created: 940 recipes, 0 photographs, so no
 -- UPDATE is needed to keep the number honest today.
@@ -48,3 +52,8 @@ COMMENT ON TABLE recipe_photo IS
 -- a live count(*) rather than trusting the seeded number, so the moment a photograph is added
 -- without the gaps.go wiring, that test fails and names the drift instead of the number quietly
 -- going stale.
+
+-- Flip GAP-025 from a number someone wrote down to a number the importer counts. measureGaps
+-- rewrites affected_rows and measured_at on every run, so the register now tracks recipe_photo
+-- rather than restating a figure from 2026-08-20.
+UPDATE gap_register SET measured_by = 'importer' WHERE gap_id = 'GAP-025';

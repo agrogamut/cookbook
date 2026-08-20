@@ -973,6 +973,11 @@ internal/db/migrations/
                                 (354 of 940 recipes reach no Book 2 chapter)
   0017_recipe_version_gap       GAP-024, the recipe_version the Book 2 card schema requires
                                 and recipe_master does not carry
+  0019_recipe_format_mark       28 dish formats -> 11 drawn marks, covering all 940 recipes
+  0020_recipe_composition_share ingredient mass by food group. Computed, correct, and not
+                                printed: see the migration's own note
+  0021_recipe_photo             commissioned recipe photographs, empty by design. GAP-025 stops
+                                being a seeded 940 and becomes a count against this table
   0018_book1_block_sources      book1_block_source: which provider rows fill each Book 1
                                 block, 37 hand-written rows. GAP-025 (no recipe imagery),
                                 GAP-026 (no red-flag/doctor-approach text on 27 blocks),
@@ -1011,6 +1016,11 @@ internal/book/tracker.go        declared columns -> blank forms, and the has-con
 internal/book/set.go            one run -> both books, one asOf, omissions partitioned
 internal/book/set_test.go       both books produced, one instant, blocked whole, omission split
 internal/book/templates/        base + tokens.css, 14 Book 1 and 7 Book 2 block templates
+internal/book/marks/            11 line-art dish-format marks, embedded, validated inert
+internal/book/marks.go          mark lookup, and the refusal of external food photographs
+internal/book/colwidth.go       table column widths computed from what the column holds
+internal/book/pagepolicy.go     the four Book 1 blocks that take a sheet whatever part they are in
+internal/book/pagefit_test.go   printed-page guards: fill, near-blank sheets, orphaned openers
 internal/book/assemble_test.go  block and meal-category conservation, allergy status on paper
 internal/book/render_test.go    template dispatch, writing lines, typography floors
 internal/book/pdf_test.go       real print, skipped when no browser is installed
@@ -1173,6 +1183,117 @@ list, not another join.
 for** (`GAP-026`). Where a mapped source row supplies `concern_or_red_flag` or
 `approach_doctor_or_specialist`, it prints verbatim. Where none does, the page prints the
 heading and a writing line. This is the item to chase the provider on.
+
+### Page fitting is measured, not argued about
+
+`rendered + reported == total` held perfectly while Book 1 printed nearly empty, which is how the
+book shipped at seven-plus-twenty-five with a green suite. Conservation accounting cannot see a
+sheet with four lines on it: the four lines are rendered, nothing is missing, every count agrees.
+
+`internal/book/pagefit_test.go` reads the printed PDF through `pdftotext -bbox` and holds both
+books to three things:
+
+| Guard | State |
+|---|---|
+| Pages ending above 62% of the text block | budget, **21** of 61, lowered by every change that improves it |
+| Pages holding almost nothing (under 15%) | **none**, and there is no budget for this |
+| Pages opening on an orphaned warning or a bare column header | **none** |
+
+It needs poppler and a Chromium and skips without either. A skipped guard is not a passing guard.
+Set `BOOK_PAGE_DUMP=<dir>` to get both printed PDFs written out, because looking at the sheets is
+not optional for layout work: every defect these guards exist for was found by printing a book
+and reading it, never by a count.
+
+**Book 1 breaks once per provider part, not once per block.** It broke before every one of its
+thirty-one blocks, so a block holding three writing lines took a whole sheet. `book1_content_block.part`
+groups them into fifteen parts and the pairs mean something - profile with consultation summary,
+growth with its trend page, the two vaccination pages. A part that contributed only one rendered
+block groups nothing and does not break: Book 1 ends with five consecutive single-block parts, and
+breaking on each put a five-row reaction grid alone on a sheet. `internal/book/pagepolicy.go`
+names the four full-page forms that take a sheet regardless, and that is layout policy, so it is
+code rather than a table - putting it in the database would dress this project's printing decision
+as the provider's.
+
+**Table columns are sized from what they hold** (`colwidth.go`). `table-layout: fixed` is not
+negotiable - without it one over-wide table silently scales the whole document, which is how a
+book printed at 79% with 10.5pt body text landing at 8.3pt - and what it costs is that every
+column is equal unless something says otherwise. An equal column narrower than its longest word
+breaks that word: `HEAD CIRCUMFER/ENCE`, `Language/cognitiv/e`, `IAP-STG-CONSTIPATIO/N` were all
+read off printed sheets, and a broken identifier is a wrong identifier. Slashes and hyphens are
+not break opportunities here for exactly that reason. It also bought four sheets, because a
+column wide enough for its longest word is a column whose rows are two lines rather than four,
+and a row is unbreakable.
+
+**A blank form protects only its last four rows.** Grouping every row into fours was tried first
+and measured worse - a group that will not fit moves whole, so every grid gained up to 26mm of
+waste. Only the tail was ever the problem: a break inside the body of a form leaves a usable
+continuation with its header repeated, while a break four rows from the end leaves a stub on a
+sheet nobody wanted to print.
+
+### Book 2 has pictures, and they are drawings
+
+The recipe page carries line art of the dish **format**, captioned with that format. Twenty-eight
+provider formats cover all 940 in-scope recipes, they collapse to eleven drawn archetypes
+(`recipe_format_mark`, migration `0019`), and the artwork is eleven embedded SVGs in
+`internal/book/marks/`.
+
+**Photographs are still refused, and the refusal is now on the record rather than an omission.**
+`data/external/indian_food_dataset.csv` does carry an `image-url` column across the 3,970 rows
+loaded here. It is unusable four ways, any one of which is enough:
+
+1. The image is of a **different dish**. The format map licenses an external row to supply
+   *method text for the same format* - a khichdi method for a khichdi. A photograph is the
+   stronger claim that this is what your dish looks like, in the one medium a reader cannot
+   check. It is the wrong-match failure already measured at four calibration thresholds.
+2. The corpus's upstream licence is **unstated**, already an open blocker, and its images are
+   third-party photographs from recipe sites.
+3. Printing would mean this service **fetching arbitrary remote files** into a document handed to
+   a family - the question `CLAUDE.md` already declines for bulk cover photographs.
+4. The print browser **blocks all network by design** (`--host-resolver-rules=MAP * ~NOTFOUND`).
+   Unblocking it for pictures would undo a security fix.
+
+`GAP-025` is unchanged in substance and changed in kind: `recipe_photo` (migration `0021`) is the
+empty table a commissioned photograph lands in, and the gap is now counted against it by the
+importer rather than restated as a seeded 940. A gap that cannot notice being filled stays open
+on paper after it has closed in fact.
+
+The marks are validated as inert markup rather than trusted: no script, no external reference, no
+raster payload, `currentColor` only, `<title>` but no `<text>`. The print tab already disables
+script and blocks network, so that is defence in depth - but these are the first assets here
+authored as markup, and one that would be dangerous if either control were relaxed should not be
+checked in.
+
+**The composition band is computed and not printed.** `recipe_composition_share` (migration
+`0020`) is what a dish is made of by ingredient mass. The band was drawn, measured and removed: a
+recipe page already ends at about 86% of the text block, and a bar plus a seven-group key added
+roughly 20mm however it was placed, pushing eleven of twelve trackers onto sheets carrying nothing
+else. One recipe on one page is the oldest rule in cookbook layout. The view stays, because the
+place for a derived value with its formula and its basis is the operator console, which is a
+screen and has room.
+
+### The console shows the printed PDF
+
+The console embeds the real printed PDF, not the HTML. Printing costs one warm-browser render and
+it is the only way what an operator approves is what a family receives; it also means "Open in a
+new tab" reuses the blob rather than printing again. When Chromium is unavailable the HTML preview
+is shown instead, with a line saying it is an approximation - a 503 is a fallback, not an error,
+because the preview genuinely works.
+
+**The HTML preview finally has screen styling.** `tokens.css` carried exactly one screen rule, so
+the preview laid a 170mm design out at the iframe's own width - about 1700 CSS pixels. Every grid
+spread, every table stretched, prose capped at the measure sat in a column four times too wide,
+and no page boundary was visible. Most of what gets reported as misalignment was this rather than
+the printed sheet. It is still an approximation and says so: without JavaScript a browser cannot
+paginate, so the boundaries drawn are the breaks the document declares, not the breaks Chromium
+resolves at print time.
+
+**The cover is one sheet on both books.** Its foot block is absolutely positioned at the bottom of
+a 248mm box rather than pushed there by a margin, so there is no distribution for the fragmenter
+to resolve differently between the two books - the failure mode of both earlier flex attempts, and
+of the block-flow version, whose single 105mm drop fitted the cover without a portrait and
+overflowed the one with it by 7mm. The auto side margins now live in the same rule as the vertical
+ones: they were set separately and a `margin` shorthand two rules later silently reset them, which
+printed every cover title about 15mm left of centre.
 
 **Both books carry a contents page**, built from the sections that actually rendered and never
 from the block or meal-category master - both books omit units routinely, and a contents entry
