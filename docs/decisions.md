@@ -106,7 +106,8 @@ iteration.
 | Recipe illustration is line art of the provider-recorded dish format, captioned with it | `internal/book/marks.go` |
 | `recipe_photo` exists empty, and GAP-025 is counted against it rather than seeded | migration `0021`, `internal/importer/gaps.go` |
 | The composition band is computed and not printed; one recipe on one page wins | migration `0020`'s own note |
-| Book 1 breaks once per provider part, not once per block; single-block parts run on | `internal/book/book1.go`, `pagepolicy.go` |
+| Book 1's sections flow; only the first and the four full-page forms break | `internal/book/book1.go`, `pagepolicy.go` |
+| Page fill is measured as ink, not text: a writing line is a stroke with no characters | `internal/book/pagefit_test.go` |
 | Printed page fill, near-blank sheets and orphaned openers are budgeted guards | `internal/book/pagefit_test.go` |
 | Table column widths are computed from content; `table-layout: fixed` stays | `internal/book/colwidth.go` |
 | A blank form protects only its last four rows, not every group of four | `internal/book/types.go` |

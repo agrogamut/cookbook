@@ -1195,24 +1195,40 @@ books to three things:
 
 | Guard | State |
 |---|---|
-| Pages ending above 62% of the text block | budget, **21** of 61, lowered by every change that improves it |
+| Pages ending above 62% of the text block | budget, **8** of 60, lowered by every change that improves it |
 | Pages holding almost nothing (under 15%) | **none**, and there is no budget for this |
 | Pages opening on an orphaned warning or a bare column header | **none** |
+
+**It measures ink, not text, and that correction changed the answer.** These books are largely
+blank forms, and a writing line is a ruled stroke carrying no characters - so `pdftotext` reported
+a sheet holding a six-row grid as ending at the grid's column header, the last thing on it that
+happened to be words. Measured that way a page three-quarters full of ruled lines looked like a
+page ending at 35%, and the pages the guard named as its worst offenders turned out on inspection
+to be full. The page is now rasterised and scanned for its lowest non-white pixel, which sees
+rules, borders, bands and writing lines the way a reader does. The budget went from a reported 21
+to a real 8 on the same document.
 
 It needs poppler and a Chromium and skips without either. A skipped guard is not a passing guard.
 Set `BOOK_PAGE_DUMP=<dir>` to get both printed PDFs written out, because looking at the sheets is
 not optional for layout work: every defect these guards exist for was found by printing a book
 and reading it, never by a count.
 
-**Book 1 breaks once per provider part, not once per block.** It broke before every one of its
-thirty-one blocks, so a block holding three writing lines took a whole sheet. `book1_content_block.part`
-groups them into fifteen parts and the pairs mean something - profile with consultation summary,
-growth with its trend page, the two vaccination pages. A part that contributed only one rendered
-block groups nothing and does not break: Book 1 ends with five consecutive single-block parts, and
-breaking on each put a five-row reaction grid alone on a sheet. `internal/book/pagepolicy.go`
-names the four full-page forms that take a sheet regardless, and that is layout policy, so it is
-code rather than a table - putting it in the database would dress this project's printing decision
-as the provider's.
+**Book 1's sections flow.** A break is emitted before the first section and before the four
+full-page forms `internal/book/pagepolicy.go` names, and nowhere else. Three policies were printed
+and measured against the same child:
+
+| Break policy | Pages ending above 62% |
+|---|---|
+| before every block | 18 of 47 - a three-line block took a whole sheet |
+| once per provider part | 10 of 61 |
+| flow, breaking only for full-page forms | **8 of 60** |
+
+So `book1_content_block.part` went the same way the per-block break did. The parts are a real
+grouping - profile with consultation summary, growth with its trend page - and reading the printed
+book showed the grouping survives without a page break enforcing it, because the parts are already
+adjacent in `book_order` and every section carries its own heading and rule. What the break added
+was white paper. The four full-page forms stay in code rather than in a table: putting this
+project's printing decision in the database would dress it as the provider's.
 
 **Table columns are sized from what they hold** (`colwidth.go`). `table-layout: fixed` is not
 negotiable - without it one over-wide table silently scales the whole document, which is how a

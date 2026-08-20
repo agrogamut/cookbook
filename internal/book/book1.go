@@ -401,42 +401,34 @@ func milestoneWidthCells(rows []Row) [][]string {
 	return out
 }
 
-// markSheetStarts decides where Book 1 breaks: once per provider part, plus the blocks
-// pagepolicy.go names.
+// markSheetStarts decides where Book 1 breaks.
 //
-// Run over the final slice rather than inside the loop above, because the loop appends only the
-// blocks that survived omission. A part whose first block resolved to no content for this child
-// must still start a sheet at whichever of its blocks did render, and the loop does not know
-// that until it has finished.
+// Sections flow. A break is emitted only before the first one and before the four full-page
+// forms pagepolicy.go names; everything else runs on down the sheet and the next section starts
+// wherever the last one ended.
+//
+// Three policies were printed and measured against the same child, counting pages whose lowest
+// ink sits above 62% of the text block:
+//
+//	break before every block                   18 of 47 -- a three-line block took a whole sheet
+//	break once per provider part               10 of 61
+//	flow, breaking only for full-page forms      8 of 60
+//
+// So the provider's parts went the same way the per-block break did. They are a real grouping --
+// profile with consultation summary, growth with its trend page -- and reading the printed book
+// showed the grouping survives without a page break enforcing it, because the parts are already
+// adjacent in book_order and each section carries its own heading and rule. What the break added
+// was white paper.
+//
+// Run over the final slice rather than inside the assembly loop, because the loop appends only
+// the blocks that survived omission and the first rendered section is not knowable until it has
+// finished.
 func markSheetStarts(sections []Section) {
-	// How many blocks each part actually contributed to this child's book. A part exists to
-	// group blocks; a part that contributed one groups nothing, and breaking before it marks a
-	// boundary the reader cannot see. Book 1 ends with five consecutive single-block parts
-	// (K to O), so breaking on every part change gave each of them a sheet and put the safety
-	// page's reaction grid alone on one with 93% of it blank.
-	rendered := map[string]int{}
-	for _, s := range sections {
-		rendered[s.Part]++
-	}
-
-	seenPart := map[string]bool{}
 	for i := range sections {
 		s := &sections[i]
-		first := !seenPart[s.Part]
-		seenPart[s.Part] = true
-
-		switch {
-		case i == 0:
-			// The first rendered section always starts a sheet: the contents page precedes it,
-			// and a conditional version left Child Profile sharing a page with a short contents.
-			s.StartsPart = true
-		case MustStartASheet(s.BlockID):
-			s.StartsPart = true
-		case first && rendered[s.Part] > 1:
-			s.StartsPart = true
-		default:
-			s.StartsPart = false
-		}
+		// The first rendered section always starts a sheet: the contents page precedes it, and
+		// letting it run on put Child Profile under a short contents list.
+		s.StartsPart = i == 0 || MustStartASheet(s.BlockID)
 	}
 }
 

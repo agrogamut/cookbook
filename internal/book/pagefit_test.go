@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -51,16 +53,15 @@ const underfillThreshold = 0.62
 // the legitimate cases -- covers, chapter openers, the imprint, a contents tail -- from needing
 // to be enumerated and argued about one at a time.
 //
-// History, so a later reader can see whether a change helped:
+// History, so a later reader can see whether a change helped. Every number below the rule is on
+// the ink measurement; the ones above it were taken on the text measurement this file used at
+// first, and are not comparable -- see pageFills for why they were wrong.
 //
-//	21  both books, before any of this work
-//	24  after breaking on parts, protecting form tails, and binding warnings to their subject
-//	    -- the last two cost fill and bought the two defects a count cannot see: a sheet
-//	    holding three writing lines, and four sheets opening on a warning about nothing
-//	21  after sizing table columns from their content: Book 1 loses four sheets outright,
-//	    because a column wide enough for its longest word is also a column whose rows are two
-//	    lines rather than four, and a row is unbreakable
-const maxUnderfilledPages = 21
+//	22  both books, before any of this work, measured by last text baseline
+//	----
+//	10  break once per provider part, measured by lowest ink
+//	 8  sections flow, breaking only for the first and the four full-page forms
+const maxUnderfilledPages = 8
 
 // maxPagesOpeningOnAnOrphan is the same kind of budget for the other half of the problem: a
 // sheet whose first line is a warning belonging to the previous page's topic, or a bare column
@@ -116,29 +117,88 @@ func pageBoxes(t *testing.T, pdf []byte) []bboxPage {
 	return doc.Pages
 }
 
-// pageFills returns, for each page, the last text baseline as a fraction of the text block.
-// A page with no text in the block yields 0.
+// pageFills returns, for each page, the lowest ink on the sheet as a fraction of the text block.
+// A page with nothing in the block yields 0.
+//
+// Ink, not text, and the difference is the whole reason this function exists in this form. These
+// books are largely blank forms, and a writing line is a ruled stroke with no characters in it --
+// so pdftotext reports a page carrying a six-row grid as ending at the grid's column header,
+// which is the last thing on it that happens to be words. Measured that way, a page three
+// quarters full of ruled lines looked like a page ending at 35%, and the pages this guard named
+// as its worst offenders turned out on inspection to be full.
+//
+// So the page is rasterised and scanned for the lowest non-white pixel. That sees rules, table
+// borders, callout bands and writing lines exactly as a reader does. It costs a pdftoppm run per
+// book, which is the same poppler package pdftotext comes from.
 func pageFills(t *testing.T, pdf []byte) []float64 {
 	t.Helper()
-	pages := pageBoxes(t, pdf)
-	fills := make([]float64, 0, len(pages))
-	for _, p := range pages {
-		last := 0.0
-		for _, w := range p.Words {
-			if !w.inTextBlock() {
-				continue
-			}
-			if w.YMax > last {
-				last = w.YMax
-			}
-		}
-		if last == 0 {
-			fills = append(fills, 0)
-			continue
-		}
-		fills = append(fills, (last-textBlockTopPt)/(textBlockBottomPt-textBlockTopPt))
+	if _, err := exec.LookPath("pdftoppm"); err != nil {
+		t.Skip("pdftoppm (poppler) is not installed; the printed-page guards cannot run")
+	}
+
+	dir := t.TempDir()
+	src := filepath.Join(dir, "measure.pdf")
+	if err := os.WriteFile(src, pdf, 0o600); err != nil {
+		t.Fatalf("write pdf: %v", err)
+	}
+	// 72 dpi puts one pixel on one PostScript point, so the page geometry constants above are
+	// pixel offsets without conversion. Finer resolution measures nothing more: the question is
+	// which millimetre the last mark sits on.
+	if err := exec.Command("pdftoppm", "-r", "72", "-gray", "-png",
+		src, filepath.Join(dir, "pg")).Run(); err != nil {
+		t.Fatalf("pdftoppm: %v", err)
+	}
+
+	names, err := filepath.Glob(filepath.Join(dir, "pg-*.png"))
+	if err != nil || len(names) == 0 {
+		t.Fatalf("no rasterised pages: %v", err)
+	}
+	sort.Strings(names)
+
+	fills := make([]float64, 0, len(names))
+	for _, name := range names {
+		fills = append(fills, inkFill(t, name))
 	}
 	return fills
+}
+
+// inkFill is the lowest inked row of one rasterised page, as a fraction of the text block.
+func inkFill(t *testing.T, name string) float64 {
+	t.Helper()
+	f, err := os.Open(name)
+	if err != nil {
+		t.Fatalf("open page: %v", err)
+	}
+	defer f.Close()
+	img, err := png.Decode(f)
+	if err != nil {
+		t.Fatalf("decode page: %v", err)
+	}
+
+	b := img.Bounds()
+	var topF, bottomF float64 = textBlockTopPt, textBlockBottomPt
+	top, bottom := int(topF), int(bottomF)
+	last := 0
+	for y := min(bottom, b.Max.Y-1); y >= max(top, b.Min.Y); y-- {
+		inked := false
+		for x := b.Min.X; x < b.Max.X; x++ {
+			// Anything meaningfully darker than paper. The threshold is generous because a
+			// hairline rule antialiases to a mid grey at this resolution and is still a mark on
+			// the page.
+			if r, _, _, _ := img.At(x, y).RGBA(); r < 0xE000 {
+				inked = true
+				break
+			}
+		}
+		if inked {
+			last = y
+			break
+		}
+	}
+	if last == 0 {
+		return 0
+	}
+	return (float64(last) - textBlockTopPt) / (textBlockBottomPt - textBlockTopPt)
 }
 
 // printedSet is both books of one run, printed once and shared by every guard in this file.

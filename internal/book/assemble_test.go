@@ -601,20 +601,20 @@ func TestTheTwoMilestoneBlocksDoNotPrintTheSamePage(t *testing.T) {
 	}
 }
 
-// TestBook1BreaksOnPartNotOnBlock.
+// TestBook1SectionsFlowRatherThanTakingASheetEach.
 //
-// Book 1 broke before every block, all thirty-one of them, so a block holding three writing
-// lines took a sheet of its own and eighteen of forty-seven pages ended above 62% of the text
-// block. The workbook groups its blocks into fifteen parts; breaking there is the provider's
-// own structure rather than a rule invented here.
-func TestBook1BreaksOnPartNotOnBlock(t *testing.T) {
+// Book 1 broke before every one of its thirty-one blocks, so a block holding three writing lines
+// took a whole sheet. Breaking once per provider part was tried next and measured better; letting
+// the sections flow and breaking only for the four full-page forms measured better again. The
+// three counts are in markSheetStarts.
+func TestBook1SectionsFlowRatherThanTakingASheetEach(t *testing.T) {
 	pool := testPool(t)
 	b, _, err := AssembleBook1(context.Background(), pool, storedProfileAged(53), time.Now())
 	if err != nil {
 		t.Fatalf("AssembleBook1: %v", err)
 	}
-	if len(b.Sections) == 0 {
-		t.Fatal("no sections rendered")
+	if len(b.Sections) < 10 {
+		t.Fatalf("only %d sections rendered; this guard would prove little", len(b.Sections))
 	}
 
 	starts := 0
@@ -623,35 +623,25 @@ func TestBook1BreaksOnPartNotOnBlock(t *testing.T) {
 			starts++
 		}
 	}
-	if starts >= len(b.Sections) {
-		t.Fatalf("%d of %d sections start a sheet: that is one per block again",
-			starts, len(b.Sections))
-	}
-
-	// Every part that rendered starts exactly one sheet, ignoring the blocks pagepolicy.go
-	// names -- those deliberately start a second sheet inside their part.
-	starters := map[string]int{}
-	for _, s := range b.Sections {
-		if s.StartsPart && !MustStartASheet(s.BlockID) {
-			starters[s.Part]++
+	// One for the first section, plus one per full-page form, and nothing else.
+	want := 1
+	for _, s := range b.Sections[1:] {
+		if MustStartASheet(s.BlockID) {
+			want++
 		}
 	}
-	for part, n := range starters {
-		if n != 1 {
-			t.Errorf("part %q starts %d sheets, want 1", part, n)
-		}
+	if starts != want {
+		t.Errorf("%d of %d sections start a sheet, want %d (the first, plus the full-page forms)",
+			starts, len(b.Sections), want)
 	}
-
-	// And the first rendered section always starts one, whatever part it belongs to: the
-	// contents page precedes it.
 	if !b.Sections[0].StartsPart {
-		t.Error("the first section must start a sheet")
+		t.Error("the first section must start a sheet; the contents page precedes it")
 	}
 }
 
-// TestFullPageFormsStillStartASheet holds the four exceptions in pagepolicy.go. Each is a form
-// a parent fills in over weeks, where a break landing mid-form costs the column headings on one
-// of the two halves.
+// TestFullPageFormsStillStartASheet holds the four exceptions in pagepolicy.go. Each is a form a
+// parent fills in over weeks, where a break landing mid-form costs the column headings on one of
+// the two halves.
 func TestFullPageFormsStillStartASheet(t *testing.T) {
 	pool := testPool(t)
 	b, _, err := AssembleBook1(context.Background(), pool, storedProfileAged(53), time.Now())
@@ -673,20 +663,20 @@ func TestFullPageFormsStillStartASheet(t *testing.T) {
 	}
 }
 
-// markSheetStarts runs over the post-omission slice, so a part whose first block was dropped
-// still starts a sheet at whichever of its blocks did render. A unit test rather than a printed
-// one, because the case needs a part with a hole in it that no real child reliably produces.
-func TestAPartWhoseFirstBlockWasOmittedStillStartsASheet(t *testing.T) {
+// A section that is neither the first nor a full-page form never forces a break, whatever part it
+// sits in. A unit test, because it is a statement about the rule rather than about one child.
+func TestOnlyTheFirstSectionAndFullPageFormsBreak(t *testing.T) {
 	sections := []Section{
-		{BlockID: "B1-002", Part: "A"}, // A's first block was omitted
+		{BlockID: "B1-002", Part: "A"},
 		{BlockID: "B1-003", Part: "B"},
-		{BlockID: "B1-004", Part: "B"},
+		{BlockID: "B1-019", Part: "L"}, // a declared full-page form
+		{BlockID: "B1-021", Part: "N"},
 	}
 	markSheetStarts(sections)
-	for i, want := range []bool{true, true, false} {
+	for i, want := range []bool{true, false, true, false} {
 		if sections[i].StartsPart != want {
-			t.Errorf("section %d (%s, part %s): StartsPart = %v, want %v",
-				i, sections[i].BlockID, sections[i].Part, sections[i].StartsPart, want)
+			t.Errorf("section %d (%s): StartsPart = %v, want %v",
+				i, sections[i].BlockID, sections[i].StartsPart, want)
 		}
 	}
 }
