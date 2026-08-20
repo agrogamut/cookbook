@@ -378,7 +378,48 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		return Book1{}, nil, fmt.Errorf("book: block rows: %w", err)
 	}
 
+	markSheetStarts(b.Sections)
+
 	return b, skipped, nil
+}
+
+// markSheetStarts decides where Book 1 breaks: once per provider part, plus the blocks
+// pagepolicy.go names.
+//
+// Run over the final slice rather than inside the loop above, because the loop appends only the
+// blocks that survived omission. A part whose first block resolved to no content for this child
+// must still start a sheet at whichever of its blocks did render, and the loop does not know
+// that until it has finished.
+func markSheetStarts(sections []Section) {
+	// How many blocks each part actually contributed to this child's book. A part exists to
+	// group blocks; a part that contributed one groups nothing, and breaking before it marks a
+	// boundary the reader cannot see. Book 1 ends with five consecutive single-block parts
+	// (K to O), so breaking on every part change gave each of them a sheet and put the safety
+	// page's reaction grid alone on one with 93% of it blank.
+	rendered := map[string]int{}
+	for _, s := range sections {
+		rendered[s.Part]++
+	}
+
+	seenPart := map[string]bool{}
+	for i := range sections {
+		s := &sections[i]
+		first := !seenPart[s.Part]
+		seenPart[s.Part] = true
+
+		switch {
+		case i == 0:
+			// The first rendered section always starts a sheet: the contents page precedes it,
+			// and a conditional version left Child Profile sharing a page with a short contents.
+			s.StartsPart = true
+		case MustStartASheet(s.BlockID):
+			s.StartsPart = true
+		case first && rendered[s.Part] > 1:
+			s.StartsPart = true
+		default:
+			s.StartsPart = false
+		}
+	}
 }
 
 // loadVaccineSchedule reads all 44 rows of the IAP-ACVIP 2025 schedule. Unfiltered: age is

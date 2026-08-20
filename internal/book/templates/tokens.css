@@ -155,6 +155,15 @@ h1, h2, h3, h4 { font-family: var(--font-serif); font-weight: 600; }
    under a centred label is a line nobody knows where to start. What centres is the furniture
    that announces a page; what stays left is everything a reader works through. */
 .page-head { margin: 0 0 8mm; break-after: avoid; text-align: center; }
+/* A section's opening unit -- head, purpose, covers -- moves whole and must be followed by
+   content. Book 1 now runs several sections onto one sheet, so a heading can land at the foot
+   of a page with the table it introduces overleaf, which page-head's own break-after cannot
+   prevent once a purpose line and a covers list sit between them. Only these three: the tables
+   and forms below run taller than a page and stay breakable. */
+.section-open { break-inside: avoid; break-after: avoid; }
+/* A section that follows another on the same sheet needs air above it, which a section that
+   opens a sheet does not. */
+section + section { margin-top: 10mm; }
 .page-head .kicker {
   font-family: var(--font-sans);
   font-size: var(--caption-size);
@@ -238,6 +247,11 @@ table {
    seven labels and the repeated header overleaf. */
 thead { display: table-header-group; break-after: avoid; break-inside: avoid; }
 tr { break-inside: avoid; }
+/* A group of blank writing rows moves whole. Chromium ignores CSS orphans and widows on table
+   rows, so a form otherwise splits anywhere: the food-diversity grid put three lines and a
+   repeated column header alone on a sheet with 92% of it blank. See rowGroupSizes in types.go
+   for why the group is four. */
+tbody.rowgroup { break-inside: avoid; }
 th {
   text-align: left;
   overflow-wrap: break-word;
@@ -835,6 +849,22 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 }
 .domain-referral { font-size: var(--caption-size); margin: 3mm 0 0; max-width: var(--measure); }
 .domain > table:first-of-type, .illness > table { break-inside: avoid; }
+/* A domain's red flag and referral line stay on the page with the reference table above them.
+
+   A break falling between the two opened four of Book 1's sheets with "Warning: when to seek
+   advice" and nothing saying what it was a warning about -- the domain it belongs to was named
+   on the previous page. A clinical warning detached from its subject is the one thing on these
+   pages worth spending white paper on, and it does cost some: pushing those four warnings takes
+   Book 1 from twenty underfilled pages to twenty-four.
+
+   break-before: avoid rather than an unbreakable table-plus-warning unit. Both were measured and
+   they are identical on orphans and on fill, so the narrower mechanism wins: this one leaves the
+   reference table free to split, where the atomic unit would have made 76mm move whole. It also
+   works, which is worth recording -- break-before: avoid is widely described as unreliable in
+   Chromium and here it removed all four. */
+.domain-guidance > .callout,
+.domain-guidance > .domain-referral,
+.domain-guidance > .domain-limit { break-before: avoid; }
 
 /* A tracker's head moves whole; its grid does not.
 
@@ -849,6 +879,19 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    do. A parent who fills three rows on one page and four on the next has a usable form; a
    parent reading a grid whose threshold is on the previous page does not. */
 .tracker { margin: 0 0 8mm; }
+/* A blank grid moves whole; a prefilled one splits.
+
+   Both extremes were printed and measured. Letting a blank grid split put its protected tail on
+   a sheet of its own twice over: the head and one row printed at the foot of a page, the four
+   remaining rows overleaf with nothing else on the paper. A blank grid is short enough that
+   keeping it whole is a promise the fragmenter can keep -- the head is about 45mm and no
+   frequency in book1_monitoring_template yields more than five rows at 6.5mm, so the tallest is
+   under 80mm.
+
+   A prefilled grid is not: the two dashboards are one row per monitoring parameter, eighteen of
+   them, taller than a page by construction. Those carry .tall and split, repeating their header,
+   which is what a long form should do. */
+.tracker:not(.tall) { break-inside: avoid; }
 .tracker-head { break-inside: avoid; break-after: avoid; }
 /* The two dashboards print one row per provider row -- eighteen monitoring areas -- and the
    row already carries its label, so it does not need the 6.5mm writing height a blank row

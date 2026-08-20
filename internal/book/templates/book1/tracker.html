@@ -48,11 +48,14 @@
   </div>
   <table>
     <thead><tr>{{ range .Columns }}<th>{{ . }}</th>{{ end }}</tr></thead>
-    <tbody>
       {{ $cols := .Columns }}
       {{ if .Prefilled }}
         {{/* Rows whose leading cells the provider supplies. The remaining columns are the
-             parent's to fill, so they get writing lines -- a labelled blank, not a blank. */}}
+             parent's to fill, so they get writing lines -- a labelled blank, not a blank.
+
+             One tbody, free to split: every row carries its own label, so a break leaves both
+             halves readable and grouping would only add places it cannot break. */}}
+        <tbody>
         {{ range $row := .Prefilled }}
           <tr>
             {{ range $c, $_ := $cols }}
@@ -61,12 +64,28 @@
             {{ end }}
           </tr>
         {{ end }}
+        </tbody>
       {{ else }}
-        {{ range $i, $_ := rows .Rows }}
+        {{/* Blank writing rows in two bodies: the leading rows break anywhere, the last four
+             move together. Chromium ignores CSS orphans and widows on table rows, so without
+             this a form splits four rows from its end and leaves a stub on a sheet of its own --
+             which is what Book 1 page 42 was. Grouping every row instead was measured worse:
+             see TrackerSpec.FlowRows for the numbers. */}}
+        {{ with .FlowRows }}
+        <tbody>
+          {{ range . }}
           <tr>{{ range $cols }}<td><span class="write-line"></span></td>{{ end }}</tr>
+          {{ end }}
+        </tbody>
+        {{ end }}
+        {{ with .TailRows }}
+        <tbody class="rowgroup">
+          {{ range . }}
+          <tr>{{ range $cols }}<td><span class="write-line"></span></td>{{ end }}</tr>
+          {{ end }}
+        </tbody>
         {{ end }}
       {{ end }}
-    </tbody>
   </table>
   {{/* The alarm is a line of text, never a column. A parent comparing a filled row against a
        threshold needs to read the threshold; an empty box headed "Chest pain/syncope" is a

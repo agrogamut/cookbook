@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" role="img">
+<title>Stack of pancakes on a plate</title>
+<ellipse cx="32" cy="48" rx="22" ry="6"/>
+<ellipse cx="32" cy="38" rx="16" ry="5"/>
+<path d="M16 38 L16 42 C16 45 48 45 48 42 L48 38"/>
+<ellipse cx="32" cy="28" rx="14" ry="4.5"/>
+<path d="M18 28 L18 32 C18 35 46 35 46 32 L46 28"/>
+</svg>

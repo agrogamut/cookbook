@@ -9,10 +9,25 @@
        honours it as a physical page -- so the book ended on an empty sheet, every time.
        Moving the break to the front of each section says the same thing about every
        boundary between two sections and says nothing at all after the final one. */}}
-  {{/* Every section, including the first: the contents page always precedes it, and the
-       conditional version left Child Profile sharing a page with the contents whenever the
-       contents happened to be short. */}}
-  <section class="page-break">
+  {{/* One sheet per provider part, not one per block.
+
+       It was one per block, all thirty-one of them, and a block holding three writing lines
+       took a whole sheet: eighteen of Book 1's forty-seven pages ended above 62% of the text
+       block and one ended at 2%. The workbook already groups its blocks into fifteen parts and
+       the pairs are meaningful -- the profile with the consultation summary, growth with its
+       trend page, the two vaccination pages -- so breaking there uses the provider's own
+       structure rather than a rule this project invented.
+
+       StartsPart is set by markSheetStarts in book1.go, after omission, because only the final
+       slice knows which of a part's blocks actually rendered. pagepolicy.go names the four
+       full-page forms that still take a sheet of their own. */}}
+  <section{{ if .StartsPart }} class="page-break"{{ end }}>
+    {{/* The head, the purpose and the covers list move as one unit and must be followed by
+         content. A section that runs on inside a part can otherwise land its heading at the
+         foot of a sheet with the table it introduces overleaf. The three together are short
+         enough that keeping them whole is a promise the fragmenter can keep -- unlike the
+         tables and forms below, which run taller than a page and stay breakable. */}}
+    <div class="section-open">
     {{/* The provider's own two levels, the right way round: section is the group and goes
          in the kicker, subsection is this page and is the heading. The first version made
          section the heading, so four pairs of consecutive pages carried identical titles --
@@ -35,6 +50,7 @@
       <p class="block-covers"><strong>This page covers:</strong>
         {{ range $j, $c := . }}{{ if $j }}; {{ end }}{{ $c }}{{ end }}</p>
     {{ end }}
+    </div>
 
     {{/* Dispatch on the provider's own template id. An unknown id renders nothing rather
          than falling back to a generic table: a fallback would silently give clinical

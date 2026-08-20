@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" role="img">
+<title>Rolled wrap cut on the diagonal</title>
+<path d="M12 44 L46 18"/>
+<path d="M20 54 L54 28"/>
+<path d="M12 44 L20 54"/>
+<ellipse cx="50" cy="23" rx="7" ry="10" transform="rotate(34 50 23)"/>
+<path d="M47 18 C50 20 50 26 47 28 C45 25 45 21 47 18"/>
+</svg>

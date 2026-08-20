@@ -94,6 +94,16 @@ type Section struct {
 	// addresses, in the provider's words.
 	Covers  []string `json:"covers,omitempty"`
 	Callout *Callout `json:"callout,omitempty"`
+
+	// StartsPart marks the first rendered block of each provider part, plus the blocks named in
+	// pagepolicy.go. It is the only thing that forces a page break in Book 1.
+	//
+	// Not derived in the template by comparing this section's Part against the previous one's:
+	// a part whose every block was omitted for this child must not leave its successor
+	// unmarked, and a part whose first block was omitted must still start a sheet at whichever
+	// of its blocks did render. Only the final, post-omission slice knows which those are, and
+	// the template never sees the blocks that were dropped.
+	StartsPart bool `json:"starts_part,omitempty"`
 }
 
 // DailyDomain is one daily-life module ready for the page. Every text field is the
@@ -152,6 +162,42 @@ type TrackerSpec struct {
 	// empty box to tick.
 	Alarm  string `json:"alarm,omitempty"`
 	Review string `json:"review,omitempty"`
+}
+
+// FlowRows and TailRows split a tracker's blank rows into the part that may break anywhere and
+// the tail that moves whole.
+//
+// Chromium honours break-inside: avoid on a tbody and ignores CSS orphans and widows on table
+// rows entirely, so a blank form splits anywhere: the food-diversity grid put three writing
+// lines and a repeated column header alone on Book 1 page 42, with 92% of the sheet blank.
+//
+// Only the tail is protected, and that is the whole design. Grouping every row into fours was
+// tried first and measured worse on printed sheets -- a group that will not fit in what is left
+// of a page moves whole, so every grid gained up to 26mm of waste and Book 1 went from sixteen
+// underfilled pages to twenty-one, losing the section pairings that breaking on parts had just
+// won. Protecting the tail alone costs nothing when the form fits, because there is no break to
+// resolve, and it is the only case that was ever bad: a break inside the body of a form leaves a
+// usable continuation with its header repeated, while a break four rows from the end leaves a
+// stub nobody can use on a sheet nobody wanted to print.
+//
+// Blank grids only. A prefilled grid is one row per provider row -- eighteen on the dashboards
+// -- and its rows carry their own labels, so a split leaves both halves readable.
+const trackerTailRows = 4
+
+// FlowRows is the leading rows, free to break anywhere.
+func (t TrackerSpec) FlowRows() []struct{} {
+	if len(t.Prefilled) > 0 || t.Rows <= trackerTailRows {
+		return nil
+	}
+	return make([]struct{}, t.Rows-trackerTailRows)
+}
+
+// TailRows is the trailing rows, which move together.
+func (t TrackerSpec) TailRows() []struct{} {
+	if len(t.Prefilled) > 0 || t.Rows <= 0 {
+		return nil
+	}
+	return make([]struct{}, min(t.Rows, trackerTailRows))
 }
 
 // StagePage is the provider's feeding guidance for the child's age, with the stages either

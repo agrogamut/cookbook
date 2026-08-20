@@ -99,3 +99,45 @@ func TestSectionHasContentRejectsAnEmptyGrid(t *testing.T) {
 		t.Error("a stage page with no current stage reports as content")
 	}
 }
+
+// TestABlankFormProtectsOnlyItsTail.
+//
+// The regression: Book 1 page 42 was three writing lines and a repeated column header on an
+// otherwise blank sheet, the tail of the food-diversity grid. Chromium ignores CSS orphans and
+// widows on table rows, so the tbody is the only unit a form can be held together by -- and
+// grouping every row was measured worse than protecting the tail alone. See FlowRows.
+func TestABlankFormProtectsOnlyItsTail(t *testing.T) {
+	for _, c := range []struct {
+		rows               int
+		wantFlow, wantTail int
+	}{
+		{rows: 0, wantFlow: 0, wantTail: 0},
+		{rows: 1, wantFlow: 0, wantTail: 1}, // a form shorter than the tail is all tail
+		{rows: 4, wantFlow: 0, wantTail: 4},
+		{rows: 5, wantFlow: 1, wantTail: 4},
+		{rows: 10, wantFlow: 6, wantTail: 4},
+	} {
+		spec := TrackerSpec{Columns: []string{"a"}, Rows: c.rows}
+		if got := len(spec.FlowRows()); got != c.wantFlow {
+			t.Errorf("%d rows: %d flow rows, want %d", c.rows, got, c.wantFlow)
+		}
+		if got := len(spec.TailRows()); got != c.wantTail {
+			t.Errorf("%d rows: %d tail rows, want %d", c.rows, got, c.wantTail)
+		}
+		if got := len(spec.FlowRows()) + len(spec.TailRows()); got != c.rows {
+			t.Errorf("%d rows: the two bodies hold %d", c.rows, got)
+		}
+	}
+}
+
+// A prefilled grid is not split: every row carries its own label, so a break leaves both halves
+// readable and holding a tail together would only add a place the fragmenter cannot break.
+func TestAPrefilledGridIsNotGrouped(t *testing.T) {
+	spec := TrackerSpec{Columns: []string{"a", "b"}, Rows: 8, Prefilled: [][]string{{"x"}, {"y"}}}
+	if got := spec.FlowRows(); got != nil {
+		t.Errorf("a prefilled grid returned %d flow rows, want none", len(got))
+	}
+	if got := spec.TailRows(); got != nil {
+		t.Errorf("a prefilled grid returned %d tail rows, want none", len(got))
+	}
+}

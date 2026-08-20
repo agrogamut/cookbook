@@ -54,14 +54,18 @@ const underfillThreshold = 0.62
 // History, so a later reader can see whether a change helped:
 //
 //	21  both books, before any of this work
-const maxUnderfilledPages = 21
+//	24  after breaking on parts, protecting form tails, and binding warnings to their subject
+//	    -- the last two cost fill and bought the two defects a count cannot see: a sheet
+//	    holding three writing lines, and four sheets opening on a warning about nothing
+const maxUnderfilledPages = 24
 
 // maxPagesOpeningOnAnOrphan is the same kind of budget for the other half of the problem: a
 // sheet whose first line is a warning belonging to the previous page's topic, or a bare column
 // header from a table named on the sheet before.
 //
 //	3  both books, before any of this work
-const maxPagesOpeningOnAnOrphan = 3
+//	0  after binding a domain's red flag and referral to the reference table above them
+const maxPagesOpeningOnAnOrphan = 0
 
 // bboxDoc is the shape of `pdftotext -bbox`: one <word> per word, positioned in PostScript
 // points with the origin at the top left.
@@ -226,6 +230,17 @@ func buildPrintedSet(url string) (printedSet, error) {
 			return printedSet{}, fmt.Errorf("print %s: %w", b.kind, err)
 		}
 		*b.into = pdf
+	}
+
+	// Looking at the sheets is not optional for layout work -- every defect this file guards
+	// against passed its own count and was found by printing a book and reading the pages. Set
+	// BOOK_PAGE_DUMP to a directory to get both PDFs written there for exactly that.
+	if dir := os.Getenv("BOOK_PAGE_DUMP"); dir != "" {
+		for name, pdf := range map[string][]byte{"book1": out.Book1PDF, "book2": out.Book2PDF} {
+			if err := os.WriteFile(filepath.Join(dir, name+".pdf"), pdf, 0o600); err != nil {
+				return printedSet{}, fmt.Errorf("dump %s: %w", name, err)
+			}
+		}
 	}
 	return out, nil
 }

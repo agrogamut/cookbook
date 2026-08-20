@@ -16,6 +16,7 @@
     <h3>{{ .Domain }}</h3>
     {{ with .AgeContext }}<p class="domain-age">{{ . }}</p>{{ end }}
 
+    <div class="domain-guidance">
     <table>
       <tbody>
         {{ with .Reference }}<tr><td class="domain-label">What is typical</td><td>{{ . }}</td></tr>{{ end }}
@@ -30,7 +31,13 @@
     {{/* Red flag and referral above the tracker, not below it. Below, they were the last
          unbreakable blocks after a grid that routinely runs past a page boundary, and kept
          landing alone on the next sheet. Above, only the grid crosses the boundary and it
-         splits cleanly. See B1-GRID for the same move and the same reason. */}}
+         splits cleanly. See B1-GRID for the same move and the same reason.
+
+         Wrapped with the reference table above them rather than left loose. A break falling
+         between the two opened four of Book 1's sheets with "Warning: when to seek advice" and
+         no indication of what it was a warning about -- the domain it belongs to was named on
+         the previous page. CSS break-before: avoid does not hold against a fragmentainer
+         boundary in Chromium; an unbreakable unit does, and this one is short enough to keep. */}}
     {{ with .RedFlag }}
       <div class="callout warning">
         <h3>Warning: when to seek advice</h3>
@@ -39,6 +46,7 @@
     {{ end }}
     {{ with .Referral }}<p class="domain-referral"><strong>Who to approach:</strong> {{ . }}</p>{{ end }}
     {{ with .AILimit }}<p class="domain-limit">Scope of this page: {{ . }}</p>{{ end }}
+    </div>
 
     {{ with .Tracker }}{{ template "B1-GRID" . }}{{ end }}
   </div>
