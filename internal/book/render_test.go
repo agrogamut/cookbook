@@ -392,3 +392,53 @@ func TestARecipeWithNoMarkPrintsNoFrame(t *testing.T) {
 		t.Error("a recipe with no mark must print no mark frame")
 	}
 }
+
+// The stylesheet has a screen half.
+//
+// Without one the console's iframe lays the document out at the iframe's own width -- about
+// 1700 CSS pixels against a 170mm text block -- so every grid spreads, prose capped at the
+// measure sits in a column four times too wide, and no page boundary is visible. Most of what
+// an operator reported as misalignment was this, not the printed page.
+func TestTheStylesheetHasAScreenPresentation(t *testing.T) {
+	css := stylesheetSource(t)
+	if !strings.Contains(css, "@media screen") {
+		t.Fatal("the preview has no screen styling and renders at iframe width")
+	}
+	for _, want := range []string{"width: 170mm", "box-shadow"} {
+		if !strings.Contains(css, want) {
+			t.Errorf("the screen half must constrain the page and show sheet boundaries; %q is absent", want)
+		}
+	}
+}
+
+// The provisional banner shows on screen and is suppressed in print, and neither state may be
+// lost. In print the running head carries the same disclosure on every sheet; on screen there is
+// no running head, so the banner is the only place it appears.
+func TestTheProvisionalBannerIsOnScreenAndNotInPrint(t *testing.T) {
+	css := stylesheetSource(t)
+	if !strings.Contains(css, "@media print { .provisional { display: none; } }") {
+		t.Error("the banner must be suppressed in print, where the running head carries it")
+	}
+	screen := css[strings.Index(css, "@media screen"):]
+	if !strings.Contains(screen, ".provisional") {
+		t.Error("the banner must be laid out on screen, where nothing else carries the disclosure")
+	}
+
+	var buf bytes.Buffer
+	if err := RenderHTML(&buf, Kind1, Metadata{Language: "en", ReviewStatus: "Draft"}, Book1{}); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(buf.String(), `class="provisional"`) {
+		t.Error("every rendered book must carry the banner element")
+	}
+}
+
+// stylesheetSource reads the embedded stylesheet the renderer inlines.
+func stylesheetSource(t *testing.T) string {
+	t.Helper()
+	b, err := templateFS.ReadFile("templates/tokens.css")
+	if err != nil {
+		t.Fatalf("read tokens.css: %v", err)
+	}
+	return string(b)
+}

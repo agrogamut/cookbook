@@ -1074,3 +1074,84 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 .imprint dl { display: grid; grid-template-columns: 40mm 1fr; gap: 2mm 4mm; margin: 0; }
 .imprint dt { font-weight: 600; color: var(--ink); }
 .imprint dd { margin: 0; word-break: break-all; }
+
+/* --------------------------------------------------------------------------------------
+   Screen.
+
+   Everything above this point is print geometry, and @page does nothing on screen. Until now
+   this stylesheet had exactly one screen rule -- hiding the provisional banner in print -- so
+   the operator console's preview laid the document out at the iframe's own width, about 1700
+   CSS pixels against the 170mm text block it was designed for. Every grid spread, every table
+   stretched, prose capped at the 108mm measure sat in a 450mm column with 340mm of nothing
+   beside it, and no page boundary was visible because on screen there are no pages. Most of
+   what looked misaligned in the console was correct in the PDF, and the two defects that were
+   real -- a cover spilling onto a second sheet, a book breaking before every block -- were
+   invisible in it.
+
+   This is an approximation and the console says so. Without JavaScript a browser cannot
+   paginate, so the sheet boundaries drawn here are the breaks the document declares, not the
+   breaks Chromium resolves at print time: a section that will overflow onto two sheets shows as
+   one long sheet. The console embeds the real printed PDF for that reason, and this styling
+   serves the fallback shown when no browser is available to print with.
+   -------------------------------------------------------------------------------------- */
+@media screen {
+  body {
+    background: #7d7a75;
+    margin: 0;
+    padding: 8mm 0 12mm;
+  }
+
+  /* One column at the printed text width, with the page margins drawn around it, so every
+     measure in the document resolves against the width it was designed for. content-box
+     because the widths above are text-block widths: padding is the margin, not part of it. */
+  .cover,
+  .page-break,
+  .recipe,
+  .chapter,
+  .provisional {
+    box-sizing: content-box;
+    width: 170mm;
+    max-width: calc(100% - 2 * var(--page-margin-side));
+    margin-left: auto;
+    margin-right: auto;
+    background: #fff;
+    padding: var(--page-margin-top) var(--page-margin-side) var(--page-margin-bottom);
+  }
+
+  /* A visible boundary wherever the document declares a page start. The gap and the shadow do
+     the work a sheet edge does on paper: they say "this is where the reader turns over". */
+  .cover,
+  .page-break,
+  .recipe,
+  .chapter {
+    margin-top: 8mm;
+    box-shadow: 0 1mm 4mm rgba(0, 0, 0, 0.4);
+  }
+
+  /* The cover's declared height is a print constraint -- a box a little under the
+     fragmentainer, with its foot block pinned to the bottom. On screen there is no
+     fragmentainer to stay inside and the fixed height only draws a tall empty box, so the cover
+     takes its content's height and the foot block sits where it falls. */
+  .cover {
+    height: auto;
+    padding-bottom: var(--page-margin-bottom);
+  }
+  .cover .cover-facts { position: static; margin-top: 24mm; }
+
+  /* The banner is hidden in print because the running head carries the same disclosure on every
+     sheet. On screen there is no running head, so it is the only place the disclosure appears
+     and it must stay. */
+  .provisional {
+    margin-bottom: 8mm;
+    padding-top: 6mm;
+    padding-bottom: 6mm;
+    box-shadow: 0 1mm 4mm rgba(0, 0, 0, 0.4);
+  }
+
+  /* Sections that share a printed sheet are separated by a margin, which on screen would show
+     as a gap inside one white sheet. They are part of the sheet before them, so they get no
+     background of their own and no boundary. */
+  section:not(.page-break) {
+    margin-top: 10mm;
+  }
+}
