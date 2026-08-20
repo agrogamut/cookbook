@@ -212,7 +212,7 @@ describe("BookGenerator", () => {
     // Explained as an approximation, not raised as an error: the set itself printed fine and
     // the HTML preview genuinely works, so this is not the same situation as generation itself
     // failing.
-    expect(screen.getByText(/approximates the printed page/i)).toBeInTheDocument();
+    expect(screen.getByText(/it cannot paginate/i)).toBeInTheDocument();
     expect(screen.queryByText(/renderer unavailable/i)).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
 
@@ -230,7 +230,7 @@ describe("BookGenerator", () => {
     // A browser was available and the print itself failed -- this is not the same as no
     // browser being installed, and must not be absorbed into the quiet HTML fallback.
     expect(await screen.findByText(/print failed/i)).toBeInTheDocument();
-    expect(screen.queryByText(/approximates the printed page/i)).toBeNull();
+    expect(screen.queryByText(/it cannot paginate/i)).toBeNull();
   });
 
   it("opens the tab from the blob it already has, without printing again", async () => {

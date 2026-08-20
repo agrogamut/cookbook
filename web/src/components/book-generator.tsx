@@ -353,9 +353,9 @@ export function BookGenerator() {
         <>
           {pdfFallbackNote && (
             <p className="text-xs text-muted-foreground">
-              Showing the HTML preview, not the printed PDF ({pdfFallbackNote}). This
-              approximates the printed page but does not show its pagination, margins or page
-              breaks.
+              Showing the HTML preview, not the printed PDF ({pdfFallbackNote}). It lays out at
+              the printed page width with the real margins, but it cannot paginate: a section
+              that will run onto two sheets appears here as one long sheet.
             </p>
           )}
           <iframe
