@@ -365,10 +365,12 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 		       r.safety_rule, r.clinical_tag, r.growth_target, r.prep_time_min, r.cook_time_min,
 		       r.budget_band, r.region_culture,
 		       n.ingredient_coverage, n.fully_verified,
-		       n.energy_kcal, n.protein_g, n.iron_mg, n.calcium_mg, n.total_mass_g, n.formula
+		       n.energy_kcal, n.protein_g, n.iron_mg, n.calcium_mg, n.total_mass_g, n.formula,
+		       coalesce(m.mark_id, ''), coalesce(m.format_label, '')
 		FROM recipe_method_card c
 		JOIN recipe_master r ON r.recipe_id = c.recipe_id
 		LEFT JOIN recipe_nutrition_recomputed n ON n.recipe_id = c.recipe_id
+		LEFT JOIN recipe_mark m ON m.recipe_id = c.recipe_id
 		WHERE c.recipe_id = ANY($1)`, ids)
 	if err != nil {
 		return nil, nil, fmt.Errorf("query recipe cards: %w", err)
@@ -389,12 +391,14 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 			energyKcal, proteinG, ironMg, calciumMg       *float64
 			totalMassG                                    *float64
 			formula                                       *string
+			markID, formatLabel                           string
 		)
 		if err := rows.Scan(&recipeID, &recipeName, &method, &reviewStatus,
 			&ageGroup, &texture, &servingSizeG, &ingredientIDs, &ingredientNames, &ingredientQty,
 			&safetyRule, &clinicalTag, &growthTarget, &prepTimeMin, &cookTimeMin,
 			&budgetBand, &regionCulture, &coverage, &fullyVerified,
-			&energyKcal, &proteinG, &ironMg, &calciumMg, &totalMassG, &formula); err != nil {
+			&energyKcal, &proteinG, &ironMg, &calciumMg, &totalMassG, &formula,
+			&markID, &formatLabel); err != nil {
 			return nil, nil, fmt.Errorf("scan recipe card: %w", err)
 		}
 
@@ -421,6 +425,10 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 			Meta:                        recipeMeta(prepTimeMin, cookTimeMin, servingSizeG, budgetBand, texture),
 			Nutrition: recipeNutrition(energyKcal, proteinG, ironMg, calciumMg,
 				totalMassG, coverage, fullyVerified, formula),
+			// The drawn mark for this recipe's dish format. Nil when the seed names no mark or
+			// this repository carries no artwork for it, in which case the page prints without
+			// one rather than with a placeholder -- the same rule the cover portrait follows.
+			Mark: Mark(markID, formatLabel),
 		}
 		byRecipeID[recipeID] = card
 	}

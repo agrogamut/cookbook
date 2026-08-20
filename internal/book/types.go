@@ -402,6 +402,14 @@ type RecipeCard struct {
 	// RecipeID is that and is printed alongside.
 	Number int `json:"number"`
 
+	// Mark is the drawn illustration of this recipe's dish format, or nil.
+	//
+	// A drawing, never a photograph: no photograph of any recipe in this corpus exists
+	// (GAP-025) and the nearest available images are of other people's dishes under an
+	// unstated licence. The full reasoning, including why the external corpus's image-url
+	// column is not a source, is in marks.go.
+	Mark *DishMark `json:"mark,omitempty"`
+
 	// RegionCulture is the recipe's own Region_Culture, printed as the card's kicker. It is
 	// the provider's value, not the family's stated region -- the two agree on most cards in
 	// a region-matched book and a reader is entitled to see which recipe came from where.

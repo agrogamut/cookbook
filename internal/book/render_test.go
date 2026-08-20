@@ -340,3 +340,55 @@ func renderOneSection(t *testing.T, sec Section) string {
 	}
 	return buf.String()
 }
+
+// The mark reaches the page, and it is captioned with the format it depicts.
+//
+// The caption is not decoration. A drawing of a bowl beside a recipe called "West Bengal Oats &
+// Chhena Regional rice bowl" makes a claim, and the caption is what makes that claim checkable:
+// it names the provider-recorded format the drawing is of, so a reader can see it is a picture
+// of the format and not a photograph of this dish. No photograph of any recipe in this corpus
+// exists (GAP-025), so a page that implied one would be worse than a page with no picture.
+func TestARecipePagePrintsItsMarkAndNamesTheFormat(t *testing.T) {
+	card := RecipeCard{
+		RecipeID: "MG-R-00001", Title: "West Bengal Rice & Rohu fish Soft rice bowl",
+		Number: 1, ReviewStatus: "Draft",
+		Mark: Mark("bowl-grain", "Soft rice bowl"),
+	}
+	b := Book2{MealSections: []MealSection{{
+		MealCategoryID: "MC-01", Title: "Breakfast", Number: 1, Recipes: []RecipeCard{card},
+	}}}
+
+	var buf bytes.Buffer
+	if err := RenderHTML(&buf, Kind2, Metadata{Language: "en"}, b); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	got := buf.String()
+	if !strings.Contains(got, `class="dish-mark"`) {
+		t.Error("a recipe page must carry its dish mark")
+	}
+	if !strings.Contains(got, `class="dish-mark-caption">Soft rice bowl<`) {
+		t.Error("the mark must be captioned with the format it depicts")
+	}
+	if !strings.Contains(got, "<svg") {
+		t.Error("the mark's markup must reach the page unescaped")
+	}
+}
+
+// A recipe with no mark prints without one -- no placeholder, no empty frame. A frame with
+// nothing in it reads as a picture that failed to load, which is a different and worse claim
+// than no picture at all. Same rule the cover portrait follows.
+func TestARecipeWithNoMarkPrintsNoFrame(t *testing.T) {
+	b := Book2{MealSections: []MealSection{{
+		MealCategoryID: "MC-01", Title: "Breakfast", Number: 1,
+		Recipes: []RecipeCard{{RecipeID: "MG-R-00002", Title: "Untagged dish", Number: 1}},
+	}}}
+	var buf bytes.Buffer
+	if err := RenderHTML(&buf, Kind2, Metadata{Language: "en"}, b); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	// The class name appears in the inlined stylesheet on every page; what must be absent is
+	// the element.
+	if strings.Contains(buf.String(), `<figure class="dish-mark"`) {
+		t.Error("a recipe with no mark must print no mark frame")
+	}
+}

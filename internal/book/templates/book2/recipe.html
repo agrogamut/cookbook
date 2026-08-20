@@ -9,12 +9,22 @@
      with break-inside: avoid under a section band left the band alone on a blank sheet.
 
      There is no photograph, here or anywhere in this book, and none is coming from a dataset
-     (GAP-025). No provider workbook carries an image column, neither loaded external dataset
-     has one, and the Tier 2 image corpora label dish types rather than the 940
-     combinatorially-named provider recipes -- a join would reproduce the wrong-match failure
-     already measured on method text, and neither has a use basis for operational output.
-     Filling this needs photographs commissioned against the recipe list. */}}
+     (GAP-025). No provider workbook carries an image column; the one external corpus that does
+     carry image URLs photographs a different dish under an unstated licence, and printing from
+     it would mean this service fetching arbitrary remote files into a document handed to a
+     family. The full refusal is in marks.go. Filling this needs photographs commissioned
+     against the recipe list.
+
+     What the page carries instead is a drawing of the dish *format* -- a provider-recorded
+     value read out of the recipe name -- captioned with that format, so its claim is explicit
+     and a reader can check it against the title beside it. */}}
 <div class="recipe">
+  {{ with .Mark }}
+  <figure class="dish-mark">
+    {{ .SVG }}
+    <figcaption class="dish-mark-caption">{{ .FormatLabel }}</figcaption>
+  </figure>
+  {{ end }}
   <div class="recipe-head">
     <span class="recipe-num">{{ printf "%02d" .Number }}</span>
     <span class="recipe-kicker">{{ with .RegionCulture }}{{ . }}{{ end }}</span>

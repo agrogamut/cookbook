@@ -657,6 +657,49 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    rather than around a hole where one would go.
    -------------------------------------------------------------------------------------- */
 .recipe { break-before: page; }
+
+/* The dish mark: a drawing of the recipe's format, opposite the title.
+   
+   A drawing and not a photograph, and captioned with the format it depicts, because no
+   photograph of any recipe in this corpus exists and the nearest available images are of other
+   people's dishes under an unstated licence. See marks.go for the full refusal.
+   
+   Floated rather than placed in a grid: the recipe head runs to one, two or three lines
+   depending on the dish name, and a grid row sized to the tallest cell left a visible gap under
+   every short title. A float takes whatever height the head does not.
+   
+   currentColor, so the mark inherits the book's brand ink and cannot introduce a colour of its
+   own -- avoid_color_only_meaning applies to a drawing as much as to a badge, and this one
+   carries no meaning colour could encode. */
+.dish-mark {
+  float: right;
+  width: 22mm;
+  /* No bottom margin. The strip below clears the float, so any margin here is height added to
+     every recipe page -- and at 26mm with a 5mm margin it was enough to push the last recipe's
+     tracker onto a sheet of its own. 22mm still reads: the marks were drawn as single
+     silhouettes with two or three interior lines precisely so they survive this size. */
+  margin: 0 0 0 7mm;
+  color: var(--brand);
+}
+.dish-mark svg { width: 22mm; height: 22mm; display: block; }
+.dish-mark-caption {
+  font-family: var(--font-sans);
+  font-size: var(--small-size);
+  color: var(--ink-soft);
+  text-align: center;
+  margin-top: 1.5mm;
+  line-height: 1.25;
+}
+/* The production strip sits beside the mark rather than clearing it.
+   
+   It cleared, and every recipe page paid the mark's full height whatever the title did. On the
+   tallest recipe -- a two-line name, a three-line selection note and the extra sentence a
+   partly-verified nutrition panel prints -- that was the difference between the page holding its
+   tracker and spilling it onto a sheet of its own.
+   
+   Safe because the strip is a grid container: it establishes its own formatting context, so it
+   narrows to the space beside the float instead of running under it and having its cells cut. */
+.metastrip { clear: none; }
 .recipe-head { display: flex; align-items: baseline; gap: 4mm; margin: 0 0 1mm; }
 .recipe-num {
   font-family: var(--font-sans);
@@ -783,12 +826,17 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    recipe's mass standing on a measured value rather than on the provider's food-group
    placeholder. It is the one bar on these pages, and it is a genuine fraction of a known
    whole rather than a value drawn against a reference intake this project does not carry. */
-.nutri { margin: 4mm 0 0; break-inside: avoid; }
+/* The three blocks that close a recipe page -- nutrition, safety, selection note -- are set
+   tight against each other on purpose. The tallest recipe in a book is the one whose name runs
+   to two lines, whose selection note runs to three and whose nutrition panel is only partly
+   verified and so prints an extra sentence; on that page these margins are the difference
+   between the recipe keeping its tracker and spilling it onto a sheet holding nothing else. */
+.nutri { margin: 3mm 0 0; break-inside: avoid; }
 .nutri-figures {
   display: flex;
   gap: 8mm;
   border-top: 0.5mm solid var(--rule-strong);
-  padding-top: 3mm;
+  padding-top: 2.5mm;
 }
 .nutri-figures .value {
   font-family: var(--font-sans);
@@ -802,7 +850,7 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   font-family: var(--font-sans);
   font-size: var(--caption-size);
   color: var(--ink-soft);
-  margin: 2.5mm 0 0;
+  margin: 2mm 0 0;
   max-width: 150mm;
 }
 .nutri-figures .cov { margin-left: auto; text-align: right; }
@@ -890,7 +938,11 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 
    A prefilled grid is not: the two dashboards are one row per monitoring parameter, eighteen of
    them, taller than a page by construction. Those carry .tall and split, repeating their header,
-   which is what a long form should do. */
+   which is what a long form should do.
+
+   Book 2's "when you cooked this" is two rows at the foot of a recipe page and takes the same
+   rule for the same reason: letting it split put its column header on one sheet and its two
+   writing rows on the next. */
 .tracker:not(.tall) { break-inside: avoid; }
 .tracker-head { break-inside: avoid; break-after: avoid; }
 /* The two dashboards print one row per provider row -- eighteen monitoring areas -- and the
@@ -990,8 +1042,8 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 .safety-band {
   border-left: 0.8mm solid var(--warning-strong);
   background: var(--warning-soft);
-  padding: 2.5mm 4mm;
-  margin: 3.5mm 0 0;
+  padding: 2mm 4mm;
+  margin: 2.5mm 0 0;
   font-family: var(--font-sans);
   font-size: var(--caption-size);
   break-inside: avoid;
@@ -1003,7 +1055,7 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   font-family: var(--font-sans);
   font-size: var(--caption-size);
   color: var(--ink-soft);
-  margin: 3mm 0 0;
+  margin: 2.5mm 0 0;
   max-width: none;
 }
 
