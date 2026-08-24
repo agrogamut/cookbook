@@ -196,8 +196,9 @@ recipe.html — <img> if the archetype has a photo, .dish-mark SVG otherwise
   `dish_format_photo`, new table `photo_label_archetype_map` + seed rows, two new
   `external_source` rows, one new `gap_register` row for GAP-029)
 - `cmd/photomatch/main.go` (new)
-- `internal/photomatch/` (new package: fetch.go, match.go, run.go — mirrors `internal/enrich`'s
-  shape)
+- `internal/photomatch/` (new package: `photomatch.go` types/label-map/manifest,
+  `fetch.go` the network stage, `match.go` the DB-writing stage — mirrors `internal/enrich`'s
+  split between stages, not its exact filenames)
 - `internal/book/photo.go` (extended: `RepresentativePhoto(ctx, pool, markID)` alongside the
   existing cover-photo `ParsePhoto`)
 - `internal/book/types.go` (`RecipeCard.Photo *RecipePhoto`, parallel to `Mark`)
