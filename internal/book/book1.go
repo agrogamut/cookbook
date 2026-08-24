@@ -162,6 +162,7 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			BookVersion:    "V1",
 			GenerationDate: asOf,
 			Language:       "en",
+			Logo:           logoDataURI,
 		},
 		Child: ChildSummary{
 			DisplayName: s.DisplayName,
@@ -175,7 +176,8 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			// Both lists, never only the confirmed one -- see allergyStatus.
 			AllergyStatus: allergyStatus(cp.Allergens, cp.SuspectedAllergens),
 		},
-		Letter: letterPage(s.DisplayName),
+		Letter:         letterPage(s.DisplayName),
+		SignoffCredits: signoffCredits(),
 	}
 
 	// Most recent measurement only, formatted as recorded. Growth[0] is newest: profile.Load
@@ -509,12 +511,20 @@ func letterPage(childName string) LetterPage {
 				"the part no book can do for you, and the part that matters most.",
 			"We hope this makes the everyday decisions a little easier.",
 		},
-		Credits: []CreditRow{
-			{Role: "Author", Name: "Dr. Arijit Sarkar"},
-			{Role: "Pediatrician"},
-			{Role: "Dietician"},
-			{Role: "Editor & co-author", Name: "Soumyabrata Ghosh"},
-		},
+	}
+}
+
+// signoffCredits is the sign-off page's four cards: the same words for every generated book.
+// Author and Editor print with a name already on the card; Pediatrician and Dietician print
+// blank. Every card still gets its own signature and date line on the page itself (see
+// signoff.html) -- a printed name here is an attribution, not an approval, and this project
+// never lets one stand in for the other.
+func signoffCredits() []CreditRow {
+	return []CreditRow{
+		{Role: "Author", Name: "Dr. Arijit Sarkar"},
+		{Role: "Pediatrician"},
+		{Role: "Dietician"},
+		{Role: "Editor & co-author", Name: "Soumyabrata Ghosh"},
 	}
 }
 

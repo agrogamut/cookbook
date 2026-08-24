@@ -14,9 +14,15 @@
   <div class="chapter">
     <p class="chapter-num">{{ printf "%02d" .Number }}</p>
     <h2>{{ .Title }}</h2>
+    {{/* Not "from a provider target of N" any more: meal_category_target.default_target_
+         recipes reads 25 for every category (verified live), and TargetRecipeCount is now
+         capped to maxRecipesPerSection in book2.go before it ever reaches this template --
+         printing it as the provider's own number would be exactly the mislabelled-source
+         defect capToTarget's own comment in internal/engine/rank.go already calls out for
+         the same situation. This states the cap as this project's own printing choice. */}}
     <p class="chapter-sub">{{ len .Recipes }} recipe{{ if ne (len .Recipes) 1 }}s{{ end }}
-      selected for this meal{{ if gt .TargetRecipeCount 0 }}, from a provider target of
-      {{ .TargetRecipeCount }}{{ end }}.</p>
+      selected for this meal{{ if gt .TargetRecipeCount 0 }} -- this book prints up to
+      {{ .TargetRecipeCount }} per chapter{{ end }}.</p>
     <ul>
       {{ range .Recipes }}<li><span class="n">{{ printf "%02d" .Number }}</span>{{ .Title }}</li>{{ end }}
     </ul>

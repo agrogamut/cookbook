@@ -427,6 +427,12 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    fragmented the earlier flex covers. 248mm is inside it with room to spare and still puts the
    foot block on the bottom margin. */
 .cover { display: block; text-align: center; position: relative; height: 248mm; }
+/* Small and at the very top: the cover box's vertical rhythm (the 96mm/26mm cover-main
+   margin-top either side of a portrait) was tuned against the box's 248mm budget with "room
+   to spare" but not much of it, per the note above .cover. 32mm wide at this image's 5:1
+   aspect ratio is about 6.4mm tall -- a fraction of that spare room, not a rebalancing of the
+   drop distances that push the title down. */
+.cover-logo { width: 32mm; margin: 0 auto 4mm; display: block; }
 .cover .cover-kicker {
   font-family: var(--font-sans);
   font-size: var(--caption-size);
@@ -943,7 +949,13 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    Chromium and here it removed all four. */
 .domain-guidance > .callout,
 .domain-guidance > .domain-referral,
-.domain-guidance > .domain-limit { break-before: avoid; }
+.domain-guidance > .domain-limit,
+/* .illness > .callout gets the same protection for the same reason: the gas/bloating entry
+   added to B1-015 (see gasBloatingSituation in book1.go) shifted this page's own break point
+   into a gap this selector never covered -- illness.html's warning box is a callout too, just
+   under a different parent class, and the fix already proven for the domain pages applies
+   without any new mechanism. */
+.illness > .callout { break-before: avoid; }
 
 /* A tracker's head moves whole; its grid does not.
 
@@ -1048,8 +1060,14 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 
 /* A pair of side-by-side blocks. Kept for the few pages that genuinely compare two things;
    it is a grid with a rule between, not two filled cards. */
-.card-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8mm; margin: 5mm 0; break-inside: avoid; }
-.card-row > .card + .card { border-left: 0.2mm solid var(--rule); padding-left: 8mm; }
+.card-row { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm 8mm; margin: 5mm 0; break-inside: avoid; }
+/* nth-child(even), not the adjacent-sibling form this replaced: with two cards the two
+   selectors agree, but Book 1's sign-off page now runs four cards in this same two-column
+   grid (see signoff.html), and "every card after the first" put a stray divider on the
+   second row's own first card, which sits in column 1. nth-child(even) means "column 2",
+   which is what a vertical divider between the two columns is supposed to mark, at any
+   row count. */
+.card-row > .card:nth-child(even) { border-left: 0.2mm solid var(--rule); padding-left: 8mm; }
 .card h3 {
   font-family: var(--font-sans);
   font-size: var(--caption-size);
@@ -1106,6 +1124,11 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 .imprint dl { display: grid; grid-template-columns: 40mm 1fr; gap: 2mm 4mm; margin: 0; }
 .imprint dt { font-weight: 600; color: var(--ink); }
 .imprint dd { margin: 0; word-break: break-all; }
+
+/* The closing-page mark, under the imprint block on both books' last page. Both closing
+   pages have real room below their content (neither runs anywhere near a full sheet), so
+   this carries no positioning constraint the way .cover-logo does. */
+.closing-logo { width: 38mm; margin: 12mm auto 0; display: block; }
 
 /* --------------------------------------------------------------------------------------
    Screen.

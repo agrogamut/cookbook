@@ -62,6 +62,24 @@
     </tbody>
   </table>
 
+  {{ if or .HoneyRule .ChokingHazards }}
+  <h3>General feeding safety for babies and young children</h3>
+  {{/* Both fields come from loadFeedingSafetyGuidance in book2.go, derived from
+       age_feeding_stage_master rather than templated prose -- see that function's doc comment
+       for exactly how each is built and why it is safe to state without a per-child age.
+       HoneyRule can be empty (the source rows did not agree on one threshold) and
+       ChokingHazards can be empty independently, so each renders only when populated. */}}
+  {{ with .HoneyRule }}<p><strong>Honey.</strong> {{ . }}</p>{{ end }}
+  {{ with .ChokingHazards }}
+  <p>Across the age ranges this book covers, the reference feeding-stage data consistently
+    flags the same handful of choking hazards. Whatever a recipe's own texture note says,
+    these are worth avoiding or modifying regardless:</p>
+  <ul>
+    {{ range . }}<li>{{ . }}</li>{{ end }}
+  </ul>
+  {{ end }}
+  {{ end }}
+
   <div class="note warning">
     <h3>Safety</h3>
     <p>These rules apply to every recipe in this book, regardless of which chapter it sits in.

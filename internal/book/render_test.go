@@ -508,11 +508,18 @@ func TestNoProvisionalBannerAnywhere(t *testing.T) {
 // among the content pages.
 func TestSignoffPagePrecedesTheImprint(t *testing.T) {
 	for _, tc := range []struct {
-		kind Kind
-		data any
+		kind  Kind
+		data  any
+		roles []string
 	}{
-		{Kind1, Book1{Child: ChildSummary{DisplayName: "Test Child"}}},
-		{Kind2, Book2{Child: ChildSummary{DisplayName: "Test Child"}}},
+		// Book 1's sign-off page carries the author/editor/clinical four-role set (see
+		// signoffCredits in book1.go), sourced from Book1.SignoffCredits -- populated here the
+		// way AssembleBook1 populates it, since this test builds the render model by hand
+		// rather than through the assembler.
+		{Kind1, Book1{Child: ChildSummary{DisplayName: "Test Child"}, SignoffCredits: signoffCredits()},
+			[]string{"Author", "Pediatrician", "Dietician", "Editor"}},
+		// Book 2 keeps its original two-role set -- untouched by the Book 1 sign-off change.
+		{Kind2, Book2{Child: ChildSummary{DisplayName: "Test Child"}}, []string{"Director", "Dietitian"}},
 	} {
 		t.Run(string(tc.kind), func(t *testing.T) {
 			var buf bytes.Buffer
@@ -526,8 +533,10 @@ func TestSignoffPagePrecedesTheImprint(t *testing.T) {
 			if signoffIdx < 0 {
 				t.Fatal("no signature page rendered")
 			}
-			if !strings.Contains(out, "Director") || !strings.Contains(out, "Dietitian") {
-				t.Fatal("signature page must name both the director and the dietitian")
+			for _, role := range tc.roles {
+				if !strings.Contains(out, role) {
+					t.Fatalf("signature page must name %q", role)
+				}
 			}
 			if imprintIdx < 0 {
 				t.Fatal("no imprint/back page rendered")

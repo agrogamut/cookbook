@@ -1,6 +1,7 @@
 package book
 
 import (
+	"html/template"
 	"time"
 
 	"github.com/madamgy/recipie/internal/aidraft"
@@ -25,6 +26,16 @@ type Metadata struct {
 	ReleaseID      string    `json:"release_id"`
 	GenerationDate time.Time `json:"generation_date"`
 	Language       string    `json:"language"`
+	// Logo is the full MadamGY wordmark (see logo.go), set to the same package-level
+	// logoDataURI by both AssembleBook1 and AssembleBook2. It lives on Metadata rather than a
+	// renderContext field or a template.FuncMap entry because every one of the four templates
+	// that print it (both covers, both closing pages) is dispatched with a different pipeline
+	// (Book1, Book2, or Metadata alone -- see body.html in each book) and Metadata is the one
+	// struct all three already embed or equal. html/template rebinds "$" to each
+	// {{ template }} call's own pipeline rather than preserving the outermost Execute
+	// argument, so reaching upward with "$.Logo" does not work here -- confirmed the hard way,
+	// not assumed.
+	Logo template.URL `json:"-"`
 }
 
 // ChildSummary is the personalization the provider's prototype actually relies on: the
@@ -372,21 +383,30 @@ type Book1 struct {
 	Child    ChildSummary `json:"child_profile"`
 	Letter   LetterPage   `json:"letter"`
 	Sections []Section    `json:"sections"`
+	// SignoffCredits is the sign-off page's card list -- Author and Editor print with their
+	// name already on the card, Pediatrician and Dietician print blank, and all four still
+	// carry their own signature and date lines: a printed name is not a signature, and this
+	// project makes nobody's approval look real until the physical page carries it. See
+	// signoffCredits in book1.go.
+	SignoffCredits []CreditRow `json:"signoff_credits"`
 }
 
 // LetterPage is Book 1's warm front-matter page: a short welcome from the book's authoring
-// team, printed right after the cover and before the contents page, plus the credits panel.
-// It is the same words for every family -- there is no per-child data behind a welcome page,
-// so it is a Go constant (see letterPage in book1.go) rather than a query result, and the
-// child's own name is the only thing interpolated into it.
+// team, printed right after the cover and before the contents page. It is the same words for
+// every family -- there is no per-child data behind a welcome page, so it is a Go constant
+// (see letterPage in book1.go) rather than a query result, and the child's own name is the
+// only thing interpolated into it. Carries no credits or signature line of its own: those
+// belong on the sign-off page, where a name next to a role is actually being approved rather
+// than just introduced.
 type LetterPage struct {
-	Body    []string    `json:"body"`
-	Credits []CreditRow `json:"credits"`
+	Body []string `json:"body"`
 }
 
-// CreditRow is one line of the credits panel. Name is printed as given for the two roles this
-// project was told to fill in; the other two print as a blank cell for a handwritten name,
-// the same "absence is a writing line, not an invented value" rule the rest of Book 1 follows.
+// CreditRow is one card on the sign-off page. Name is printed as given for the two roles this
+// project was told to fill in; the other two print with a blank printed-name line, the same
+// "absence is a writing line, not an invented value" rule the rest of Book 1 follows. Every
+// row still gets its own signature and date line regardless of whether Name is set -- a
+// printed name is not an approval.
 type CreditRow struct {
 	Role string `json:"role"`
 	Name string `json:"name,omitempty"`
@@ -555,6 +575,13 @@ type Book2 struct {
 	SafetySOP    []SafetyGuideline `json:"safety_sop"`
 	MealSections []MealSection     `json:"meal_sections"`
 	RotationPlan *RotationPlan     `json:"rotation_plan"`
+	// HoneyRule and ChokingHazards are derived from age_feeding_stage_master -- general infant
+	// feeding safety, static across every book, not this child's own row. See
+	// loadFeedingSafetyGuidance in book2.go for how each is built and what makes it safe to
+	// state generically rather than per-age. HoneyRule is "" when the source rows do not agree
+	// on a single threshold -- an honest gap rather than a guessed one.
+	HoneyRule      string   `json:"honey_rule,omitempty"`
+	ChokingHazards []string `json:"choking_hazards,omitempty"`
 }
 
 // SafetyGuideline is one row of the provider's food_safety_sop table, joined to

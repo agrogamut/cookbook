@@ -1,7 +1,17 @@
 {{ define "B1-SIGNOFF-01" }}
-{{/* Same page as book2/signoff.html's B2-SIGNOFF-01, duplicated rather than shared because
-     RenderHTML parses each book's template set separately (see render.go) and this project
-     keeps no cross-book shared template files. Second-to-last, immediately before B1-END-01. */}}
+{{/* Book 1's own version of this page -- book2/signoff.html's B2-SIGNOFF-01 keeps the
+     original two-role (Director, Dietitian) card set for the recipe book; this one carries
+     the four-role author/editor/clinical set instead, sourced from Book1.SignoffCredits (see
+     signoffCredits in book1.go). Duplicated rather than shared because RenderHTML parses each
+     book's template set separately (see render.go) and this project keeps no cross-book
+     shared template files. Second-to-last, immediately before B1-END-01.
+
+     Printed name is pre-filled for Author and Editor & co-author and left blank for
+     Pediatrician and Dietician -- CreditRow.Name is empty for those two, so the "absence is a
+     writing line" rule already in play elsewhere in this book covers it here without a
+     separate branch. Signature and date are always blank lines, on every card: a name printed
+     here is an attribution, not an approval, and only a physical signature on the printed
+     page makes it one. */}}
 <section class="page-break">
   <div class="page-head">
     <p class="kicker">Approval</p>
@@ -10,18 +20,14 @@
   <p class="block-purpose">For {{ .Child.DisplayName }}{{ with .Metadata.ReleaseID }} &middot; release {{ . }}{{ end }} &middot; generated {{ .Metadata.GenerationDate.Format "2006-01-02" }}.</p>
 
   <div class="card-row signoff">
+    {{ range .SignoffCredits }}
     <div class="card">
-      <h3>Director</h3>
-      <p><span class="label">Printed name</span><br><span class="write-line"></span></p>
+      <h3>{{ .Role }}</h3>
+      <p><span class="label">Printed name</span><br>{{ if .Name }}{{ .Name }}{{ else }}<span class="write-line"></span>{{ end }}</p>
       <p><span class="label">Signature</span><br><span class="write-line"></span></p>
       <p><span class="label">Date</span><br><span class="write-line"></span></p>
     </div>
-    <div class="card">
-      <h3>Dietitian</h3>
-      <p><span class="label">Printed name</span><br><span class="write-line"></span></p>
-      <p><span class="label">Signature</span><br><span class="write-line"></span></p>
-      <p><span class="label">Date</span><br><span class="write-line"></span></p>
-    </div>
+    {{ end }}
   </div>
 </section>
 {{ end }}

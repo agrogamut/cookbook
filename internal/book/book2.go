@@ -34,9 +34,20 @@ var ErrBlocked = errors.New("book: engine blocked generation")
 // -- this only breaks one string into several, it never rewrites a syllable of it.
 var methodStepPattern = regexp.MustCompile(`\d+\)\s*`)
 
+// maxRecipesPerSection is a project policy decision, not provider data: every row of
+// meal_category_target.default_target_recipes reads 25 (verified live), and every chapter of
+// this book prints at most 10 of the real, already-ranked-best-first candidates instead. The
+// recipes themselves are unaffected -- still real, still ranked the same way -- this only
+// decides how many of them make the printed page. Applied in two places: loadMealCategories
+// caps the target itself so topUpInvented never drafts recipes 11-25 that would just be
+// discarded, and the per-category loop below truncates the final card list to the same
+// number regardless of how many real survivors the engine returned.
+const maxRecipesPerSection = 10
+
 // mealCategory is one row of meal_category_target, with default_target_recipes parsed to an
-// int. The column is text in the workbook; a value this code cannot parse means "no cap"
-// rather than a guessed number.
+// int and capped at maxRecipesPerSection. The column is text in the workbook; a value this
+// code cannot parse is treated the same as an over-target value -- capped to
+// maxRecipesPerSection rather than left uncapped, per the policy above.
 type mealCategory struct {
 	ID     string
 	Name   string
@@ -125,6 +136,11 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 	safetySOP, err := loadFoodSafetySOP(ctx, pool)
 	if err != nil {
 		return Book2{}, nil, fmt.Errorf("book: load food safety sop: %w", err)
+	}
+
+	honeyRule, chokingHazards, err := loadFeedingSafetyGuidance(ctx, pool)
+	if err != nil {
+		return Book2{}, nil, fmt.Errorf("book: load feeding safety guidance: %w", err)
 	}
 
 	bengaliNames, err := ingredientBengaliNames(ctx, pool)
@@ -263,6 +279,21 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		})
 	}
 
+	// Belt and suspenders on maxRecipesPerSection: loadMealCategories caps cat.Target so
+	// topUpInvented never drafts past it, but the engine's own capToTarget (internal/engine/
+	// rank.go) re-queries meal_category_target independently and can still hand back up to the
+	// provider's uncapped 25 real survivors. This is the one place that actually enforces the
+	// printed limit regardless of how many candidates arrived. Ranked best-first already, so
+	// truncating keeps the strongest matches.
+	for i := range sections {
+		if len(sections[i].Recipes) > maxRecipesPerSection {
+			sections[i].Recipes = sections[i].Recipes[:maxRecipesPerSection]
+		}
+		if sections[i].TargetRecipeCount > maxRecipesPerSection {
+			sections[i].TargetRecipeCount = maxRecipesPerSection
+		}
+	}
+
 	numberBook(sections)
 
 	b := Book2{
@@ -271,6 +302,7 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			BookVersion:    "V1",
 			GenerationDate: asOf,
 			Language:       "en",
+			Logo:           logoDataURI,
 		},
 		Child: ChildSummary{
 			DisplayName:   s.DisplayName,
@@ -279,9 +311,11 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			FoodPractice:  cp.DietType,
 			AllergyStatus: allergyStatus(cp.Allergens, cp.SuspectedAllergens),
 		},
-		SafetySOP:    safetySOP,
-		MealSections: sections,
-		RotationPlan: nil,
+		SafetySOP:      safetySOP,
+		HoneyRule:      honeyRule,
+		ChokingHazards: chokingHazards,
+		MealSections:   sections,
+		RotationPlan:   nil,
 	}
 	return b, skipped, nil
 }
@@ -422,6 +456,91 @@ func loadFoodSafetySOP(ctx context.Context, pool *pgxpool.Pool) ([]SafetyGuideli
 	return out, nil
 }
 
+// loadFeedingSafetyGuidance derives two static, generic (not per-child) facts from
+// age_feeding_stage_master -- real per-stage columns the engine already reads for ranking,
+// never rendered as guidance before this. Static across every book: this is general infant-
+// feeding safety, not this child's own row.
+//
+// honeyRule is a documented derivation, not a hardcoded fact: it checks that every one of the
+// table's stages agrees on a single threshold (excluded below 12 months, allowed at or after)
+// before stating it as one sentence, and returns "" -- an honest gap, never a guessed
+// threshold -- if a future row ever disagrees with that pattern. This is the hard rule's third
+// category applied literally: the formula is "confirm the real per-stage rows imply one
+// threshold, then state the threshold," the source is age_feeding_stage_master, and the check
+// is right here rather than assumed.
+//
+// chokingHazards is not a derivation -- it is the distinct, verbatim key_choking_control text
+// from every stage the table itself flags "High" or "Moderate-High" (a plain string match,
+// verified live: 4 distinct rows), presented as a list rather than merged into one invented
+// sentence, so nothing is stated more precisely than the source data actually says.
+func loadFeedingSafetyGuidance(ctx context.Context, pool *pgxpool.Pool) (honeyRule string, chokingHazards []string, err error) {
+	rows, err := pool.Query(ctx, `
+		SELECT age_from_months, coalesce(honey_rule, '')
+		FROM age_feeding_stage_master
+		ORDER BY age_from_months`)
+	if err != nil {
+		return "", nil, fmt.Errorf("query honey rule by stage: %w", err)
+	}
+	agreesOnTwelveMonths := true
+	sawAny := false
+	for rows.Next() {
+		var ageFrom int
+		var rule string
+		if err := rows.Scan(&ageFrom, &rule); err != nil {
+			rows.Close()
+			return "", nil, fmt.Errorf("scan honey rule row: %w", err)
+		}
+		if rule == "" {
+			continue
+		}
+		sawAny = true
+		excluded := strings.Contains(strings.ToUpper(rule), "EXCLUDE")
+		allowed := strings.Contains(strings.ToLower(rule), "allow")
+		// "Not applicable" appears on the 0-5 month stage (AF00), before any solid food is
+		// given at all -- it does not contradict "no honey below 12 months," it is moot for
+		// the same reason the rule exists. Treated as agreeing below 12 months; still checked
+		// strictly (must be excluded or moot) so a real future disagreement still trips this.
+		moot := rule == "Not applicable"
+		switch {
+		case ageFrom < 12 && !excluded && !moot:
+			agreesOnTwelveMonths = false
+		case ageFrom >= 12 && excluded:
+			agreesOnTwelveMonths = false
+		case ageFrom >= 12 && !allowed && !moot:
+			agreesOnTwelveMonths = false
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return "", nil, fmt.Errorf("honey rule rows: %w", err)
+	}
+	if sawAny && agreesOnTwelveMonths {
+		honeyRule = "No honey before 12 months of age."
+	}
+
+	hazardRows, err := pool.Query(ctx, `
+		SELECT DISTINCT key_choking_control
+		FROM age_feeding_stage_master
+		WHERE choking_risk_level ILIKE '%high%'
+		  AND key_choking_control IS NOT NULL AND key_choking_control <> ''
+		ORDER BY key_choking_control`)
+	if err != nil {
+		return "", nil, fmt.Errorf("query choking hazards: %w", err)
+	}
+	defer hazardRows.Close()
+	for hazardRows.Next() {
+		var h string
+		if err := hazardRows.Scan(&h); err != nil {
+			return "", nil, fmt.Errorf("scan choking hazard: %w", err)
+		}
+		chokingHazards = append(chokingHazards, h)
+	}
+	if err := hazardRows.Err(); err != nil {
+		return "", nil, fmt.Errorf("choking hazard rows: %w", err)
+	}
+	return honeyRule, chokingHazards, nil
+}
+
 func loadMealCategories(ctx context.Context, pool *pgxpool.Pool) ([]mealCategory, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT meal_category_id, meal_category, coalesce(default_target_recipes, '')
@@ -438,8 +557,10 @@ func loadMealCategories(ctx context.Context, pool *pgxpool.Pool) ([]mealCategory
 		if err := rows.Scan(&id, &name, &targetText); err != nil {
 			return nil, fmt.Errorf("scan meal category: %w", err)
 		}
-		// A target this code cannot parse means no cap is applied, not a guessed number.
 		target, _ := strconv.Atoi(strings.TrimSpace(targetText))
+		if target <= 0 || target > maxRecipesPerSection {
+			target = maxRecipesPerSection
+		}
 		out = append(out, mealCategory{ID: id, Name: name, Target: target})
 	}
 	if err := rows.Err(); err != nil {

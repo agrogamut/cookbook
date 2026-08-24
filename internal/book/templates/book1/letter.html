@@ -7,7 +7,11 @@
 
      Every paragraph here is the same for every family -- see letterPage in book1.go for why
      that makes it a Go constant rather than a query result. Nothing on this page is
-     personalised beyond the child's own name. */}}
+     personalised beyond the child's own name.
+
+     No credits or signatures here: those are on the sign-off page (B1-SIGNOFF-01), where a
+     name next to a role is being approved rather than just introduced. See CreditRow's doc
+     comment in types.go. */}}
 <section class="page-break">
   <div class="page-head">
     <p class="kicker">Welcome</p>
@@ -15,16 +19,5 @@
   </div>
 
   {{ range .Letter.Body }}<p>{{ . }}</p>{{ end }}
-
-  <table>
-    <tbody>
-      {{ range .Letter.Credits }}
-      <tr>
-        <td class="domain-label">{{ .Role }}</td>
-        <td>{{ if .Name }}{{ .Name }}{{ else }}<span class="write-line"></span>{{ end }}</td>
-      </tr>
-      {{ end }}
-    </tbody>
-  </table>
 </section>
 {{ end }}

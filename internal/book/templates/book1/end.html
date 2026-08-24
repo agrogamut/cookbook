@@ -3,7 +3,8 @@
      section the same way B2-IMPRINT-01 always closes Book 2 -- see body.html's own comment.
      Dispatched with $b.Metadata rather than a Section: the release fields it prints
      (book_version, release_id, generation_date) live on Book1.Metadata and have nowhere
-     else to live. */}}
+     else to live -- which is also where Logo lives, so it is just .Logo here, no reaching
+     required. See Metadata.Logo's doc comment in types.go. */}}
 <section class="page-break">
   <div class="page-head">
     <p class="kicker">About this copy</p>
@@ -16,5 +17,6 @@
       <dt>Generation date</dt><dd class="mono">{{ .GenerationDate.Format "2006-01-02" }}</dd>
     </dl>
   </div>
+  <img class="closing-logo" src="{{ .Logo }}" alt="MadamGY">
 </section>
 {{ end }}

@@ -272,10 +272,22 @@ func TestEveryBlockIsEitherRenderedOrReported(t *testing.T) {
 				blockSkips++
 			}
 		}
-		if got := len(b.Sections) + blockSkips; got != total {
+		// B1-CONNECT-01 ("Being Together") is synthetic -- inserted by insertConnectSection,
+		// not a book1_content_block row -- so it is deliberately outside this test's universe
+		// of `total`, the same way B1-COVER-01/B1-TOC-01/B1-SIGNOFF-01/B1-END-01 already are.
+		// Excluded here rather than counted against `total`, because `total` is specifically
+		// "how many real provider blocks does this table have," and that number does not
+		// change when this project adds its own page.
+		rendered := 0
+		for _, sec := range b.Sections {
+			if sec.BlockID != "B1-CONNECT-01" {
+				rendered++
+			}
+		}
+		if got := rendered + blockSkips; got != total {
 			t.Fatalf("at %d months: %d rendered + %d reported skips = %d, want %d; "+
 				"a block that is neither rendered nor reported is silently absent",
-				months, len(b.Sections), blockSkips, got, total)
+				months, rendered, blockSkips, got, total)
 		}
 	}
 }
@@ -285,7 +297,6 @@ func TestEveryBlockIsEitherRenderedOrReported(t *testing.T) {
 // anything in it, which is exactly how a heading over an empty table shipped once already
 // on this branch (D1). This is the other half: for every section AssembleBook1 puts in the
 // book, at least one of Rows, Growth or Callout must be non-empty.
-//
 func TestRenderedSectionsAreNotEmpty(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
