@@ -514,6 +514,48 @@ func TestWatermarkAppearsOnEveryBook(t *testing.T) {
 	}
 }
 
+// The kitchen-safety chapter renders every SOP row's rule text, grouped under its two
+// subsections, appearing exactly once. Book 1 never gets this chapter -- it is scoped to
+// Book 2 only, per the original ask.
+func TestBook2PrintsTheKitchenSafetyChapter(t *testing.T) {
+	data := Book2{
+		Child: ChildSummary{DisplayName: "Test Child"},
+		SafetySOP: []SafetyGuideline{
+			{SOPID: "FS-001", Area: "Raw animal foods", Rule: "No raw or undercooked egg, meat, poultry, fish or shellfish.", Status: "Draft"},
+			{SOPID: "FS-004", Area: "Hand hygiene", Rule: "Begin from clean hands and a clean surface.", Status: "Draft",
+				EvidenceTitle: "Five Keys to Safer Food", EvidenceAuthority: "WHO"},
+		},
+	}
+	var buf bytes.Buffer
+	if err := RenderHTML(&buf, Kind2, Metadata{Language: "en", GenerationDate: time.Now()}, data); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := buf.String()
+
+	for _, want := range []string{
+		"No raw or undercooked egg, meat, poultry, fish or shellfish.",
+		"Begin from clean hands and a clean surface.",
+		"Five Keys to Safer Food",
+	} {
+		if strings.Count(out, want) != 1 {
+			t.Errorf("want %q to appear exactly once, appeared %d times", want, strings.Count(out, want))
+		}
+	}
+}
+
+// Book 1 carries no SafetySOP field at all -- confirming this via Book 1's own render output
+// makes sure the chapter is genuinely Book2-only, not merely unused by Book1's test fixtures.
+func TestBook1NeverPrintsTheKitchenSafetyChapter(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RenderHTML(&buf, Kind1, Metadata{Language: "en", GenerationDate: time.Now()},
+		Book1{Child: ChildSummary{DisplayName: "Test Child"}}); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if strings.Contains(buf.String(), "Kitchen safety") {
+		t.Fatal("Book 1 must never carry the Book 2 kitchen-safety chapter")
+	}
+}
+
 // stylesheetSource reads the embedded stylesheet the renderer inlines.
 func stylesheetSource(t *testing.T) string {
 	t.Helper()

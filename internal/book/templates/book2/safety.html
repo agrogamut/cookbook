@@ -1,0 +1,47 @@
+{{ define "B2-SAFETY-01" }}
+{{/* Every rule here is a real food_safety_sop row, sourced live -- see loadFoodSafetySOP in
+     book2.go. Nothing on this page is templated prose: KitchenSafetyRules/HygieneSafetyRules
+     only decide which of the two subsections a real row sits under. A rule whose citation did
+     not resolve (GAP-028: the provider's own evidence_id references are not yet in
+     evidence_reference_master) prints without one -- never a fabricated source. */}}
+<section class="page-break">
+  <div class="page-head">
+    <p class="kicker">Before you cook</p>
+    <h2>Kitchen safety &amp; hygiene</h2>
+    <p class="standfirst">Food-safety practice behind every recipe in this book, from the
+      provider's own safety standard operating procedures.</p>
+  </div>
+
+  <h3>Kitchen &amp; ingredient safety</h3>
+  <table>
+    <thead><tr><th>Rule</th><th>Status</th></tr></thead>
+    <tbody>
+      {{ range .KitchenSafetyRules }}
+      <tr>
+        <td>{{ .Rule }}{{ if .EvidenceTitle }}<br><span class="citation">{{ if .EvidenceAuthority }}{{ .EvidenceAuthority }}, {{ end }}{{ .EvidenceTitle }}{{ if .EvidenceYear }} ({{ .EvidenceYear }}){{ end }}</span>{{ end }}</td>
+        <td class="mono">{{ .Status }}</td>
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+
+  <h3>Hygiene, storage &amp; handling</h3>
+  <table>
+    <thead><tr><th>Rule</th><th>Status</th></tr></thead>
+    <tbody>
+      {{ range .HygieneSafetyRules }}
+      <tr>
+        <td>{{ .Rule }}{{ if .EvidenceTitle }}<br><span class="citation">{{ if .EvidenceAuthority }}{{ .EvidenceAuthority }}, {{ end }}{{ .EvidenceTitle }}{{ if .EvidenceYear }} ({{ .EvidenceYear }}){{ end }}</span>{{ end }}</td>
+        <td class="mono">{{ .Status }}</td>
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+
+  <div class="note warning">
+    <h3>Safety</h3>
+    <p>These rules apply to every recipe in this book, regardless of which chapter it sits in.
+      Every row's status reflects the provider's own review state, shown as recorded.</p>
+  </div>
+</section>
+{{ end }}

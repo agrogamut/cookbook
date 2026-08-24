@@ -278,7 +278,7 @@ pass from an empty database.
 | 5 | NT00-NT12 ranker | done - migration `0003`, weights read from the provider table |
 | 6 | IFCT 2017 nutrition audit | done - `cmd/enrich`, 542 foods loaded |
 | 7 | External prep-text join | done - `cmd/enrich`, 166 of 940 recipes |
-| 8 | Gap register | done - 27 rows (12 seeded in 0002, 4 upserted by cmd/enrich, 4 added in 0012, 2 in 0015, 1 each in 0016 and 0017, 3 in 0018), re-counted on every run |
+| 8 | Gap register | done - 28 rows (12 seeded in 0002, 4 upserted by cmd/enrich, 4 added in 0012, 2 in 0015, 1 each in 0016 and 0017, 3 in 0018, 1 in 0022), re-counted on every run |
 | + | Corrected nutrition layer | done - migrations `0009`-`0010`, 139 ingredients on IFCT values, 410 recipes fully verified |
 | + | `Book1_Content_Master` import | done - migration `0013`, 9 tables. `internal/importer/spec.go`'s exclusion comment (which had listed it alongside the empty Review/Version Control scaffold and the PDF-pagination Page Registry) is corrected: it is the general content layer of Book 1, not a pagination concern, and is bound to the importer like every other master |
 
@@ -1057,7 +1057,7 @@ scripts/dev_db.fish down && scripts/dev_db.fish up
 go run ./cmd/import && go run ./cmd/enrich
 ```
 
-The check that it worked is `SELECT count(*) FROM gap_register` returning 27, not 16, 20, 22 or 24.
+The check that it worked is `SELECT count(*) FROM gap_register` returning 28, not 16, 20, 22, 24 or 27.
 
 ```
 internal/db/integrity_test.go   22 invariants + row counts + idempotency

@@ -132,6 +132,16 @@ var gapMeasures = []gapMeasure{
 	// gap that stays open on paper after it has closed in fact.
 	{"GAP-025", `SELECT count(*) FROM recipe_master r
 	             WHERE NOT EXISTS (SELECT 1 FROM recipe_photo p WHERE p.recipe_id = r.recipe_id)`},
+
+	// food_safety_sop rows whose evidence_id has no matching row in evidence_reference_master.
+	// Reads 7 today (FS-008's EV-INTERNAL-SAFETY was never meant to resolve, so it is excluded
+	// rather than counted as a miss). Falls to zero the day the provider adds the two real
+	// citations, with no code change needed to notice.
+	{"GAP-028", `SELECT count(*) FROM food_safety_sop s
+	             WHERE s.evidence_id <> 'EV-INTERNAL-SAFETY'
+	               AND NOT EXISTS (
+	                   SELECT 1 FROM evidence_reference_master e
+	                   WHERE e.evidence_id = s.evidence_id)`},
 }
 
 // measureGaps refreshes the counted gaps inside the import transaction.

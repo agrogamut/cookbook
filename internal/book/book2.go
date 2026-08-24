@@ -122,6 +122,11 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		return Book2{}, nil, fmt.Errorf("book: load meal categories: %w", err)
 	}
 
+	safetySOP, err := loadFoodSafetySOP(ctx, pool)
+	if err != nil {
+		return Book2{}, nil, fmt.Errorf("book: load food safety sop: %w", err)
+	}
+
 	bengaliNames, err := ingredientBengaliNames(ctx, pool)
 	if err != nil {
 		return Book2{}, nil, fmt.Errorf("book: load ingredient bengali names: %w", err)
@@ -274,6 +279,7 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			FoodPractice:  cp.DietType,
 			AllergyStatus: allergyStatus(cp.Allergens, cp.SuspectedAllergens),
 		},
+		SafetySOP:    safetySOP,
 		MealSections: sections,
 		RotationPlan: nil,
 	}
@@ -381,6 +387,37 @@ func ingredientBengaliNames(ctx context.Context, pool *pgxpool.Pool) (map[string
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("ingredient bengali name rows: %w", err)
+	}
+	return out, nil
+}
+
+// loadFoodSafetySOP reads all 8 rows of the provider's food_safety_sop table, left-joined to
+// evidence_reference_master for citation. This is static reference content -- the same 8 rows
+// for every child -- confirmed unused anywhere else in this codebase before this call was added.
+func loadFoodSafetySOP(ctx context.Context, pool *pgxpool.Pool) ([]SafetyGuideline, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT s.sop_id, s.area, s.rule, s.status,
+		       coalesce(e.title, ''), coalesce(e.authority, ''),
+		       coalesce(e.year, ''), coalesce(e.source_url, '')
+		FROM food_safety_sop s
+		LEFT JOIN evidence_reference_master e ON e.evidence_id = s.evidence_id
+		ORDER BY s.sop_id`)
+	if err != nil {
+		return nil, fmt.Errorf("query food safety sop: %w", err)
+	}
+	defer rows.Close()
+
+	var out []SafetyGuideline
+	for rows.Next() {
+		var g SafetyGuideline
+		if err := rows.Scan(&g.SOPID, &g.Area, &g.Rule, &g.Status,
+			&g.EvidenceTitle, &g.EvidenceAuthority, &g.EvidenceYear, &g.SourceURL); err != nil {
+			return nil, fmt.Errorf("scan food safety sop: %w", err)
+		}
+		out = append(out, g)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("food safety sop rows: %w", err)
 	}
 	return out, nil
 }

@@ -495,10 +495,64 @@ type MealSection struct {
 // nil here whenever the selected recipes cannot fill seven days without repetition beyond
 // what the provider's diversity target allows.
 type Book2 struct {
-	Metadata     Metadata      `json:"book_metadata"`
-	Child        ChildSummary  `json:"child_recipe_profile"`
-	MealSections []MealSection `json:"meal_sections"`
-	RotationPlan *RotationPlan `json:"rotation_plan"`
+	Metadata     Metadata          `json:"book_metadata"`
+	Child        ChildSummary      `json:"child_recipe_profile"`
+	SafetySOP    []SafetyGuideline `json:"safety_sop"`
+	MealSections []MealSection     `json:"meal_sections"`
+	RotationPlan *RotationPlan     `json:"rotation_plan"`
+}
+
+// SafetyGuideline is one row of the provider's food_safety_sop table, joined to
+// evidence_reference_master for its citation. Every field traces to that source row -- nothing
+// here is templated prose. EvidenceTitle is empty when the join found no citation (e.g.
+// EV-INTERNAL-SAFETY, which is not an external source), and the rule still prints without one
+// rather than inventing a source.
+type SafetyGuideline struct {
+	SOPID             string `json:"sop_id"`
+	Area              string `json:"area"`
+	Rule              string `json:"rule"`
+	Status            string `json:"status"`
+	EvidenceTitle     string `json:"evidence_title,omitempty"`
+	EvidenceAuthority string `json:"evidence_authority,omitempty"`
+	EvidenceYear      string `json:"evidence_year,omitempty"`
+	SourceURL         string `json:"source_url,omitempty"`
+}
+
+// kitchenSafetyAreas names the three food_safety_sop areas (Raw animal foods, Dairy, Juice)
+// that are about an ingredient itself rather than about handling it. This is an organisational
+// split of the provider's own 8 rows, not new data -- every row still prints its own real
+// `area` and `rule` verbatim; this only decides which of the chapter's two subsections a row
+// sits under.
+var kitchenSafetyAreas = map[string]bool{
+	"Raw animal foods": true,
+	"Dairy":            true,
+	"Juice":            true,
+}
+
+// KitchenSafetyRules is the food_safety_sop rows about the ingredient itself: what may or may
+// not go into a recipe unmodified. Order follows SafetySOP, which loadFoodSafetySOP already
+// sorts by sop_id.
+func (b Book2) KitchenSafetyRules() []SafetyGuideline {
+	var out []SafetyGuideline
+	for _, g := range b.SafetySOP {
+		if kitchenSafetyAreas[g.Area] {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// HygieneSafetyRules is every food_safety_sop row not claimed by KitchenSafetyRules: hand
+// hygiene, cross-contamination, storage, water and leftovers -- handling practice rather than
+// an ingredient rule.
+func (b Book2) HygieneSafetyRules() []SafetyGuideline {
+	var out []SafetyGuideline
+	for _, g := range b.SafetySOP {
+		if !kitchenSafetyAreas[g.Area] {
+			out = append(out, g)
+		}
+	}
+	return out
 }
 
 // RecipeCount is the number of recipes across every chapter. A method rather than a field
