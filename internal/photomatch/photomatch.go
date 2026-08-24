@@ -7,7 +7,9 @@ package photomatch
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/csv"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -148,4 +150,20 @@ func ReadManifest(path string) ([]ManifestRow, error) {
 		})
 	}
 	return rows, nil
+}
+
+// SHA256File hashes a file's contents, hex-encoded -- used to record the fetched
+// manifest's checksum in external_source, the same way every other external dataset
+// already records its own.
+func SHA256File(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("photomatch: open %s for hashing: %w", path, err)
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", fmt.Errorf("photomatch: hash %s: %w", path, err)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
