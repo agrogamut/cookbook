@@ -225,9 +225,6 @@ func TestMissingGrowthStaysNil(t *testing.T) {
 		t.Fatalf("a child with no growth measurement must carry nil, got %v / %v",
 			b.Child.WeightKg, b.Child.HeightCm)
 	}
-	if b.Metadata.ReviewStatus == "" {
-		t.Fatal("every assembled book must carry the provider's review status")
-	}
 }
 
 // Blocks with no template mapping must be reported, not silently dropped. A reviewer needs
@@ -286,10 +283,6 @@ func TestEveryBlockIsEitherRenderedOrReported(t *testing.T) {
 // on this branch (D1). This is the other half: for every section AssembleBook1 puts in the
 // book, at least one of Rows, Growth or Callout must be non-empty.
 //
-// B1-END-01 (block B1-022) is the one deliberate exception. Its template reads
-// Book1.Metadata directly -- book_version, release_id, generation_date, review_status --
-// because those are release-level facts with nowhere else to live, not per-section content,
-// so the section it renders under legitimately carries none of the three.
 func TestRenderedSectionsAreNotEmpty(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
@@ -300,9 +293,6 @@ func TestRenderedSectionsAreNotEmpty(t *testing.T) {
 			t.Fatalf("assemble at %d months: %v", months, err)
 		}
 		for _, sec := range b.Sections {
-			if sec.TemplateID == "B1-END-01" {
-				continue
-			}
 			// SectionHasContent rather than a hand-written list of the shapes a section
 			// can carry. The hand-written version listed rows, growth and callout, and went
 			// on passing when four more content kinds were added -- a test that checks a
@@ -435,6 +425,50 @@ func TestEmptyChaptersAreOmittedAndReported(t *testing.T) {
 	}
 }
 
+// capToTarget (engine step 13) applies its 25-recipe cap to the flat, cross-category ranked
+// list before AssembleBook2 ever splits it by meal category, so today's per-chapter target of
+// 25 is unreachable for more than one chapter regardless of how many safe candidates actually
+// exist. Breakfast, Lunch and Dinner each carry roughly 190 recipes mapped to them (migration
+// 0016), so a broad vegetarian profile at this age should reach each chapter's own target
+// independently rather than sharing one book-wide cap.
+func TestBook2ReachesPerChapterTargetsNotOneGlobalCap(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	s := profile.Stored{
+		ChildID:     "BOOK-TEST-005",
+		DateOfBirth: time.Date(2022, 5, 1, 0, 0, 0, 0, time.UTC),
+		DietType:    "Vegetarian",
+	}
+	b, _, err := AssembleBook2(ctx, pool, s,
+		time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("AssembleBook2: %v", err)
+	}
+
+	// Breakfast, Lunch and Dinner all survive this child's age/diet/allergy filters with a
+	// real, non-trivial pool -- so all three should render, and only capToTarget capping the
+	// whole book before category-splitting could make their combined total top out at 25 or
+	// below, the way it did before this fix (13 total, 12 of the top-25 globally-ranked
+	// recipes belonging to unmapped meal types like Mid-morning that contribute nothing).
+	populated := 0
+	for _, sec := range b.MealSections {
+		if len(sec.Recipes) > 0 {
+			populated++
+		}
+	}
+	if populated < 3 {
+		t.Fatalf("only %d chapter(s) rendered with recipes; want Breakfast, Lunch and Dinner "+
+			"all populated for this broad vegetarian profile", populated)
+	}
+	if got := b.RecipeCount(); got <= 25 {
+		t.Fatalf("book recipe count was %d, want more than 25 -- a total this low or capped "+
+			"exactly at 25 across three well-populated chapters means capToTarget is still "+
+			"capping the whole book once, before the category split, rather than each "+
+			"chapter independently", got)
+	}
+}
+
 // The property under test: for the ids handed to loadRecipeCards, every id ends up either as
 // a rendered card or named in the skip slice, never neither. recipe_method_card joins
 // recipe_master 1:1 across all 940 recipes today, so a genuine join miss cannot be produced by
@@ -478,6 +512,34 @@ func TestLoadRecipeCardsReportsAJoinMiss(t *testing.T) {
 	if !found {
 		t.Fatalf("recipe id %s has no method card row; it must be named in the skip list, got %v",
 			missingID, skipped)
+	}
+}
+
+// Book 1's back page was silently unreachable: a past commit remapped the block that used to
+// reach B1-END-01 (B1-022) to B1-REFS-01 and nothing replaced it, so Book 1 ended wherever the
+// last daily-life block happened to sort in book_order, with no imprint page at all. It renders
+// unconditionally now, the same way B2-IMPRINT-01 always closes Book 2, rather than depending on
+// any provider block mapping to it.
+func TestBook1EndsOnItsOwnBackPage(t *testing.T) {
+	pool := testPool(t)
+	for _, months := range []int{7, 51, 200} {
+		b, _, err := AssembleBook1(context.Background(), pool, storedProfileAged(months), time.Now())
+		if err != nil {
+			t.Fatalf("assemble at %d months: %v", months, err)
+		}
+		var buf bytes.Buffer
+		if err := RenderHTML(&buf, Kind1, b.Metadata, b); err != nil {
+			t.Fatalf("render at %d months: %v", months, err)
+		}
+		out := buf.String()
+		endIdx := strings.Index(out, "About this copy")
+		if endIdx < 0 {
+			t.Fatalf("at %d months: Book 1 has no back page at all", months)
+		}
+		if lastSection := strings.LastIndex(out, "<section"); endIdx < lastSection {
+			t.Fatalf("at %d months: the back page must be the book's last section, not "+
+				"embedded earlier in it", months)
+		}
 	}
 }
 

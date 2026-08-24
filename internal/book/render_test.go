@@ -15,23 +15,26 @@ func TestRenderRejectsAnUnknownKind(t *testing.T) {
 	}
 }
 
-// The provisional banner lives in the base template precisely so no section can omit it.
-// If this ever fails, a book can be generated that does not disclose that its data is
-// unapproved, which is the single worst thing this renderer could do.
-func TestEveryBookCarriesTheProvisionalBanner(t *testing.T) {
+// The provisional banner used to live in the base template precisely so no section could omit
+// it. It is gone now: approval is a physical signature on the signature page (director and
+// dietitian), decided the same day this test was rewritten, and the banner's claim that
+// nothing has been approved stopped being true the moment that page exists to be signed. This
+// asserts the opposite of what it used to -- the banner must never reappear, on either book.
+func TestNoBookCarriesTheProvisionalBanner(t *testing.T) {
 	for _, kind := range []Kind{Kind1, Kind2} {
 		t.Run(string(kind), func(t *testing.T) {
 			var buf bytes.Buffer
-			meta := Metadata{Title: "t", Language: "en", ReviewStatus: "Draft"}
+			meta := Metadata{Title: "t", Language: "en"}
 			if err := RenderHTML(&buf, kind, meta, nil); err != nil {
 				t.Fatalf("render: %v", err)
 			}
 			out := buf.String()
-			if !strings.Contains(out, "Provisional - not clinically approved") {
-				t.Fatal("generated book does not disclose that its data is unapproved")
-			}
-			if !strings.Contains(out, "Draft") {
-				t.Fatal("the provider's own review status must appear verbatim")
+			if strings.Contains(out, "Provisional - not clinically approved") ||
+				strings.Contains(out, "not clinically approved") {
+				t.Fatal("a generated book must not print the provisional disclaimer -- " +
+					"approval is now a physical signature on the signature page, and the " +
+					"data-level Draft/Review_Status flags on individual rows are untouched " +
+					"and still surfaced elsewhere, but this document-level claim is gone")
 			}
 		})
 	}
@@ -110,7 +113,7 @@ func TestTableSizingDoesNotLeakOntoProse(t *testing.T) {
 // The template has no branch that prints a date, and this is what pins that.
 func TestVaccinationTrackerNeverPrintsADate(t *testing.T) {
 	b := Book1{
-		Metadata: Metadata{Language: "en", ReviewStatus: "Draft"},
+		Metadata: Metadata{Language: "en"},
 		Sections: []Section{{
 			BlockID: "B1-009", TemplateID: "B1-VAX-01", Title: "Vaccination Tracker",
 			Rows: []Row{{Label: "6 weeks", Reference: "DTwP-1"}},
@@ -145,7 +148,7 @@ func TestUnrecordedValueRendersAsAWritingLine(t *testing.T) {
 	render := func(t *testing.T, rows []Row) string {
 		t.Helper()
 		b := Book1{
-			Metadata: Metadata{Language: "en", ReviewStatus: "Draft"},
+			Metadata: Metadata{Language: "en"},
 			Sections: []Section{{
 				TemplateID: "B1-PROFILE-01", Title: "Child profile", Rows: rows,
 			}},
@@ -173,7 +176,15 @@ func TestUnrecordedValueRendersAsAWritingLine(t *testing.T) {
 	if !strings.Contains(filled, "4 years 3 months") {
 		t.Fatal("a recorded value must render itself")
 	}
-	if strings.Contains(filled, line) {
+	// Truncated before Book 1's own signature and back pages, which always render write-lines
+	// of their own -- three blank signature lines and an unset release id -- unrelated to the
+	// profile row under test here. A blanket substring search across the whole document would
+	// wrongly catch them now that every Book 1 render carries both.
+	beforeBackPage := filled
+	if i := strings.Index(filled, "Sign-off"); i >= 0 {
+		beforeBackPage = filled[:i]
+	}
+	if strings.Contains(beforeBackPage, line) {
 		t.Fatal("a recorded value must not also render a writing line")
 	}
 }
@@ -411,25 +422,95 @@ func TestTheStylesheetHasAScreenPresentation(t *testing.T) {
 	}
 }
 
-// The provisional banner shows on screen and is suppressed in print, and neither state may be
-// lost. In print the running head carries the same disclosure on every sheet; on screen there is
-// no running head, so the banner is the only place it appears.
-func TestTheProvisionalBannerIsOnScreenAndNotInPrint(t *testing.T) {
+// The provisional banner and its CSS are gone, on screen and in print alike -- there is no
+// state left in which either should reappear. This replaces the old test, which asserted the
+// banner was present on screen and suppressed only in print; approval is a physical signature
+// now, and a banner that came back in one rendering path and not the other would be a worse
+// bug than one that never left, because it would look deliberate.
+func TestNoProvisionalBannerAnywhere(t *testing.T) {
 	css := stylesheetSource(t)
-	if !strings.Contains(css, "@media print { .provisional { display: none; } }") {
-		t.Error("the banner must be suppressed in print, where the running head carries it")
-	}
-	screen := css[strings.Index(css, "@media screen"):]
-	if !strings.Contains(screen, ".provisional") {
-		t.Error("the banner must be laid out on screen, where nothing else carries the disclosure")
+	if strings.Contains(css, ".provisional") {
+		t.Error("tokens.css must not carry any .provisional rule; the banner is removed, not hidden")
 	}
 
 	var buf bytes.Buffer
-	if err := RenderHTML(&buf, Kind1, Metadata{Language: "en", ReviewStatus: "Draft"}, Book1{}); err != nil {
+	if err := RenderHTML(&buf, Kind1, Metadata{Language: "en"}, Book1{}); err != nil {
 		t.Fatalf("render: %v", err)
 	}
-	if !strings.Contains(buf.String(), `class="provisional"`) {
-		t.Error("every rendered book must carry the banner element")
+	// The banner element and its visible text, not a bare substring match: tokens.css keeps a
+	// couple of historical comments that mention the old banner by name (this project layers
+	// history rather than scrubbing it, the same way CLAUDE.md keeps a dated ruling rather
+	// than deleting it), and those comments are inlined verbatim into every <style> block.
+	// They are invisible CSS comments, never rendered text, so they are not the defect this
+	// guards against.
+	out := buf.String()
+	if strings.Contains(out, `class="provisional"`) {
+		t.Error("no rendered book may carry the banner element")
+	}
+	if strings.Contains(out, "not clinically approved") {
+		t.Error("no rendered book may carry the banner's disclaimer text")
+	}
+}
+
+// The physical approval page: a director and a dietitian sign the printed copy before it
+// reaches a family (see CLAUDE.md's sign-off amendment -- there is no stored record and no
+// system gate, this page is the entire mechanism). Second-to-last in both books, immediately
+// before the imprint/back page, so a signature always has a sheet to itself and is never lost
+// among the content pages.
+func TestSignoffPagePrecedesTheImprint(t *testing.T) {
+	for _, tc := range []struct {
+		kind Kind
+		data any
+	}{
+		{Kind1, Book1{Child: ChildSummary{DisplayName: "Test Child"}}},
+		{Kind2, Book2{Child: ChildSummary{DisplayName: "Test Child"}}},
+	} {
+		t.Run(string(tc.kind), func(t *testing.T) {
+			var buf bytes.Buffer
+			meta := Metadata{Language: "en", GenerationDate: time.Now()}
+			if err := RenderHTML(&buf, tc.kind, meta, tc.data); err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			out := buf.String()
+			signoffIdx := strings.Index(out, "Sign-off")
+			imprintIdx := strings.Index(out, "About this copy")
+			if signoffIdx < 0 {
+				t.Fatal("no signature page rendered")
+			}
+			if !strings.Contains(out, "Director") || !strings.Contains(out, "Dietitian") {
+				t.Fatal("signature page must name both the director and the dietitian")
+			}
+			if imprintIdx < 0 {
+				t.Fatal("no imprint/back page rendered")
+			}
+			if signoffIdx > imprintIdx {
+				t.Fatal("the signature page must come before the imprint, not after")
+			}
+		})
+	}
+}
+
+// The watermark: water1.jpeg (the icon mark, not the full text lockup), fixed and centered
+// behind the content on every page. Verified by a real headless-Chrome print spike
+// (2026-08-24, not committed here) that a position: fixed img with a negative z-index repeats
+// identically on every physical page with no tiling bug -- unlike the in-document banner that
+// was tried and rejected, this is a non-flow pseudo-element-like box, not a block competing
+// with document layout, which is what made the difference.
+func TestWatermarkAppearsOnEveryBook(t *testing.T) {
+	for _, kind := range []Kind{Kind1, Kind2} {
+		t.Run(string(kind), func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := RenderHTML(&buf, kind, Metadata{Language: "en"}, nil); err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			out := buf.String()
+			if !strings.Contains(out, `class="watermark"`) {
+				t.Fatal("no watermark element rendered")
+			}
+			if !strings.Contains(out, `src="data:image/jpeg;base64,`) {
+				t.Fatal("watermark must be embedded as a data URI, not fetched at print time")
+			}
+		})
 	}
 }
 

@@ -47,6 +47,7 @@ type renderContext struct {
 	Metadata  Metadata
 	BookClass string
 	CSS       template.CSS
+	Watermark template.URL
 	Data      any
 }
 
@@ -77,6 +78,7 @@ func RenderHTML(w io.Writer, kind Kind, meta Metadata, data any) error {
 		Metadata:  meta,
 		BookClass: string(kind),
 		CSS:       template.CSS(css),
+		Watermark: watermarkDataURI,
 		Data:      data,
 	}
 	if err := t.ExecuteTemplate(w, "base.html", ctx); err != nil {

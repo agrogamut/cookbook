@@ -1,0 +1,30 @@
+{{ define "B2-SIGNOFF-01" }}
+{{/* The physical approval page: a director and a dietitian sign this printed copy before it
+     reaches a family. There is no stored approval record and no system gate on it -- see
+     CLAUDE.md's amendment on the sign-off workflow -- this page is the entire mechanism.
+     Second-to-last, immediately before B2-IMPRINT-01, on its own sheet so a signature never
+     shares a page with anything else. Child name and generation date are printed so a signed
+     sheet can't be separated from the book it belongs to. */}}
+<section class="page-break">
+  <div class="page-head">
+    <p class="kicker">Approval</p>
+    <h2>Sign-off</h2>
+  </div>
+  <p class="block-purpose">For {{ .Child.DisplayName }}{{ with .Metadata.ReleaseID }} &middot; release {{ . }}{{ end }} &middot; generated {{ .Metadata.GenerationDate.Format "2006-01-02" }}.</p>
+
+  <div class="card-row signoff">
+    <div class="card">
+      <h3>Director</h3>
+      <p><span class="label">Printed name</span><br><span class="write-line"></span></p>
+      <p><span class="label">Signature</span><br><span class="write-line"></span></p>
+      <p><span class="label">Date</span><br><span class="write-line"></span></p>
+    </div>
+    <div class="card">
+      <h3>Dietitian</h3>
+      <p><span class="label">Printed name</span><br><span class="write-line"></span></p>
+      <p><span class="label">Signature</span><br><span class="write-line"></span></p>
+      <p><span class="label">Date</span><br><span class="write-line"></span></p>
+    </div>
+  </div>
+</section>
+{{ end }}

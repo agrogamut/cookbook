@@ -12,6 +12,7 @@
 {{ with $b.RotationPlan }}
   {{ template "B2-ROTATE-01" . }}
 {{ end }}
+{{ template "B2-SIGNOFF-01" $b }}
 {{/* The imprint takes the whole render context rather than the book, because the release
      fields it prints live on Metadata. */}}
 {{ template "B2-IMPRINT-01" . }}

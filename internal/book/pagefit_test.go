@@ -61,7 +61,21 @@ const underfillThreshold = 0.62
 //	----
 //	10  break once per provider part, measured by lowest ink
 //	 8  sections flow, breaking only for the first and the four full-page forms
-const maxUnderfilledPages = 8
+//	10  capToTarget stopped capping the whole book to 25 recipes before Book 2 split into
+//	    meal-category chapters, so Breakfast, Lunch and Dinner all render fully instead of
+//	    one chapter absorbing the only real content. The two new pages are exactly the
+//	    legitimate cases this budget already names: two more chapter-opener pages (Lunch,
+//	    Dinner) and a contents table that now runs three pages of short single-line entries
+//	    instead of one, both inherently below the threshold by design, not a layout defect.
+//	    Book 1 is unchanged; its four pages here are the same ones already inside the
+//	    previous budget of 8.
+//	11  Book 1's back page (B1-END-01) was unreachable and now renders unconditionally (see
+//	    book1/end.html), the same legitimate case as Book 2's imprint page: a handful of dl
+//	    rows on their own sheet, inherently below the threshold by design.
+//	13  The signature page (B1-SIGNOFF-01 / B2-SIGNOFF-01) added to both books: a short form
+//	    of six write-lines on its own sheet, the same legitimate case as the imprint pages
+//	    either side of it.
+const maxUnderfilledPages = 13
 
 // maxPagesOpeningOnAnOrphan is the same kind of budget for the other half of the problem: a
 // sheet whose first line is a warning belonging to the previous page's topic, or a bare column

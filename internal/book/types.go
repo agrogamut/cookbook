@@ -21,10 +21,6 @@ type Metadata struct {
 	ReleaseID      string    `json:"release_id"`
 	GenerationDate time.Time `json:"generation_date"`
 	Language       string    `json:"language"`
-	// ReviewStatus is the provider's own value, carried verbatim onto the page. It is a
-	// string rather than a bool because "Draft - Culinary/Nutrition/Clinical Review
-	// Required" says more than false does.
-	ReviewStatus string `json:"review_status"`
 }
 
 // ChildSummary is the personalization the provider's prototype actually relies on: the

@@ -55,6 +55,53 @@ Any derived value carries three things in the schema: the formula reference, the
 rows it came from, and a confidence or match score where a join was involved. If you
 cannot supply all three, the value is not derived - it is invented, and it does not go in.
 
+### Amendment - AI-drafted recipe content authorized (2026-08-24)
+
+The prohibition above on "Writing recipe text, preparation steps, safety notes or
+clinical advice from scratch" is narrowed by an explicit operational decision, not
+repealed wholesale. Books are now signed off by a director and a dietitian, on
+paper, before reaching a family - that physical review is what makes AI-drafted
+*prose* acceptable here. Nothing about fabricated **data values** changes: nutrition
+figures, allergen tags, min-ages and every other data field this rule covers stay
+exactly as forbidden to invent as before.
+
+What's now allowed:
+
+- AI (Gemini) may draft per-recipe preparation text and symptom-specific
+  modification notes for conditions the provider data actually documents
+  (constipation, diarrhea, vomiting, fever/recovery/low appetite, picky eating -
+  grounded in `clinical_rule_master.book2_action` and `Required_Modification`,
+  not invented from nothing).
+- For conditions with zero provider backing (gas/bloating, a child wanting to eat
+  more) - generic, non-specific safe text only ("offer smaller portions, don't
+  force, mention it to your doctor if it continues"), never a specific claim with
+  no source behind it.
+- AI may invent an entirely new recipe (ingredients and method included) as a
+  fallback, only when a chapter would otherwise fall short of its recipe-count
+  target after real corpus recipes are exhausted - constrained to real
+  `ingredient_master` rows only, and the same age/allergy/texture hard filters
+  real recipes go through. Every invented recipe carries an internal source flag
+  distinguishing it from a real corpus row, for audit purposes, whether or not
+  that distinction is shown to the reader.
+- Content generation is live, per book request, not pre-generated into a reviewed
+  library. The system does not gate on a human having read the specific draft
+  text before it prints - the printed signature page is the entire review
+  mechanism, and verifying a human actually read the book before signing it is a
+  process outside this codebase's responsibility.
+
+What's unchanged:
+
+- No AI-generated images, anywhere. Food photography comes from a real, licensed
+  photo dataset, matched by dish format then re-ranked by name/ingredient
+  similarity - never generated.
+- The `ai_can_draft = 'N'` gate on the five Book 1 blocks (vaccination schedule,
+  milestone surveillance, developmental red flags, development-by-age,
+  reference/disclaimer) is untouched. This decision applies to Book 2 recipe
+  content; it does not reopen those five blocks.
+- Per-row provider `Review_Status`/`Data_Quality` flags stay verbatim, surfaced,
+  never overridden - this decision is about document-level banners and new
+  AI-drafted prose, not about the provider's own data flags.
+
 ## Communication and attribution rules
 
 - Never mention claude, anthropic, or ai anywhere: not in chat, code, comments, commit
@@ -85,6 +132,20 @@ Two things follow, and both are open questions rather than settled positions:
   culinary, nutrition or clinical review. Surfacing a per-row `Draft` badge to an operator
   is honest and necessary; it is not the same as clearance to act on the row, and the
   provider's sign-off is still outstanding.
+
+### Amendment - per-book physical sign-off (2026-08-24)
+
+The paragraph above describes the *dataset's* clinical sign-off as outstanding -
+that hasn't changed; nothing in the provider data has been through review. What's
+new is separate and narrower: each generated *book*, as a printed physical
+document, now carries a signature page for a director and a dietitian to sign
+before it reaches a family. That per-copy signature is not the same claim as "the
+underlying dataset has been clinically reviewed," and this document's existing
+statement that provider sign-off is still outstanding continues to stand
+alongside it. The document-level "Provisional - not clinically approved" banner
+that used to print on every page is removed, unconditionally, on the strength of
+this physical sign-off process - verification that the process is actually
+followed for every printed copy happens outside this codebase.
 
 The engineering answer to both is the same and is already built: every value carries its
 source, its verification state and its confidence, so an operator can see what is

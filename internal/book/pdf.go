@@ -131,16 +131,17 @@ var printSlots = make(chan struct{}, maxConcurrentPrints)
 // the release fields and the page number, which is why they are set here rather than in CSS:
 // only the print engine knows the total page count.
 //
-// The header template also carries the provisional-data disclosure banner, not just page
-// furniture. Nothing in the dataset is approved, and that has to appear on every printed
-// page with no template able to suppress it. An in-document position: fixed banner was
-// tried first and rejected -- see the comment above the .provisional print rule in
-// tokens.css -- because Chromium's fixed-element page-repeat tiles a negative offset onto
-// the bottom of the page instead of the reserved band above the content. Chrome's own
-// repeating header has no such coordinate math: it is drawn once per physical page by the
-// print engine itself. marginTop is widened to match the --banner-reserve space tokens.css
-// already carves out of @page for exactly this banner, so the header has room to render
-// without clipping.
+// The header used to also carry the provisional-data disclosure banner on every physical
+// page. It no longer does (2026-08-24): approval is a physical signature on the signature
+// page now, not a document-level claim this renderer prints. marginTop stays widened rather
+// than reverted, because a margin change re-triggers every measurement in pagefit_test.go and
+// there was no layout reason to force that here -- and the band it reserves is exactly where
+// a future watermark would go. If that work lands here: Chrome's own repeating header/footer
+// is the one mechanism in this pipeline already proven to draw something once per physical
+// page. An in-document position: fixed element was tried for the banner and rejected --
+// Chromium's fixed-element page-repeat tiled a negative offset onto the bottom of the page
+// instead of the reserved band above the content -- so the same trap is worth checking for
+// before trusting a CSS-only approach for a watermark too.
 func PrintPDF(ctx context.Context, htmlDoc []byte, meta Metadata) ([]byte, error) {
 	// Probed before the run, so the two failures stay distinguishable. Wrapping every
 	// chromedp failure as "renderer unavailable" told an operator a 60-second timeout, a
@@ -317,22 +318,12 @@ func printIn(caller, browser context.Context, htmlDoc []byte, meta Metadata) ([]
 	ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 
-	// A running head, not a poster. The disclosure is on every page and no template can
-	// suppress it, which is the requirement; printing the whole three-line paragraph 42 times
-	// was not. It cost 28mm of every sheet's head, left the top of each page empty and the
-	// foot crowded, and by the fifth page a reader has stopped seeing it -- which is the one
-	// thing a standing warning must not do. The full sentence appears once, in the document's
-	// own .provisional block on the opening page; this line carries the same two facts on
-	// every sheet in the space a running head occupies.
-	header := fmt.Sprintf(`<div style="font-size:7pt;line-height:1.3;width:100%%;
-		box-sizing:border-box;padding:0 20mm;margin:0;
-		display:flex;justify-content:space-between;gap:6mm;
-		font-family:'Noto Sans','Liberation Sans',sans-serif;color:#9b2226">
-		<span><strong>Provisional - not clinically approved.</strong> Not a clinical prescription.</span>
-		<span style="font-family:'Noto Sans Mono','DejaVu Sans Mono',ui-monospace,monospace;
-		      white-space:nowrap;overflow:hidden;text-overflow:ellipsis">%s</span>
-		</div>`,
-		html.EscapeString(meta.ReviewStatus))
+	// No running head. There used to be one carrying the provisional-data disclosure on every
+	// physical page; approval is a physical signature on the signature page now; see the note
+	// above PrintPDF. An explicit empty string, not an omitted parameter -- CDP's PrintToPDF
+	// only falls back to its own default title/URL header when WithHeaderTemplate is left
+	// unset entirely, and that default is not one this project wants either.
+	const header = ""
 
 	// The release segment is omitted entirely when there is no release id, rather than
 	// printing the label with nothing after it. There is no release layer yet, so on every

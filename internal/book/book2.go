@@ -59,6 +59,9 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		return Book2{}, nil, fmt.Errorf("book: derive engine input: %w", err)
 	}
 
+	// One preliminary run, with no meal type set, purely for the special-care/clinical block
+	// check -- blocking does not depend on meal type, so this is the cheapest way to catch a
+	// blocked child before doing any per-category work below.
 	res, err := engine.Run(ctx, pool, cp)
 	if err != nil {
 		return Book2{}, nil, fmt.Errorf("book: run engine: %w", err)
@@ -97,16 +100,6 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		return Book2{}, nil, fmt.Errorf("book: load meal category recipe map: %w", err)
 	}
 
-	// rank orders every recipe the engine returned, best first. byID recovers the engine's
-	// own recorded region and diet fields for a recipe, which is where selection_reasons
-	// comes from -- the engine's accounting, not new prose.
-	rank := make(map[string]int, len(res.Recipes))
-	byID := make(map[string]models.RankedRecipe, len(res.Recipes))
-	for i, r := range res.Recipes {
-		rank[r.RecipeID] = i
-		byID[r.RecipeID] = r
-	}
-
 	skipped := append([]string{}, dropped...)
 	sections := []MealSection{}
 
@@ -117,6 +110,31 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 				"%s (%s) has no recipes mapped to it at all (GAP-023)",
 				cat.ID, cat.Name))
 			continue
+		}
+
+		// Run the engine again, this time scoped to this category's own meal type -- the
+		// per-meal-type invocation path internal/api/handlers/search.go already uses. This
+		// is what makes each chapter's target independently reachable: capToTarget (step 13)
+		// caps whatever candidate pool it is handed, and handing it the whole book's pool
+		// once, before any category split, is what silently ceilinged every book at 25
+		// recipes total instead of 25 per chapter. cat.Name matches meal_category_target's
+		// own meal_category column exactly, which is what both applyMealFilter and
+		// capToTarget key their lookups on.
+		catCP := cp
+		catCP.MealType = cat.Name
+		catRes, err := engine.Run(ctx, pool, catCP)
+		if err != nil {
+			return Book2{}, nil, fmt.Errorf("book: run engine for %s: %w", cat.ID, err)
+		}
+
+		// rank orders this category's own candidates, best first. byID recovers the
+		// engine's own recorded region and diet fields for a recipe, which is where
+		// selection_reasons comes from -- the engine's accounting, not new prose.
+		rank := make(map[string]int, len(catRes.Recipes))
+		byID := make(map[string]models.RankedRecipe, len(catRes.Recipes))
+		for i, r := range catRes.Recipes {
+			rank[r.RecipeID] = i
+			byID[r.RecipeID] = r
 		}
 
 		var survivors []string
@@ -133,14 +151,12 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			continue
 		}
 
-		// Ranked best-first, the engine's own ordering, then capped to the provider's
-		// per-category target.
+		// Ranked best-first, the engine's own ordering. No cap applied here: catRes.Recipes
+		// is already capped to this category's own target by capToTarget inside engine.Run,
+		// so survivors can never exceed cat.Target.
 		sort.Slice(survivors, func(i, j int) bool { return rank[survivors[i]] < rank[survivors[j]] })
-		if cat.Target > 0 && len(survivors) > cat.Target {
-			survivors = survivors[:cat.Target]
-		}
 
-		cards, cardSkips, err := loadRecipeCards(ctx, pool, survivors, cat.ID, version, boilerplate, ageStages, bengaliNames, byID, cp, res)
+		cards, cardSkips, err := loadRecipeCards(ctx, pool, survivors, cat.ID, version, boilerplate, ageStages, bengaliNames, byID, cp, catRes)
 		if err != nil {
 			return Book2{}, nil, fmt.Errorf("book: load recipe cards for %s: %w", cat.ID, err)
 		}
@@ -172,7 +188,6 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			BookVersion:    "V1",
 			GenerationDate: asOf,
 			Language:       "en",
-			ReviewStatus:   "Draft - Culinary/Nutrition/Clinical Review Required",
 		},
 		Child: ChildSummary{
 			DisplayName:   s.DisplayName,

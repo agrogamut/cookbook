@@ -67,12 +67,13 @@
     {{ else if eq .TemplateID "B1-SAFETY-01" }}{{ template "B1-SAFETY-01" . }}
     {{ else if eq .TemplateID "B1-TRACKER-01" }}{{ template "B1-TRACKER-01" . }}
     {{ else if eq .TemplateID "B1-REFS-01" }}{{ template "B1-REFS-01" . }}
-    {{/* B1-END-01 prints the release footer -- book_version, release_id, generation_date,
-         review_status -- which live on Book1.Metadata, not on the Section. The section's
-         own Title/Subtitle are already drawn by the section-header above, so the release
-         panel is handed $b.Metadata directly rather than the Section it has no use for. */}}
-    {{ else if eq .TemplateID "B1-END-01" }}{{ template "B1-END-01" $b.Metadata }}
     {{ end }}
   </section>
 {{ end }}
+{{ template "B1-SIGNOFF-01" $b }}
+{{/* B1-END-01 is the book's own back page, not a provider block, so it never comes through
+     the range above -- no book_order row maps to it. Printed unconditionally, the same way
+     B2-IMPRINT-01 always closes Book 2, so Book 1 always ends on a real page instead of
+     wherever the last surviving block happens to sort. */}}
+{{ template "B1-END-01" $b.Metadata }}
 {{ end }}

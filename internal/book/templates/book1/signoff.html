@@ -1,0 +1,27 @@
+{{ define "B1-SIGNOFF-01" }}
+{{/* Same page as book2/signoff.html's B2-SIGNOFF-01, duplicated rather than shared because
+     RenderHTML parses each book's template set separately (see render.go) and this project
+     keeps no cross-book shared template files. Second-to-last, immediately before B1-END-01. */}}
+<section class="page-break">
+  <div class="page-head">
+    <p class="kicker">Approval</p>
+    <h2>Sign-off</h2>
+  </div>
+  <p class="block-purpose">For {{ .Child.DisplayName }}{{ with .Metadata.ReleaseID }} &middot; release {{ . }}{{ end }} &middot; generated {{ .Metadata.GenerationDate.Format "2006-01-02" }}.</p>
+
+  <div class="card-row signoff">
+    <div class="card">
+      <h3>Director</h3>
+      <p><span class="label">Printed name</span><br><span class="write-line"></span></p>
+      <p><span class="label">Signature</span><br><span class="write-line"></span></p>
+      <p><span class="label">Date</span><br><span class="write-line"></span></p>
+    </div>
+    <div class="card">
+      <h3>Dietitian</h3>
+      <p><span class="label">Printed name</span><br><span class="write-line"></span></p>
+      <p><span class="label">Signature</span><br><span class="write-line"></span></p>
+      <p><span class="label">Date</span><br><span class="write-line"></span></p>
+    </div>
+  </div>
+</section>
+{{ end }}

@@ -289,10 +289,13 @@ func TestBookSetPreviewReturnsBothBooks(t *testing.T) {
 		if !strings.Contains(doc, "<html") {
 			t.Fatalf("%s is not a rendered document: %.80q", name, doc)
 		}
-		// The provisional banner is on every page of every book. Its absence here would
-		// mean the set rendered through a path that skips it.
-		if !strings.Contains(doc, "clinical prescription") {
-			t.Fatalf("%s is missing the provisional banner", name)
+		// A rendered document carries its book class on <body> (base.html), the one marker
+		// every real render sets and a stub or an error path would not. This used to check
+		// for the provisional banner instead; that banner is gone (2026-08-24 -- approval is
+		// a physical signature now, not a document-level claim), so the marker changed but
+		// the property under test -- "this went through the real render path" -- did not.
+		if !strings.Contains(doc, `<body class="book`) {
+			t.Fatalf("%s does not look like a real rendered document: %.80q", name, doc)
 		}
 	}
 	if body.Book1 == body.Book2 {

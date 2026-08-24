@@ -31,7 +31,7 @@ func TestPrintPDFProducesAPDF(t *testing.T) {
 
 	var doc bytes.Buffer
 	meta := Metadata{
-		Title: "t", Language: "en", ReviewStatus: "Draft",
+		Title: "t", Language: "en",
 		BookVersion: "V1", ReleaseID: "TEST", GenerationDate: time.Now(),
 	}
 	if err := RenderHTML(&doc, Kind1, meta, Book1{Metadata: meta}); err != nil {
@@ -94,7 +94,7 @@ func TestNoPageContentOverflowsTheTextBlock(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			meta := Metadata{
-				Title: tc.name, Language: "en", ReviewStatus: "Draft",
+				Title: tc.name, Language: "en",
 				BookVersion: "V1", GenerationDate: time.Now(),
 			}
 			var doc bytes.Buffer
@@ -172,7 +172,7 @@ func overflowingElements(t *testing.T, htmlDoc []byte, widthPx float64) ([]strin
 func widestBook1() Book1 {
 	longest := "IAP-HRINFANT-2025"
 	return Book1{
-		Metadata: Metadata{Language: "en", ReviewStatus: "Draft"},
+		Metadata: Metadata{Language: "en"},
 		Child: ChildSummary{
 			DisplayName: "Ananya Roy", DateOfBirth: "2022-03-14",
 			AgeMonths: 53, AgeLabel: "4 years 5 months",
@@ -259,7 +259,7 @@ func widestBook2() Book2 {
 	prep, cook := 15, 20
 	band, texture := "Moderate", "Family texture"
 	return Book2{
-		Metadata: Metadata{Language: "en", ReviewStatus: "Draft"},
+		Metadata: Metadata{Language: "en"},
 		Child: ChildSummary{
 			DisplayName: "Ananya Roy", AgeLabel: "4 years 5 months",
 			FoodPractice: "Vegetarian", AllergyStatus: "Peanut (confirmed)",
@@ -319,7 +319,7 @@ func TestPrintStopsWhenTheCallerGivesUp(t *testing.T) {
 		t.Skip("no chromium on PATH")
 	}
 
-	meta := Metadata{Title: "t", Language: "en", ReviewStatus: "Draft", GenerationDate: time.Now()}
+	meta := Metadata{Title: "t", Language: "en", GenerationDate: time.Now()}
 	var doc bytes.Buffer
 	if err := RenderHTML(&doc, Kind1, meta, widestBook1()); err != nil {
 		t.Fatalf("render: %v", err)
@@ -359,7 +359,7 @@ func TestPrintTabCannotExecuteScript(t *testing.T) {
 		`<script>document.getElementById('p').textContent = 'SCRIPT-RAN';</script>` +
 		`</body></html>`
 
-	meta := Metadata{Title: "t", Language: "en", ReviewStatus: "Draft", GenerationDate: time.Now()}
+	meta := Metadata{Title: "t", Language: "en", GenerationDate: time.Now()}
 	out, err := PrintPDF(context.Background(), []byte(probe), meta)
 	if err != nil {
 		if errors.Is(err, ErrChromiumUnavailable) {

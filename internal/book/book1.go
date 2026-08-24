@@ -127,7 +127,6 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			BookVersion:    "V1",
 			GenerationDate: asOf,
 			Language:       "en",
-			ReviewStatus:   "Draft - Culinary/Nutrition/Clinical Review Required",
 		},
 		Child: ChildSummary{
 			DisplayName: s.DisplayName,
@@ -361,19 +360,13 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 
 		case "B1-TRACKER-01":
 			sec.Trackers = trackerGrids(blockID, writable, src, cp.AgeMonths)
-
-		case "B1-END-01":
-			// No section content: the template reads Metadata directly (book_version,
-			// release_id, generation_date, review_status), which is not per-child data and
-			// has nowhere else to live. See body.html's own comment on why.
 		}
 
 		// The last guard before a section is appended, and the one conservation accounting
 		// cannot supply. "Rendered plus reported equals total" stayed true for the whole time
 		// this book was printing headings over empty areas: a section counted as rendered and
-		// a section that carries something are different claims. B1-END-01 is exempt because
-		// its content lives on Metadata rather than on the Section.
-		if tmpl != "B1-END-01" && !SectionHasContent(sec) {
+		// a section that carries something are different claims.
+		if !SectionHasContent(sec) {
 			skipped = append(skipped, omissionBlock+fmt.Sprintf(
 				"%s (%s) resolved to no content for this child and was not rendered",
 				blockID, sectionTitle))

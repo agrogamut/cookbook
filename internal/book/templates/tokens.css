@@ -21,13 +21,13 @@
      margins        top 22 · outer 20 · bottom 20
      text block               170 x 255 mm
 
-   The top margin holds the running provisional line, the bottom the folio; both are drawn by
-   Chromium's own header/footer templates in pdf.go and those values must match the ones here.
-   The previous geometry reserved 50mm at the head for a three-line warning paragraph repeated
-   on every sheet, which left every page top-heavy with a hand's width of white above the
-   first line and the text crowded at the foot. The disclosure did not get quieter -- it is
-   still on every page and still unremovable -- it got set as a running head instead of a
-   poster.
+   The bottom margin holds the folio, drawn by Chromium's own footer template in pdf.go, and
+   that value must match the one here. The top margin used to hold a running disclosure line
+   the same way; it no longer does (2026-08-24: approval is a physical signature on the
+   signature page now, not a document-level claim), so the top band is currently unused space
+   rather than repurposed -- kept at 22mm rather than reverted to a uniform 20mm because a
+   margin change re-triggers every page-fit measurement in pagefit_test.go, and there was no
+   reason to force that here. A watermark may claim this band; see pdf.go for that work.
    ============================================================================================ */
 
 :root {
@@ -362,29 +362,26 @@ tbody tr:last-child td { border-bottom: 0.2mm solid var(--rule); }
 td .write-line, th .write-line { min-width: 0; width: 100%; }
 
 /* --------------------------------------------------------------------------------------
-   The provisional disclosure.
+   Watermark. See watermark.go for why this is a fixed <img>, not a CSS background-image or
+   an @page margin box, and why that mechanism is safe here where the equivalent in-document
+   position: fixed approach was rejected for the old banner (that was a block-level element
+   competing with document flow; this is a non-flow box with a negative z-index, verified by
+   a real print spike to repeat identically on every physical page).
 
-   Nothing in the dataset is approved and every page says so. In print that is Chromium's own
-   repeating header (see pdf.go): an in-document position: fixed banner was tried and
-   rejected, because Chromium's fixed-element page repeat tiles a negative offset onto the
-   BOTTOM of every page instead of into the reserved band above the content -- the banner
-   reappeared overlapping the last table row on every sheet. Confirmed by rendering and
-   opening the page images, not by counting; a banner count would have reported 13 of 13
-   correct.
-
-   The in-flow block below stays in the document so the HTML preview never shows a book with
-   no disclosure, and is suppressed at print time so the page does not carry two.
+   120mm and 0.10 opacity were chosen by printing the real asset, not by a rule -- water1.jpeg
+   carries its own near-white background, which blends into the page at this opacity and
+   leaves only the pink linework faintly visible, on every sheet.
    -------------------------------------------------------------------------------------- */
-.provisional {
-  border-left: 0.8mm solid var(--warning-strong);
-  background: var(--warning-soft);
-  color: var(--warning-strong);
-  padding: 4mm 5mm;
-  margin: 0 0 8mm;
-  font-size: var(--caption-size);
-  max-width: 150mm;
+.watermark {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 120mm;
+  opacity: 0.10;
+  z-index: -1;
+  pointer-events: none;
 }
-@media print { .provisional { display: none; } }
 
 /* --------------------------------------------------------------------------------------
    Cover.
@@ -1034,6 +1031,11 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 }
 .card p { margin: 0; }
 
+/* The signature page's three stacked write-lines per signer -- .card p's zero margin is
+   right for the prose comparison .card was built for, wrong for a form. */
+.signoff .card p { margin: 0 0 6mm; }
+.signoff .card p:last-child { margin-bottom: 0; }
+
 /* The end matter's imprint: the run's own identity, printed once and in full rather than on
    every recipe card. The content hash is 64 characters and is the same value for every card
    in a book -- it versions the import of recipe_master, not the dish -- so thirty copies of
@@ -1107,8 +1109,7 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   .cover,
   .page-break,
   .recipe,
-  .chapter,
-  .provisional {
+  .chapter {
     box-sizing: content-box;
     width: 170mm;
     max-width: calc(100% - 2 * var(--page-margin-side));
@@ -1137,16 +1138,6 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
     padding-bottom: var(--page-margin-bottom);
   }
   .cover .cover-facts { position: static; margin-top: 24mm; }
-
-  /* The banner is hidden in print because the running head carries the same disclosure on every
-     sheet. On screen there is no running head, so it is the only place the disclosure appears
-     and it must stay. */
-  .provisional {
-    margin-bottom: 8mm;
-    padding-top: 6mm;
-    padding-bottom: 6mm;
-    box-shadow: 0 1mm 4mm rgba(0, 0, 0, 0.4);
-  }
 
   /* Sections that share a printed sheet are separated by a margin, which on screen would show
      as a gap inside one white sheet. They are part of the sheet before them, so they get no

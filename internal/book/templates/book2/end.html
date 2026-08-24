@@ -17,23 +17,19 @@
     Indian Food Composition Tables 2017 (ICMR-NIN, Hyderabad) where an ingredient could be
     matched to an IFCT food; every recipe page states how much of the dish that covers.</p>
 
-  <p>Nothing in this book has completed culinary, nutrition or clinical review. It supports a
-    consultation and does not replace one.</p>
-
   <div class="imprint">
     <dl>
       <dt>Book</dt><dd>{{ .Metadata.Title }}</dd>
       <dt>Book version</dt><dd class="mono">{{ .Metadata.BookVersion }}</dd>
       <dt>Generated</dt><dd class="mono">{{ .Metadata.GenerationDate.Format "2006-01-02" }}</dd>
-      <dt>Review status</dt><dd class="mono">{{ .Metadata.ReviewStatus }}</dd>
       {{/* Omitted entirely when there is no release id, rather than printing a label with
            nothing after it: there is no release layer yet, so on every book printed today a
            blank there is a field a reader has to interpret. */}}
       {{ with .Metadata.ReleaseID }}<dt>Release</dt><dd class="mono">{{ . }}</dd>{{ end }}
       {{/* Nested with, because this template takes the whole render context and the book on
-           it can legitimately be absent -- the renderer is called with nil data by the tests
-           that prove the base template carries the provisional banner for every book kind.
-           A single {{ with .Data.RecipeDataVersion }} would still dereference nil. */}}
+           it can legitimately be absent -- the renderer is called with nil data by
+           TestRenderRejectsAnUnknownKind and other base-template tests. A single
+           {{ with .Data.RecipeDataVersion }} would still dereference nil. */}}
       {{ with .Data }}{{ with .RecipeDataVersion }}
         <dt>Recipe data version</dt><dd class="mono">{{ . }}</dd>
       {{ end }}{{ end }}

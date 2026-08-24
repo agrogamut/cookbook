@@ -343,7 +343,7 @@ func TestPrintPDFAllPrintsEveryDocument(t *testing.T) {
 		t.Skip("no chromium on PATH")
 	}
 	meta := Metadata{
-		Title: "Set", BookVersion: "V1", ReviewStatus: "Draft",
+		Title: "Set", BookVersion: "V1",
 		GenerationDate: time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC), Language: "en",
 	}
 
