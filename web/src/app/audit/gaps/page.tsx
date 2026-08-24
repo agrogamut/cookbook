@@ -17,10 +17,10 @@ import type { GapSeverity } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 
-const severityOrder: GapSeverity[] = ["blocker", "major", "minor", "parked"];
+const severityOrder: GapSeverity[] = ["warning", "major", "minor", "parked"];
 
 const severityColor: Record<GapSeverity, string> = {
-  blocker: "border-destructive text-destructive",
+  warning: "border-destructive text-destructive",
   major: "border-[var(--color-unverified)] text-[var(--color-unverified)]",
   minor: "border-muted-foreground text-muted-foreground",
   parked: "border-muted-foreground text-muted-foreground opacity-60",

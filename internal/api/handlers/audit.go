@@ -69,7 +69,7 @@ func (h *Handlers) Gaps(w http.ResponseWriter, r *http.Request) {
 		SELECT gap_id, severity, area, source_table, source_column, description,
 		       affected_rows, measured_by, ui_behaviour, resolution_path, measured_at
 		FROM gap_register ORDER BY
-		  CASE severity WHEN 'blocker' THEN 1 WHEN 'major' THEN 2 WHEN 'minor' THEN 3 ELSE 4 END,
+		  CASE severity WHEN 'warning' THEN 1 WHEN 'major' THEN 2 WHEN 'minor' THEN 3 ELSE 4 END,
 		  gap_id`)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "gap register failed: "+err.Error())

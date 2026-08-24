@@ -1043,6 +1043,15 @@ internal/db/migrations/
                                 block, 37 hand-written rows. GAP-025 (no recipe imagery),
                                 GAP-026 (no red-flag/doctor-approach text on 27 blocks),
                                 GAP-027 (feeding stages stop at 216mo, blocks declare 228)
+  0022_food_safety_evidence_gap GAP-028: 7 of 8 food_safety_sop rows cite an evidence_id
+                                (EV-CDC-FOODSAFETY, EV-WHO-FIVEKEYS) with no row in
+                                evidence_reference_master. Rule text still prints; citation
+                                line is blank until the provider adds those two rows.
+  0023_blocker_to_warning       renamed gap_register severity 'blocker' -> 'warning' on the
+                                nine rows that carried it (GAP-001..004, 017, 019..021, 023).
+                                Nothing in this codebase enforces a gap_register severity as
+                                an actual stop - only the special-care gate does that, in
+                                code - so 'blocker' overstated what the label does.
 ```
 
 **Migrations 0012 and 0013-0014 were authored on separate branches and merged after the

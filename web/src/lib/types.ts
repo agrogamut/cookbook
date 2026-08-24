@@ -190,7 +190,7 @@ export interface NutritionDiscrepancy {
   calcium_pct_diff: number | null;
 }
 
-export type GapSeverity = "blocker" | "major" | "minor" | "parked";
+export type GapSeverity = "warning" | "major" | "minor" | "parked";
 
 export interface Gap {
   gap_id: string;
