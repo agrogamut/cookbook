@@ -74,6 +74,26 @@ func TestAllergyFilterErrorsOnUnmatchedAllergen(t *testing.T) {
 	}
 }
 
+// TestAllergyFilterExcludesGroundnutOilRecipeForPeanut pins the fix for a silent hard-filter
+// gap: ING0063 (Groundnut oil) carries no allergen tag in ingredient_master ("None identified
+// in starter tagging"), so a recipe built from it never propagated a Peanut tag anywhere the
+// filter checks -- despite allergen_mapping's own ALG-PEANUT row naming "groundnut oil"
+// directly under common_derivatives_or_hidden_sources. MG-R-00285 is a real corpus recipe
+// that uses it. ingredient_allergen_override (migration 0024) is the correction.
+func TestAllergyFilterExcludesGroundnutOilRecipeForPeanut(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	filtered, _, _, err := allergyFilter(ctx, pool, models.ChildProfile{Allergens: []string{"Peanut"}}, []string{"MG-R-00285"})
+	if err != nil {
+		t.Fatalf("allergyFilter: %v", err)
+	}
+	for _, id := range filtered {
+		if id == "MG-R-00285" {
+			t.Fatal("MG-R-00285 uses Groundnut oil, a documented peanut derivative -- it must be excluded for a declared Peanut allergy")
+		}
+	}
+}
+
 // TestAllergyFilterWheatMatchesGlutenContainingCerealTag pins the fix for the final
 // whole-branch review's Critical #1: allergen_mapping names this group "Wheat" but the
 // corpus tags it "Gluten-containing cereal". Before allergen_tag_vocabulary existed,
@@ -133,7 +153,9 @@ func TestAllergyFilterReportsUnscreenedGroups(t *testing.T) {
 	}{
 		{"tree nuts have no corpus tag", []string{"Tree nuts"}, []string{"Tree nuts"}},
 		{"peanut has one", []string{"Peanut"}, nil},
-		{"mixed reports only the unscreened half", []string{"Peanut", "Mustard"}, []string{"Mustard"}},
+		// Mustard has no corpus_tag but is screened via ingredient_allergen_override
+		// (Mustard oil, Mustard seeds -- migration 0024), so it is no longer unscreened.
+		{"mixed reports only the unscreened half", []string{"Tree nuts", "Mustard"}, []string{"Tree nuts"}},
 		{"none declared", nil, nil},
 	}
 

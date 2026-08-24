@@ -1,0 +1,1 @@
+DROP TABLE ingredient_allergen_override;

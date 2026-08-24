@@ -160,6 +160,29 @@ func TestApplySuspectedAllergenRankDemotesButNeverRemoves(t *testing.T) {
 	}
 }
 
+// TestApplySuspectedAllergenRankDemotesGroundnutOilForSuspectedPeanut is the ranker-path
+// counterpart to TestAllergyFilterExcludesGroundnutOilRecipeForPeanut: unscreenedGroups is
+// shared between the hard filter and this ranker specifically so the two never disagree, and
+// this pins that a suspected (not confirmed) Peanut allergy demotes MG-R-00285 (Groundnut
+// oil) via ingredient_allergen_override, the same way the hard filter excludes it for a
+// confirmed one.
+func TestApplySuspectedAllergenRankDemotesGroundnutOilForSuspectedPeanut(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	ranked := []models.RankedRecipe{
+		{RecipeID: "MG-R-00285", RankedScore: 1.0},
+	}
+	out, _, err := applySuspectedAllergenRank(ctx, pool, models.ChildProfile{SuspectedAllergens: []string{"Peanut"}}, ranked)
+	if err != nil {
+		t.Fatalf("applySuspectedAllergenRank: %v", err)
+	}
+	if out[0].RankedScore >= ranked[0].RankedScore {
+		t.Fatalf("MG-R-00285 uses Groundnut oil, a documented peanut derivative -- a suspected Peanut allergy must demote it, got score %v (was %v)",
+			out[0].RankedScore, ranked[0].RankedScore)
+	}
+}
+
 func taggedRecipeIDs(t *testing.T, pool *pgxpool.Pool, group string) map[string]bool {
 	t.Helper()
 	rows, err := pool.Query(context.Background(), `

@@ -156,6 +156,56 @@ func TestBrinjalIsNotEgg(t *testing.T) {
 	}
 }
 
+// TestIngredientAllergenOverrideResolvesRealRows pins the three rows of
+// ingredient_allergen_override (migration 0024): every ingredient_id must be a real
+// ingredient_master row, and every allergen_group must be a real allergen_mapping row --
+// allergen_group has no foreign key (allergen_mapping's own primary key is allergen_id),
+// so this is what actually catches a typo in either column.
+func TestIngredientAllergenOverrideResolvesRealRows(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	rows, err := pool.Query(ctx, `
+		SELECT o.ingredient_id, o.allergen_group
+		FROM ingredient_allergen_override o
+		LEFT JOIN ingredient_master i ON i.ingredient_id = o.ingredient_id
+		LEFT JOIN allergen_mapping a ON a.allergen_group = o.allergen_group
+		WHERE i.ingredient_id IS NULL OR a.allergen_group IS NULL`)
+	if err != nil {
+		t.Fatalf("resolve override rows: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var ingredientID, allergenGroup string
+		if err := rows.Scan(&ingredientID, &allergenGroup); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		t.Errorf("ingredient_allergen_override row (%s, %s) does not resolve against ingredient_master and allergen_mapping", ingredientID, allergenGroup)
+	}
+
+	var count int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM ingredient_allergen_override`).Scan(&count); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 3 {
+		t.Fatalf("ingredient_allergen_override has %d rows, want 3 (Groundnut oil, Mustard oil, Mustard seeds) -- "+
+			"if this changed intentionally, update this pin", count)
+	}
+
+	// ingredient_master itself must stay untouched -- the correction lives only in the
+	// override table and the queries that join against it, same rule as the nutrition layer.
+	var groundnutTag string
+	if err := pool.QueryRow(ctx,
+		`SELECT allergen_tags FROM ingredient_master WHERE ingredient_id = 'ING0063'`,
+	).Scan(&groundnutTag); err != nil {
+		t.Fatalf("read groundnut oil: %v", err)
+	}
+	if groundnutTag != "None identified in starter tagging" {
+		t.Errorf("ingredient_master.allergen_tags for Groundnut oil changed to %q; "+
+			"this table must never be modified, the correction belongs in ingredient_allergen_override", groundnutTag)
+	}
+}
+
 // TestNutritionPlaceholdersAreStillDetectable keeps the original finding measurable. If
 // a future provider release ships real per-ingredient values, this fails and the whole
 // corrected layer should be revisited rather than left running unnecessarily.

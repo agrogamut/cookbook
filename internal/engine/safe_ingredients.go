@@ -16,10 +16,11 @@ type SafeIngredient struct {
 }
 
 // SafeIngredients returns every ingredient_master row a fallback (AI-invented) recipe may
-// draw from for this child. It applies the same two provider-sourced signals real recipes are
-// already filtered on -- food_group and allergen_tags -- at the ingredient level instead of
-// the recipe level, because an invented recipe has no recipe_master row of its own for
-// allergyFilter (steps_hard.go) or dietFilter (diet.go) to run against.
+// draw from for this child. It applies the same provider-sourced signals real recipes are
+// already filtered on -- food_group, allergen_tags, and ingredient_allergen_override -- at
+// the ingredient level instead of the recipe level, because an invented recipe has no
+// recipe_master row of its own for allergyFilter (steps_hard.go) or dietFilter (diet.go) to
+// run against.
 //
 // Two places this is deliberately stricter than the real-recipe path, both because an
 // invented recipe has been through no human review beyond the document-level signature page,
@@ -47,6 +48,11 @@ func SafeIngredients(ctx context.Context, pool *pgxpool.Pool, p models.ChildProf
 		      WHERE v.allergen_group = ANY($1)
 		        AND v.corpus_tag IS NOT NULL
 		        AND i.allergen_tags ILIKE '%' || v.corpus_tag || '%'
+		  )
+		  AND NOT EXISTS (
+		      SELECT 1 FROM ingredient_allergen_override o
+		      WHERE o.ingredient_id = i.ingredient_id
+		        AND o.allergen_group = ANY($1)
 		  )
 		ORDER BY i.ingredient_id`,
 		excludedGroups, restrictDiet, animalFoodGroups)

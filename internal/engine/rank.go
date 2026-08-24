@@ -431,14 +431,20 @@ func applySuspectedAllergenRank(ctx context.Context, pool *pgxpool.Pool, p model
 	rows, err := pool.Query(ctx, `
 		SELECT DISTINCT r.recipe_id
 		FROM recipe_master r
-		JOIN allergen_tag_vocabulary v
-		  ON v.allergen_group = ANY($2) AND v.corpus_tag IS NOT NULL
 		WHERE r.recipe_id = ANY($1)
-		  AND (r.allergen_tags ILIKE '%' || v.corpus_tag || '%'
+		  AND (EXISTS (
+		           SELECT 1 FROM allergen_tag_vocabulary v
+		           WHERE v.allergen_group = ANY($2) AND v.corpus_tag IS NOT NULL
+		             AND (r.allergen_tags ILIKE '%' || v.corpus_tag || '%'
+		                  OR EXISTS (
+		                      SELECT 1 FROM recipe_ingredient_mapping m
+		                      WHERE m.recipe_id = r.recipe_id
+		                        AND m.ingredient_allergen_tag ILIKE '%' || v.corpus_tag || '%')))
 		       OR EXISTS (
 		           SELECT 1 FROM recipe_ingredient_mapping m
+		           JOIN ingredient_allergen_override o ON o.ingredient_id = m.ingredient_id
 		           WHERE m.recipe_id = r.recipe_id
-		             AND m.ingredient_allergen_tag ILIKE '%' || v.corpus_tag || '%'))`,
+		             AND o.allergen_group = ANY($2)))`,
 		ids, p.SuspectedAllergens)
 	if err != nil {
 		return nil, models.StepResult{}, fmt.Errorf("engine: suspected allergen rank: %w", err)
@@ -539,9 +545,12 @@ func unknownAllergenGroups(ctx context.Context, pool *pgxpool.Pool, groups []str
 	return out, nil
 }
 
-// unscreenedGroups returns the subset of groups with no corpus tag. Shared by the
-// suspected-allergen ranker and step 2's hard filter so the two can never disagree about
-// which groups the corpus cannot screen.
+// unscreenedGroups returns the subset of groups with no corpus tag and no override row.
+// Shared by the suspected-allergen ranker and step 2's hard filter so the two can never
+// disagree about which groups the corpus cannot screen. A group is screened if either the
+// corpus carries its tag directly, or ingredient_allergen_override supplies it -- Mustard
+// has no corpus_tag but is screened via the override (Mustard oil, Mustard seeds), so it is
+// excluded from this list even though allergen_tag_vocabulary.corpus_tag is still NULL for it.
 func unscreenedGroups(ctx context.Context, pool *pgxpool.Pool, groups []string) ([]string, error) {
 	if len(groups) == 0 {
 		return nil, nil
@@ -549,6 +558,7 @@ func unscreenedGroups(ctx context.Context, pool *pgxpool.Pool, groups []string) 
 	rows, err := pool.Query(ctx, `
 		SELECT allergen_group FROM allergen_tag_vocabulary
 		WHERE allergen_group = ANY($1) AND corpus_tag IS NULL
+		  AND allergen_group NOT IN (SELECT DISTINCT allergen_group FROM ingredient_allergen_override)
 		ORDER BY allergen_group`, groups)
 	if err != nil {
 		return nil, fmt.Errorf("engine: unscreened group lookup: %w", err)

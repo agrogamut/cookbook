@@ -995,11 +995,13 @@ Backend Go, frontend Next.js, Postgres. Standard layout:
 - Errors wrapped with `fmt.Errorf("...: %w", err)` at each boundary. Sentinel errors for
   conditions callers branch on.
 - Table-driven tests, package-local (`foo_test.go`).
-- Frontend: Next.js App Router, React, Tailwind, deployed to Vercel. All API calls through
-  one `src/lib/api.ts` client.
+- Frontend: Next.js App Router, React, Tailwind. All API calls through one `src/lib/api.ts`
+  client.
 
-Local Postgres via a throwaway docker container (`scripts/dev_db.fish up`). Production via
-Supabase on the transaction pooler port 6543, never the direct IPv6-only host.
+Local Postgres via a throwaway docker container (`scripts/dev_db.fish up`). Production is
+the Render blueprint in `render.yaml` -- database, API and console deployed together as one
+stack, not split across providers. See "The book renderer" section below for why (Chromium
++ Bengali fonts need a Docker image, not a native build).
 
 ### What exists now
 

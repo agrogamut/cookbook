@@ -33,6 +33,24 @@ func TestSafeIngredientsExcludesDeclaredAllergen(t *testing.T) {
 	}
 }
 
+// TestSafeIngredientsExcludesGroundnutOilForPeanut pins the same correction
+// TestAllergyFilterExcludesGroundnutOilRecipeForPeanut pins on the recipe path: the
+// invented-recipe fallback must not offer ING0063 (Groundnut oil) as a safe ingredient for a
+// declared Peanut allergy just because ingredient_master never tagged it.
+func TestSafeIngredientsExcludesGroundnutOilForPeanut(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	out, err := SafeIngredients(ctx, pool, models.ChildProfile{Allergens: []string{"Peanut"}})
+	if err != nil {
+		t.Fatalf("SafeIngredients: %v", err)
+	}
+	for _, s := range out {
+		if s.IngredientID == "ING0063" {
+			t.Fatal("ING0063 (Groundnut oil) is a documented peanut derivative -- it must not appear in the allow-list for a declared Peanut allergy")
+		}
+	}
+}
+
 // TestSafeIngredientsExcludesSuspectedAllergenToo pins the deliberate stricter-than-real-
 // recipes behaviour: SuspectedAllergens are only a ranker demotion for provider-authored
 // recipes (AS-002), but a hard exclusion here, because an invented recipe gets no human

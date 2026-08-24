@@ -47,7 +47,11 @@ func ageFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (
 // overridable. A recipe is excluded if its own allergen_tags names a declared allergen,
 // or any mapped ingredient's ingredient_allergen_tag does -- both columns are verified
 // clean per CLAUDE.md ("Verified clean": zero allergen-propagation omissions), so this
-// is a straight substring match against real data, not a fuzzy join.
+// is a straight substring match against real data, not a fuzzy join. It is also excluded
+// if a mapped ingredient appears in ingredient_allergen_override, which covers the small
+// set of ingredients ingredient_master itself left untagged despite allergen_mapping
+// documenting them as a derivative or example of a declared group (Groundnut oil, Mustard
+// oil, Mustard seeds -- see migration 0024).
 func allergyFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile, candidateIDs []string) ([]string, models.StepResult, []string, error) {
 	stepIn := len(candidateIDs)
 	if len(p.Allergens) == 0 || stepIn == 0 {
@@ -93,6 +97,11 @@ func allergyFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfil
 	// rows with a non-NULL corpus_tag means a declared allergen whose group has no
 	// corpus tag correctly excludes nothing, rather than being silently coerced into a
 	// (wrong) direct match against a vocabulary word the corpus never uses.
+	//
+	// The second OR EXISTS catches what corpus_tag matching cannot: ingredient_master left
+	// Groundnut oil and Mustard oil/seeds untagged even though allergen_mapping's own text
+	// names them as Peanut/Mustard. ingredient_allergen_override (migration 0024) records
+	// that correction without touching ingredient_master itself.
 	rows, err := pool.Query(ctx, `
 		SELECT r.recipe_id
 		FROM recipe_master r
@@ -106,6 +115,12 @@ func allergyFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfil
 		                 SELECT 1 FROM recipe_ingredient_mapping m
 		                 WHERE m.recipe_id = r.recipe_id
 		                   AND m.ingredient_allergen_tag ILIKE '%' || v.corpus_tag || '%'))
+		  )
+		  AND NOT EXISTS (
+		      SELECT 1 FROM recipe_ingredient_mapping m
+		      JOIN ingredient_allergen_override o ON o.ingredient_id = m.ingredient_id
+		      WHERE m.recipe_id = r.recipe_id
+		        AND o.allergen_group = ANY($2)
 		  )`,
 		candidateIDs, p.Allergens)
 	if err != nil {
@@ -125,10 +140,12 @@ func allergyFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfil
 		return nil, models.StepResult{}, nil, fmt.Errorf("engine: allergy filter rows: %w", err)
 	}
 
-	// A declared allergen whose allergen_group has no corpus_tag at all (Crustacean/
-	// Mollusc, Mustard, Sulphites, Tree nuts as verified live) correctly excludes zero
+	// A declared allergen whose allergen_group has no corpus_tag and no override row
+	// (Crustacean/Mollusc, Sulphites, Tree nuts as verified live) correctly excludes zero
 	// recipes -- there's genuinely nothing tagged. That is indistinguishable from an
-	// ordinary no-op exclusion unless it's called out explicitly, so name it here.
+	// ordinary no-op exclusion unless it's called out explicitly, so name it here. Mustard
+	// used to be in this list; it no longer is, because ingredient_allergen_override now
+	// covers it (see unscreenedGroups).
 	absent, err := unscreenedGroups(ctx, pool, p.Allergens)
 	if err != nil {
 		return nil, models.StepResult{}, nil, err

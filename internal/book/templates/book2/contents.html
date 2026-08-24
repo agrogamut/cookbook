@@ -20,6 +20,20 @@
       {{ .ChapterCount }} chapter{{ if ne .ChapterCount 1 }}s{{ end }}.</p>
   </div>
 
+  {{/* Above the table, not below it. A trailing paragraph after a table that happens to end
+       exactly on a page boundary (as a declared allergy narrowing the recipe pool can
+       produce) prints alone on the next sheet -- three lines of prose on an otherwise blank
+       page. break-after: avoid on the table's last row and break-before: avoid on the note
+       were both tried against a real print and neither held: Chromium does not reserve room
+       across a table/sibling boundary here the way it does for the plain-block case
+       .domain-guidance's break-before: avoid solves elsewhere. Printing before the table
+       instead removes the failure mode structurally -- the note can never be the sole thing
+       on a trailing page, because real table rows always follow it. */}}
+  <p class="contents-note">Recipes are numbered continuously through the book; the number in
+    the left column is printed at the head of the recipe's own page. Every recipe here passed
+    the age and allergy filters, which are absolute and have no override. Recipes left out,
+    and which step removed them, are listed with the generated output.</p>
+
   {{/* An explicit colgroup, because table-layout is fixed (see tokens.css) and fixed layout
        takes its column widths from the first row -- which here is a chapter heading spanning
        all three. Without it the three columns divided equally and every recipe title wrapped
@@ -40,10 +54,5 @@
       {{ end }}
     {{ end }}
   </table>
-
-  <p class="contents-note">Recipes are numbered continuously through the book; the number in
-    the left column is printed at the head of the recipe's own page. Every recipe here passed
-    the age and allergy filters, which are absolute and have no override. Recipes left out,
-    and which step removed them, are listed with the generated output.</p>
 </section>
 {{ end }}

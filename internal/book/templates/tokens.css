@@ -534,6 +534,17 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    -------------------------------------------------------------------------------------- */
 .contents-table { font-size: var(--body-size); font-family: var(--font-serif); }
 .contents-table td { padding: 1.7mm 3mm 1.7mm 0; border-bottom: 0.2mm solid var(--rule); }
+/* A recipe count that happens to fill a page exactly (a declared allergy narrowing the pool
+   is what surfaced this) strands the table's last row alone on the next sheet -- a single
+   line on an otherwise blank page. Moving the closing note above the table (contents.html)
+   ruled out one cause but not this one; break-before: avoid on a lone trailing element after
+   the table (tried on .contents-note) also had no effect -- Chromium does not appear to
+   reserve room across a table-to-sibling-block boundary here, only within the table's own
+   row set. This does hold between <tr> siblings: printed and measured at n+3 (14% fill,
+   still under the 15% floor) and n+5 (comfortably clear). Glues the last 5 rows into one
+   unbreakable group, so if the tail can't all fit it moves as a block instead of splitting
+   at the very end. */
+.contents-table tr:nth-last-child(-n+5) { break-before: avoid; }
 .contents-table .num {
   width: 12mm;
   font-family: var(--font-mono);
@@ -577,8 +588,11 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 .contents-note {
   color: var(--ink-soft);
   font-size: var(--caption-size);
-  margin-top: 8mm;
+  margin: 0 0 6mm;
   max-width: var(--measure);
+  /* Printed above the contents table now, not below it -- see contents.html for why. Kept
+     unbreakable regardless, so it stays legible if it ever does land at a page edge. */
+  break-inside: avoid;
 }
 
 /* --------------------------------------------------------------------------------------
