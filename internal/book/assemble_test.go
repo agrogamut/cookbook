@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/madamgy/recipie/internal/aidraft"
 	"github.com/madamgy/recipie/internal/models"
 	"github.com/madamgy/recipie/internal/profile"
 )
@@ -490,7 +491,7 @@ func TestLoadRecipeCardsReportsAJoinMiss(t *testing.T) {
 	ids := []string{realID, missingID}
 	cards, skipped, err := loadRecipeCards(ctx, pool, ids, "MC-TEST", "v-test",
 		map[string]bool{}, map[string][]string{}, map[string]string{}, map[string]models.RankedRecipe{},
-		models.ChildProfile{}, models.EngineResult{})
+		models.ChildProfile{}, models.EngineResult{}, aidraft.Disabled, nil)
 	if err != nil {
 		t.Fatalf("loadRecipeCards: %v", err)
 	}

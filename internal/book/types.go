@@ -1,6 +1,10 @@
 package book
 
-import "time"
+import (
+	"time"
+
+	"github.com/madamgy/recipie/internal/aidraft"
+)
 
 // Omission scope markers. An assembler reports two different things through one skip slice:
 // a whole unit of the book that is absent, and a note about rows left out of a unit that did
@@ -418,6 +422,22 @@ type RecipeCard struct {
 
 	// Nutrition is nil for a recipe with no recomputed row. See RecipeNutrition.
 	Nutrition *RecipeNutrition `json:"nutrition,omitempty"`
+
+	// Source distinguishes a real, provider-authored recipe from one Gemini invented as a
+	// last-resort fallback when a chapter fell short of its target after the real corpus was
+	// exhausted (see internal/book/invented.go). "provider" for every card loaded by
+	// loadRecipeCards; "ai-invented" is set only by the fallback path. Never left empty --
+	// a reader (and an operator checking a book before signing it) always sees which one this
+	// is, matching the project's "provenance is a column, never a footnote" rule.
+	Source string `json:"source"`
+
+	// ModificationNote is a short feeding note for a clinical condition the family's
+	// profile declares, grounded in clinical_rule_master.book2_action/required_modification
+	// (see internal/engine.ActiveClinicalRuleActions) and either paraphrased live by Gemini
+	// or, for the two conditions with no provider text behind them, a fixed static string.
+	// Nil when no active clinical flag's rule matches this recipe's own clinical tag -- most
+	// cards carry none.
+	ModificationNote *aidraft.DraftedText `json:"modification_note,omitempty"`
 }
 
 // RecipeNutrition is one recipe's per-serving figures, rebuilt from IFCT-corrected

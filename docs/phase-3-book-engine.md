@@ -120,6 +120,28 @@ such gate. The rule is about gate placement, not about the technology.
 If and when the review portal is built (section 8 below), phrasing assistance inside
 approved semantic boundaries becomes legitimate and this ruling should be revisited.
 
+#### Amendment — superseded for Book 2 recipe content, not repealed (2026-08-24)
+
+The review portal in section 8 was never built, and this ruling is not being revisited on
+the strength of one being built now. What changed instead: Book 2 (the recipe book only)
+adopted a different, narrower review mechanism than either this ruling or the SRS's five
+gates describe — a physical signature page, signed by a director and a dietitian on the
+printed book itself, before it reaches a family. See CLAUDE.md's own dated amendment for
+the operational decision and its scope.
+
+That is not the review portal this section anticipated: there is no `clinical_pass`,
+`nutrition_pass`, `safety_pass`, `language_pass`, `editorial_pass` or `release_approval`
+gate in the system, and none is planned as part of this. Live Gemini-drafted content
+(`internal/aidraft/`) is constrained in code instead — grounded strictly in
+`clinical_rule_master.book2_action`/`required_modification` for modification notes, and to
+a real, filtered ingredient allow-list plus the child's existing hard filters for the
+invented-recipe fallback — with the printed signature page as the only human checkpoint.
+Whether a pen-and-paper signature satisfies the spirit of "human review gate" this section
+argues for is a judgment call the project has made for Book 2, not a technical resolution
+of the gap this section describes. This ruling stands unmodified for Book 1 and for
+anything outside Book 2 recipe content — the five-block `ai_can_draft = 'N'` gate CLAUDE.md
+already documents is untouched by any of this.
+
 ### The constraint nobody has solved
 
 The general content pool is currently too thin to carry personalization at all:

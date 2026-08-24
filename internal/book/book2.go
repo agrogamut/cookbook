@@ -12,6 +12,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/madamgy/recipie/internal/aidraft"
 	"github.com/madamgy/recipie/internal/engine"
 	"github.com/madamgy/recipie/internal/models"
 	"github.com/madamgy/recipie/internal/profile"
@@ -42,6 +43,24 @@ type mealCategory struct {
 	Target int
 }
 
+// AssembleOption configures optional dependencies AssembleBook2 does not require to run.
+// A functional-option tail rather than a new positional parameter, deliberately: every
+// existing caller (the API handlers, every prior test) keeps compiling unchanged, and a
+// caller that wants Gemini-backed drafting opts in explicitly with WithDrafter.
+type AssembleOption func(*assembleOptions)
+
+type assembleOptions struct {
+	drafter aidraft.Drafter
+}
+
+// WithDrafter supplies the Drafter AssembleBook2 uses for clinical modification notes and the
+// invented-recipe fallback. Omitted, AssembleBook2 behaves exactly as it did before either
+// feature existed: aidraft.Disabled reports ErrDraftingUnavailable on every call, so no note
+// is ever attached and a short chapter is reported the same way GAP-023 always has been.
+func WithDrafter(d aidraft.Drafter) AssembleOption {
+	return func(o *assembleOptions) { o.drafter = d }
+}
+
 // AssembleBook2 builds the recipe book for one child.
 //
 // A chapter with no recipes is omitted rather than rendered empty, and the omission is
@@ -53,7 +72,12 @@ type mealCategory struct {
 // hold as few as one surviving recipe would mean repeating a recipe or inventing a schedule
 // this project has no data to construct honestly, so it stays nil (its documented meaning
 // in types.go) until a real rotation logic is designed against real diversity data.
-func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, asOf time.Time) (Book2, []string, error) {
+func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, asOf time.Time, opts ...AssembleOption) (Book2, []string, error) {
+	cfg := assembleOptions{drafter: aidraft.Disabled}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	cp, dropped, err := s.ToChildProfile(asOf)
 	if err != nil {
 		return Book2{}, nil, fmt.Errorf("book: derive engine input: %w", err)
@@ -68,6 +92,14 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 	}
 	if res.Blocked {
 		return Book2{}, nil, fmt.Errorf("%w: %s", ErrBlocked, res.BlockReason)
+	}
+
+	// Read once, outside the per-category loop: which rules matter is a property of the
+	// child's own ClinicalFlags, not of any one chapter, and drafting the same note twice
+	// for two recipes sharing a clinical tag would mean two Gemini calls for identical input.
+	clinicalActions, err := engine.ActiveClinicalRuleActions(ctx, pool, cp)
+	if err != nil {
+		return Book2{}, nil, fmt.Errorf("book: active clinical rule actions: %w", err)
 	}
 
 	version, err := recipeMasterVersion(ctx, pool)
@@ -106,9 +138,24 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 	for _, cat := range categories {
 		candidateIDs := mapped[cat.ID]
 		if len(candidateIDs) == 0 {
-			skipped = append(skipped, omissionMealCategory+fmt.Sprintf(
-				"%s (%s) has no recipes mapped to it at all (GAP-023)",
-				cat.ID, cat.Name))
+			// GAP-023: this is exactly the case the invented-recipe fallback matters most
+			// for -- a category with zero real recipes mapped to it at all, the same shape
+			// as the 6-11 month iron-support gap CLAUDE.md names as the blocker this whole
+			// feature exists to answer. topUpInvented starts from an empty slice and tries
+			// to reach the whole target from nothing but the allow-listed ingredients.
+			cards, note := topUpInvented(ctx, pool, cfg.drafter, cp, cat, version, nil)
+			if len(cards) == 0 {
+				skipped = append(skipped, omissionMealCategory+fmt.Sprintf(
+					"%s (%s) has no recipes mapped to it at all (GAP-023)",
+					cat.ID, cat.Name))
+				continue
+			}
+			if note != "" {
+				skipped = append(skipped, note)
+			}
+			sections = append(sections, MealSection{
+				MealCategoryID: cat.ID, Title: cat.Name, TargetRecipeCount: cat.Target, Recipes: cards,
+			})
 			continue
 		}
 
@@ -144,10 +191,20 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			}
 		}
 		if len(survivors) == 0 {
-			skipped = append(skipped, omissionMealCategory+fmt.Sprintf(
-				"%s (%s) has %d recipes mapped to it, but none survived "+
-					"this child's age, allergy, clinical or diet filters",
-				cat.ID, cat.Name, len(candidateIDs)))
+			cards, note := topUpInvented(ctx, pool, cfg.drafter, cp, cat, version, nil)
+			if len(cards) == 0 {
+				skipped = append(skipped, omissionMealCategory+fmt.Sprintf(
+					"%s (%s) has %d recipes mapped to it, but none survived "+
+						"this child's age, allergy, clinical or diet filters",
+					cat.ID, cat.Name, len(candidateIDs)))
+				continue
+			}
+			if note != "" {
+				skipped = append(skipped, note)
+			}
+			sections = append(sections, MealSection{
+				MealCategoryID: cat.ID, Title: cat.Name, TargetRecipeCount: cat.Target, Recipes: cards,
+			})
 			continue
 		}
 
@@ -156,20 +213,41 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		// so survivors can never exceed cat.Target.
 		sort.Slice(survivors, func(i, j int) bool { return rank[survivors[i]] < rank[survivors[j]] })
 
-		cards, cardSkips, err := loadRecipeCards(ctx, pool, survivors, cat.ID, version, boilerplate, ageStages, bengaliNames, byID, cp, catRes)
+		cards, cardSkips, err := loadRecipeCards(ctx, pool, survivors, cat.ID, version, boilerplate, ageStages, bengaliNames, byID, cp, catRes, cfg.drafter, clinicalActions)
 		if err != nil {
 			return Book2{}, nil, fmt.Errorf("book: load recipe cards for %s: %w", cat.ID, err)
 		}
 		skipped = append(skipped, cardSkips...)
 		if len(cards) == 0 {
 			// Every id in survivors came from the engine's own result, so the join to
-			// recipe_method_card/recipe_master should never drop one -- reaching this
-			// means an id is orphaned somewhere upstream, and the honest response is to
-			// report the omission rather than render a heading with nothing under it.
-			skipped = append(skipped, omissionMealCategory+fmt.Sprintf(
-				"%s (%s) had %d surviving candidates but none could be "+
-					"loaded as a recipe card", cat.ID, cat.Name, len(survivors)))
+			// recipe_method_card/recipe_master should never drop one on real data -- reaching
+			// this means an id is orphaned somewhere upstream. Still worth a top-up attempt
+			// before reporting the omission, on the same footing as the other two empty-start
+			// branches above.
+			cards, note := topUpInvented(ctx, pool, cfg.drafter, cp, cat, version, nil)
+			if len(cards) == 0 {
+				skipped = append(skipped, omissionMealCategory+fmt.Sprintf(
+					"%s (%s) had %d surviving candidates but none could be "+
+						"loaded as a recipe card", cat.ID, cat.Name, len(survivors)))
+				continue
+			}
+			if note != "" {
+				skipped = append(skipped, note)
+			}
+			sections = append(sections, MealSection{
+				MealCategoryID: cat.ID, Title: cat.Name, TargetRecipeCount: cat.Target, Recipes: cards,
+			})
 			continue
+		}
+
+		// The chapter already has at least one real card at this point, so a shortfall here is
+		// a note on a rendered chapter, never a whole-category omission -- topUpInvented's note
+		// must never carry the omissionMealCategory prefix, or the conservation tests'
+		// "rendered + reported == total" accounting would double-count this category.
+		var note string
+		cards, note = topUpInvented(ctx, pool, cfg.drafter, cp, cat, version, cards)
+		if note != "" {
+			skipped = append(skipped, note)
 		}
 
 		sections = append(sections, MealSection{
@@ -371,7 +449,8 @@ func loadMealCategoryRecipeIDs(ctx context.Context, pool *pgxpool.Pool) (map[str
 // chapter one recipe short of what was asked for.
 func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, categoryID, version string,
 	boilerplate map[string]bool, ageStages map[string][]string, bengaliNames map[string]string,
-	byID map[string]models.RankedRecipe, cp models.ChildProfile, res models.EngineResult) ([]RecipeCard, []string, error) {
+	byID map[string]models.RankedRecipe, cp models.ChildProfile, res models.EngineResult,
+	drafter aidraft.Drafter, clinicalActions []engine.ClinicalRuleAction) ([]RecipeCard, []string, error) {
 
 	rows, err := pool.Query(ctx, `
 		SELECT c.recipe_id, c.recipe_name, c.provider_method, c.provider_review_status,
@@ -444,7 +523,12 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 			// this repository carries no artwork for it, in which case the page prints without
 			// one rather than with a placeholder -- the same rule the cover portrait follows.
 			Mark: Mark(markID, formatLabel),
+			// Every card this function builds is a real, provider-authored recipe -- the
+			// invented-recipe fallback builds its own card directly (invented.go) and is
+			// never routed through here.
+			Source: "provider",
 		}
+		card.ModificationNote = modificationNoteFor(ctx, drafter, cp, clinicalActions, recipeName, clinicalTag)
 		byRecipeID[recipeID] = card
 	}
 	if err := rows.Err(); err != nil {

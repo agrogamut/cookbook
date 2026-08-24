@@ -12,6 +12,12 @@ type Config struct {
 	DatabaseURL string // Postgres connection string
 	XlsxDir     string // directory holding the provider workbooks
 	Port        int    // HTTP listen port (unused until phase 2)
+
+	// GeminiAPIKey is optional, unlike everything above. An empty value does not fail
+	// startup -- it means the AI-drafting feature (internal/aidraft) stays off: no
+	// clinical modification notes, no invented-recipe fallback, chapters that fall
+	// short just report the gap the way they always have.
+	GeminiAPIKey string
 }
 
 // Load reads the environment. It returns an error naming every missing variable at
@@ -38,6 +44,8 @@ func Load() (Config, error) {
 		}
 		c.Port = p
 	}
+
+	c.GeminiAPIKey = os.Getenv("GEMINI_API_KEY")
 
 	if len(missing) > 0 {
 		return c, fmt.Errorf("config: missing required environment variables: %v", missing)

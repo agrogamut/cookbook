@@ -32,6 +32,14 @@
   <h2>{{ .Title }}</h2>
   <p class="recipe-id"><span class="rid">{{ .RecipeID }}</span> &middot; {{ .ReviewStatus }}</p>
 
+  {{/* Source is never a footnote here. An invented recipe went through no human review
+       beyond the book's own signature page, and an operator checking the book before signing
+       it needs to see which cards are which without hunting for it. */}}
+  {{ if eq .Source "ai-invented" }}
+  <p class="ai-badge"><strong>AI-invented recipe.</strong> Drafted to fill this chapter after
+    real corpus recipes were exhausted -- not a provider recipe. Check before signing.</p>
+  {{ end }}
+
   {{/* Production strip: prep, cook, serving, texture, cost band. Every value is a
        recipe_master column that has always been loaded and was never printed. An unset
        column yields no cell rather than a cell reading zero. */}}
@@ -87,6 +95,17 @@
 
   {{ with .Safety }}
   <p class="safety-band"><span class="label">Safety</span>{{ . }}</p>
+  {{ end }}
+
+  {{/* Grounded in clinical_rule_master.book2_action/required_modification (Gemini-paraphrased)
+       or, for the two conditions with no provider text behind them, a fixed static note --
+       never phrased as a clinician's own note, the same restraint the ranker applies to a
+       computed score. */}}
+  {{ with .ModificationNote }}
+  <div class="mod-note">
+    <p class="mod-note-label">Feeding note</p>
+    <p>{{ .Text }}</p>
+  </div>
   {{ end }}
 
   {{/* The engine's own recorded reasons, never prose composed here. Set small and across the
