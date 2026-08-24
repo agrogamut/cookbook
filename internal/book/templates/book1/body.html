@@ -68,6 +68,21 @@
     {{ else if eq .TemplateID "B1-TRACKER-01" }}{{ template "B1-TRACKER-01" . }}
     {{ else if eq .TemplateID "B1-REFS-01" }}{{ template "B1-REFS-01" . }}
     {{ end }}
+
+    {{/* One generic slot, reused across every block that carries no red-flag/doctor-approach
+         content of its own -- see doctorApproachEligible in book1.go for which, and why the
+         rest don't need one. Deliberately "info", never "warning": that word is reserved for
+         the provider's own red-flag rows (B1-RED-01, the tracker alarms, the safety card),
+         and a drafted note claiming warning-level urgency would overclaim beyond its source.
+         Not reader-disclosed as AI-drafted, matching Book 2's recipe-content posture -- the
+         provenance lives on this section's own struct/JSON for the operator fact-check pass,
+         not on the printed page. */}}
+    {{ with .DoctorApproachNote }}
+    <div class="callout">
+      <h3>Note: what to discuss with your doctor</h3>
+      <p>{{ .Text }}</p>
+    </div>
+    {{ end }}
   </section>
 {{ end }}
 {{ template "B1-SIGNOFF-01" $b }}

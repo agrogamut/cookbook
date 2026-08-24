@@ -26,17 +26,39 @@ var ErrDraftingUnavailable = errors.New("aidraft: drafting unavailable")
 type Drafter interface {
 	DraftModificationNote(ctx context.Context, req ModificationRequest) (DraftedText, error)
 	DraftInventedRecipe(ctx context.Context, req InventedRecipeRequest) (InventedRecipe, error)
+	DraftDoctorApproachNote(ctx context.Context, req DoctorApproachRequest) (DraftedText, error)
 }
 
 // DraftedText is one piece of AI-drafted prose plus a provenance record -- the same "every
 // value carries its source" instinct CLAUDE.md applies to derived data values, carried over to
 // generated prose even though prose isn't a derived value in the schema sense.
 type DraftedText struct {
-	Text             string    `json:"text"`
-	Source           string    `json:"source"` // "gemini" -- static, non-AI text never reaches this package at all
-	Model            string    `json:"model,omitempty"`
-	GeneratedAt      time.Time `json:"generated_at"`
-	GroundedOnRuleID string    `json:"grounded_on_rule_id,omitempty"` // clinical_rule_master.rule_id this note paraphrases
+	Text        string    `json:"text"`
+	Source      string    `json:"source"` // "gemini" -- static, non-AI text never reaches this package at all
+	Model       string    `json:"model,omitempty"`
+	GeneratedAt time.Time `json:"generated_at"`
+	// GroundedOnRuleID names the provider row this note paraphrases: clinical_rule_master.rule_id
+	// for a recipe modification note, book1_evidence_source.source_id for a Book 1 doctor-approach
+	// note. One field rather than two, because both are the same claim -- "here is the row a
+	// human can check this sentence against" -- against a different master depending on caller.
+	GroundedOnRuleID string `json:"grounded_on_rule_id,omitempty"`
+}
+
+// DoctorApproachRequest grounds a Book 1 doctor-approach/red-flag note in the block's own
+// provider text plus its cited evidence row. Nothing here is per-child: these are general
+// guidance blocks (child profile, growth record, feeding-stage pages, monitoring dashboards),
+// not a condition-specific note the way ModificationRequest is, so unlike that request there is
+// no child age or recipe name to thread through.
+type DoctorApproachRequest struct {
+	BlockID             string
+	Section             string
+	ContentPurpose      string // book1_content_block.content_purpose, verbatim
+	ParentFacingOutput  string // book1_content_block.parent_facing_output, verbatim
+	EvidenceSourceID    string
+	EvidenceAuthority   string
+	EvidenceTopic       string
+	HowUsed             string // book1_evidence_source.how_used, verbatim
+	ImportantLimitation string // book1_evidence_source.important_limitation, verbatim
 }
 
 // ModificationRequest grounds one drafted note in the provider's own clinical_rule_master

@@ -112,6 +112,10 @@ func Run(ctx context.Context, pool *pgxpool.Pool, xlsxDir string) ([]Result, err
 		}
 	}
 
+	if err := seedIngredientAllergenOverride(ctx, tx); err != nil {
+		return nil, err
+	}
+
 	if err := measureGaps(ctx, tx); err != nil {
 		return nil, err
 	}
@@ -401,4 +405,36 @@ func convert(raw string, c column) (any, error) {
 	default:
 		return s, nil
 	}
+}
+
+// seedIngredientAllergenOverride populates the ingredient_allergen_override correction table
+// (migration 0024) with its three hand-written rows. The migration's own INSERT is
+// conditional on ingredient_master already holding those ids, which it never does at
+// migrate-on-startup time -- db.Connect runs every pending migration before this function's
+// caller loads a single workbook row. This call is what actually seeds the table, every run,
+// once ingredient_master is populated; it is a no-op once the rows already exist.
+func seedIngredientAllergenOverride(ctx context.Context, tx pgx.Tx) error {
+	_, err := tx.Exec(ctx, `
+		INSERT INTO ingredient_allergen_override (ingredient_id, allergen_group, reason)
+		SELECT * FROM (
+		    VALUES
+		        ('ING0063', 'Peanut',
+		         'allergen_mapping.ALG-PEANUT names "groundnut oil" directly under '
+		         || 'common_derivatives_or_hidden_sources.'),
+		        ('ING0062', 'Mustard',
+		         'allergen_mapping.ALG-MUSTARD names "Mustard oil" directly under '
+		         || 'common_derivatives_or_hidden_sources.'),
+		        ('ING0191', 'Mustard',
+		         'allergen_mapping.ALG-MUSTARD names "Mustard seed" directly under '
+		         || 'example_ingredients -- this is the base allergen, not a derivative.')
+		) AS data(ingredient_id, allergen_group, reason)
+		WHERE EXISTS (SELECT 1 FROM ingredient_master WHERE ingredient_id = data.ingredient_id)
+		  AND NOT EXISTS (
+		    SELECT 1 FROM ingredient_allergen_override
+		    WHERE ingredient_id = data.ingredient_id AND allergen_group = data.allergen_group
+		  )`)
+	if err != nil {
+		return fmt.Errorf("importer: seed ingredient_allergen_override: %w", err)
+	}
+	return nil
 }

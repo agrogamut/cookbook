@@ -142,7 +142,37 @@ of the gap this section describes. This ruling stands unmodified for Book 1 and 
 anything outside Book 2 recipe content — the five-block `ai_can_draft = 'N'` gate CLAUDE.md
 already documents is untouched by any of this.
 
-### The constraint nobody has solved
+#### Amendment — extended to Book 1's non-gated blocks, same mechanism, still not repealed (2026-08-24)
+
+The paragraph above named Book 1 as still covered by the unmodified 18 August ruling. That
+stands as written for the twenty-seven blocks the five-block gate does not cover — this
+amendment does not widen the gate — but it narrows the ruling itself the same way the Book 2
+amendment did: a Book 1 block outside `ai_can_draft = 'N'` may now carry a short,
+Gemini-drafted "what to discuss with your doctor" note (`internal/aidraft.DraftDoctorApproachNote`,
+`Section.DoctorApproachNote`), grounded the same way Book 2's modification notes are — real
+provider text in, paraphrase only, never a new clinical claim — with the same physical
+signature page as the only human checkpoint. No new review portal, no `clinical_pass`/
+`nutrition_pass`/etc. gate; this is the identical mechanism the Book 2 amendment already
+adopted, applied to a second document rather than a second gate.
+
+Grounding source: `book1_content_block.content_purpose`/`parent_facing_output` (the
+provider's own sentences about the page) plus the block's cited `book1_evidence_source` row
+via `book1_content_block.source_id`, joined directly — verified live before any code was
+written, per the executing plan's own first step. The direct join resolves for 29 of the
+32 blocks; the three exceptions (`B1-010`, `B1-018`, `B1-022`) all already carry real
+provider-sourced red-flag/doctor-review content through another path (a monitoring
+template's `alarm_column`, the child's own safety card, and the gated reference block
+itself), so none of them is a candidate for this feature and the join gap never surfaces.
+No hand-written bridge table was needed.
+
+Scope is eight blocks, not the seventeen or twenty-seven a naive reading of `gap_register`
+or the plan's own opening context might suggest: `internal/book/book1.go`'s
+`doctorApproachEligible` names them and its own comment explains, block by block, why every
+other one already carries real content and would get redundant clutter rather than a gap
+closed. The `ai_can_draft = 'N'` gate is re-checked in code at the same point (queried
+live from the row just loaded, not hardcoded), so a gated block is never a drafting
+candidate in the first place — pinned by a test that wires in a Drafter willing to draft
+for every block and asserts the five gated ones still come back with no note.
 
 The general content pool is currently too thin to carry personalization at all:
 

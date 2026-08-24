@@ -36,6 +36,33 @@ func (g *geminiClient) DraftModificationNote(ctx context.Context, req Modificati
 	}, nil
 }
 
+// DraftDoctorApproachNote asks Gemini to paraphrase a Book 1 block's own provider text and its
+// cited evidence row into a short doctor-approach note. See buildDoctorApproachPrompt for the
+// grounding contract.
+func (g *geminiClient) DraftDoctorApproachNote(ctx context.Context, req DoctorApproachRequest) (DraftedText, error) {
+	resp, err := g.client.Models.GenerateContent(ctx, modelName, genai.Text(buildDoctorApproachPrompt(req)),
+		&genai.GenerateContentConfig{
+			ResponseMIMEType: "application/json",
+			ResponseSchema:   doctorApproachSchema(),
+		})
+	if err != nil {
+		return DraftedText{}, fmt.Errorf("%w: gemini doctor-approach note request: %v", ErrDraftingUnavailable, err)
+	}
+
+	var out doctorApproachResponse
+	if err := json.Unmarshal([]byte(resp.Text()), &out); err != nil {
+		return DraftedText{}, fmt.Errorf("%w: decode doctor-approach note response: %v", ErrDraftingUnavailable, err)
+	}
+
+	return DraftedText{
+		Text:             out.Note,
+		Source:           "gemini",
+		Model:            modelName,
+		GeneratedAt:      time.Now(),
+		GroundedOnRuleID: req.EvidenceSourceID,
+	}, nil
+}
+
 // DraftInventedRecipe asks Gemini for a whole fallback recipe constrained to req's allowed
 // ingredients and dish formats. The response is returned exactly as decoded -- this function
 // performs no safety validation. internal/book must re-check every ingredient id against

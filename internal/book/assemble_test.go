@@ -743,3 +743,100 @@ func TestOnlyTheFirstSectionAndFullPageFormsBreak(t *testing.T) {
 		}
 	}
 }
+
+// alwaysWillingDoctorDrafter drafts a doctor-approach note for any block it's asked about --
+// the "willing fake" the gate tests below need, so a missing note proves the gate stopped the
+// call rather than proving the fake declined to answer.
+type alwaysWillingDoctorDrafter struct{ fakeDrafter }
+
+func (alwaysWillingDoctorDrafter) DraftDoctorApproachNote(_ context.Context, req aidraft.DoctorApproachRequest) (aidraft.DraftedText, error) {
+	return aidraft.DraftedText{
+		Text:             "Mention this at your next visit if you have questions.",
+		Source:           "gemini",
+		Model:            "test-model",
+		GeneratedAt:      time.Now(),
+		GroundedOnRuleID: req.EvidenceSourceID,
+	}, nil
+}
+
+// Every block doctorApproachEligible names must actually carry a note once a willing drafter is
+// wired in -- proving the eligibility list isn't just documentation nobody wires up.
+func TestDoctorApproachNoteFillsTheGenuineGapBlocks(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	b, _, err := AssembleBook1(ctx, pool, storedProfileAged(51), time.Now(),
+		WithDrafter(alwaysWillingDoctorDrafter{}))
+	if err != nil {
+		t.Fatalf("AssembleBook1: %v", err)
+	}
+
+	found := map[string]bool{}
+	for _, s := range b.Sections {
+		if s.DoctorApproachNote != nil {
+			found[s.BlockID] = true
+			if s.DoctorApproachNote.Text == "" {
+				t.Errorf("%s: DoctorApproachNote set with an empty Text", s.BlockID)
+			}
+		}
+	}
+	for blockID := range doctorApproachEligible {
+		if !found[blockID] {
+			// Age-eligibility can drop a block for a 51-month-old the same way any other
+			// block can be age-excluded; only fail on a block that actually rendered.
+			rendered := false
+			for _, s := range b.Sections {
+				if s.BlockID == blockID {
+					rendered = true
+				}
+			}
+			if rendered {
+				t.Errorf("%s is in doctorApproachEligible and rendered, but carries no "+
+					"DoctorApproachNote under a willing drafter", blockID)
+			}
+		}
+	}
+}
+
+// The five ai_can_draft = 'N' blocks must never carry a drafted note, even under a drafter
+// that would happily draft one for every block asked -- the same "prove the gate stops the
+// call" pattern TestInventedRecipeFallbackNeverRunsBelowMinAge already uses. A missing note
+// here proves the code-level gate in book1.go stopped the call; TestAICanDraftGateIsPinned
+// (internal/db) separately pins that the underlying data still names exactly these five.
+func TestDoctorApproachNoteNeverReachesGatedBlocks(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	rows, err := pool.Query(ctx,
+		`SELECT block_id FROM book1_content_block WHERE ai_can_draft = 'N' ORDER BY block_id`)
+	if err != nil {
+		t.Fatalf("query gated blocks: %v", err)
+	}
+	var gated []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			t.Fatalf("scan gated block: %v", err)
+		}
+		gated = append(gated, id)
+	}
+	rows.Close()
+	if len(gated) == 0 {
+		t.Fatal("no ai_can_draft = 'N' blocks found; the gate cannot be exercised")
+	}
+
+	b, _, err := AssembleBook1(ctx, pool, storedProfileAged(51), time.Now(),
+		WithDrafter(alwaysWillingDoctorDrafter{}))
+	if err != nil {
+		t.Fatalf("AssembleBook1: %v", err)
+	}
+
+	for _, s := range b.Sections {
+		for _, g := range gated {
+			if s.BlockID == g && s.DoctorApproachNote != nil {
+				t.Errorf("%s has ai_can_draft = 'N' and must never carry a DoctorApproachNote, "+
+					"even under a drafter willing to supply one", g)
+			}
+		}
+	}
+}

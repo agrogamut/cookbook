@@ -50,6 +50,58 @@ func buildModificationPrompt(req ModificationRequest) string {
 	return b.String()
 }
 
+// doctorApproachResponse is the JSON shape the model is constrained to for a doctor-approach
+// note. One field, same reasoning as modificationResponse.
+type doctorApproachResponse struct {
+	Note string `json:"note"`
+}
+
+func doctorApproachSchema() *genai.Schema {
+	return &genai.Schema{
+		Type:     genai.TypeObject,
+		Required: []string{"note"},
+		Properties: map[string]*genai.Schema{
+			"note": {Type: genai.TypeString},
+		},
+	}
+}
+
+// buildDoctorApproachPrompt hands the model the block's own provider text -- content_purpose,
+// parent_facing_output -- and its cited evidence row's how_used/important_limitation as the
+// only source of fact, and instructs it to paraphrase rather than extend. Severity is fixed at
+// "info" by the caller, never decided here: a drafted note claiming warning-level urgency would
+// be exactly the overclaim CLAUDE.md's hard rule exists to prevent, and "warning" stays reserved
+// for the provider's own red-flag rows.
+func buildDoctorApproachPrompt(req DoctorApproachRequest) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "You are writing a short general-guidance note for a page in a children's "+
+		"daily-life handbook, on the topic of when to involve a doctor. Write one short, "+
+		"warm, parent-readable paragraph (2-3 sentences) suggesting when a parent might want "+
+		"to mention this page's topic to their child's doctor. Do not add any clinical claim, "+
+		"threshold, diagnosis, medication, or fact that is not already present in the "+
+		"guidance below. Never claim urgency beyond what the guidance states. If the "+
+		"guidance is thin, keep the note short and generic (e.g. \"mention this at your next "+
+		"visit if you have questions\") rather than inventing detail to fill space.\n\n")
+	fmt.Fprintf(&b, "Book section: %s\n", req.Section)
+	if req.ContentPurpose != "" {
+		fmt.Fprintf(&b, "This page's purpose: %s\n", req.ContentPurpose)
+	}
+	if req.ParentFacingOutput != "" {
+		fmt.Fprintf(&b, "What this page shows a parent: %s\n", req.ParentFacingOutput)
+	}
+	fmt.Fprintf(&b, "\nCited evidence (the ONLY source of fact you may use):\n")
+	if req.EvidenceAuthority != "" || req.EvidenceTopic != "" {
+		fmt.Fprintf(&b, "- Source: %s, on %s\n", req.EvidenceAuthority, req.EvidenceTopic)
+	}
+	if req.HowUsed != "" {
+		fmt.Fprintf(&b, "- How this project uses it: %s\n", req.HowUsed)
+	}
+	if req.ImportantLimitation != "" {
+		fmt.Fprintf(&b, "- Its stated limitation: %s\n", req.ImportantLimitation)
+	}
+	return b.String()
+}
+
 // inventedRecipeResponse is the JSON shape a fallback recipe is constrained to.
 type inventedRecipeResponse struct {
 	Name         string                   `json:"name"`

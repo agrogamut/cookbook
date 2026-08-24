@@ -45,13 +45,13 @@ type Set struct {
 //
 // Errors name which book failed. The two assemblers read different tables, so an operator
 // chasing a failure needs to know which half of the run produced it.
-func AssembleSet(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, asOf time.Time) (Set, error) {
-	b1, dropped1, err := AssembleBook1(ctx, pool, s, asOf)
+func AssembleSet(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, asOf time.Time, opts ...AssembleOption) (Set, error) {
+	b1, dropped1, err := AssembleBook1(ctx, pool, s, asOf, opts...)
 	if err != nil {
 		return Set{}, fmt.Errorf("book1: %w", err)
 	}
 
-	b2, dropped2, err := AssembleBook2(ctx, pool, s, asOf)
+	b2, dropped2, err := AssembleBook2(ctx, pool, s, asOf, opts...)
 	if err != nil {
 		return Set{}, fmt.Errorf("book2: %w", err)
 	}

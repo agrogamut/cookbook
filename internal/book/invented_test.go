@@ -20,6 +20,7 @@ import (
 // disabled client's default behaviour so a test only has to wire up what it actually exercises.
 type fakeDrafter struct {
 	inventFn func(ctx context.Context, req aidraft.InventedRecipeRequest) (aidraft.InventedRecipe, error)
+	doctorFn func(ctx context.Context, req aidraft.DoctorApproachRequest) (aidraft.DraftedText, error)
 }
 
 func (f fakeDrafter) DraftModificationNote(context.Context, aidraft.ModificationRequest) (aidraft.DraftedText, error) {
@@ -31,6 +32,13 @@ func (f fakeDrafter) DraftInventedRecipe(ctx context.Context, req aidraft.Invent
 		return aidraft.InventedRecipe{}, aidraft.ErrDraftingUnavailable
 	}
 	return f.inventFn(ctx, req)
+}
+
+func (f fakeDrafter) DraftDoctorApproachNote(ctx context.Context, req aidraft.DoctorApproachRequest) (aidraft.DraftedText, error) {
+	if f.doctorFn == nil {
+		return aidraft.DraftedText{}, aidraft.ErrDraftingUnavailable
+	}
+	return f.doctorFn(ctx, req)
 }
 
 // unmappedCategory returns one meal_category_target row (GAP-023: a category with zero rows

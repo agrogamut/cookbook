@@ -46,13 +46,23 @@ COMMENT ON TABLE ingredient_allergen_override IS
     'table alongside the provider''s own allergen_tags, the same pattern the nutrition '
     'correction layer uses.';
 
-INSERT INTO ingredient_allergen_override (ingredient_id, allergen_group, reason) VALUES
-    ('ING0063', 'Peanut',
-     'allergen_mapping.ALG-PEANUT names "groundnut oil" directly under '
-     || 'common_derivatives_or_hidden_sources.'),
-    ('ING0062', 'Mustard',
-     'allergen_mapping.ALG-MUSTARD names "Mustard oil" directly under '
-     || 'common_derivatives_or_hidden_sources.'),
-    ('ING0191', 'Mustard',
-     'allergen_mapping.ALG-MUSTARD names "Mustard seed" directly under '
-     || 'example_ingredients -- this is the base allergen, not a derivative.');
+-- Seed the three override rows only if the ingredients exist; if this migration runs before
+-- the importer populates ingredient_master (as during db.Connect at app startup, which always
+-- runs every pending migration before cmd/import loads a single workbook row), the rows stay
+-- empty and are added by seedIngredientAllergenOverride (internal/importer/importer.go) after
+-- ingredient_master is populated. Without this guard, migrating a genuinely fresh database
+-- fails its very first `go run ./cmd/import` on this FK -- found live, twice, the same way.
+INSERT INTO ingredient_allergen_override (ingredient_id, allergen_group, reason)
+SELECT * FROM (
+    VALUES
+        ('ING0063', 'Peanut',
+         'allergen_mapping.ALG-PEANUT names "groundnut oil" directly under '
+         || 'common_derivatives_or_hidden_sources.'),
+        ('ING0062', 'Mustard',
+         'allergen_mapping.ALG-MUSTARD names "Mustard oil" directly under '
+         || 'common_derivatives_or_hidden_sources.'),
+        ('ING0191', 'Mustard',
+         'allergen_mapping.ALG-MUSTARD names "Mustard seed" directly under '
+         || 'example_ingredients -- this is the base allergen, not a derivative.')
+) AS data(ingredient_id, allergen_group, reason)
+WHERE EXISTS (SELECT 1 FROM ingredient_master WHERE ingredient_id = data.ingredient_id);

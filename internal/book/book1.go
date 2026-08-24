@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/madamgy/recipie/internal/aidraft"
 	"github.com/madamgy/recipie/internal/engine"
 	"github.com/madamgy/recipie/internal/models"
 	"github.com/madamgy/recipie/internal/profile"
@@ -73,6 +74,35 @@ var blockTemplate = map[string]string{
 	"B1-032": "B1-DAILY-01",
 }
 
+// doctorApproachEligible names the blocks that reach the page today with no red-flag or
+// doctor-approach content of their own -- verified live against the rendered book, not against
+// gap_register's stated "27", which does not reconcile against current code and predates the
+// block-source mapping. Every other block already carries provider-sourced red-flag/doctor-
+// review text through its own template, and a second generic box on top of a real one would be
+// redundant clutter, not a gap closed:
+//
+//   - B1-005 (the stage "target" facet) prints ChokingControl/HardExclusion/EscalationTriggers
+//     from age_feeding_stage_master directly -- B1-006/007/008 share the template but not the
+//     facet, and the other three facets print none of that.
+//   - Six B1-TRACKER-01 blocks (B1-010, 013, 016, 017, 019, 021) already print
+//     book1_monitoring_template.alarm_column/doctor_review_column as the grid's own "Warning:
+//     when this needs attention" callout (tracker.html). B1-002, 020 and 031 have no monitoring
+//     template behind them (020/031 are the two summary dashboards; 002 is a writable-only goal
+//     table) and print nothing.
+//   - B1-012 is the global red-flag block itself (B1-RED-01); B1-015/016 carry
+//     IllnessBlock.RedFlags; B1-018 is the child's own safety card, already the most
+//     safety-critical box in the book.
+//
+// The remaining eight are real gaps: B1-001 (profile), B1-002 (goal tracker), B1-003 (growth),
+// B1-006/007/008 (the other three stage facets), B1-020/031 (the two dashboards). See
+// docs/phase-3-book-engine.md's dated amendment for the source_id/evidence-join verification
+// this list rests on.
+var doctorApproachEligible = map[string]bool{
+	"B1-001": true, "B1-002": true, "B1-003": true,
+	"B1-006": true, "B1-007": true, "B1-008": true,
+	"B1-020": true, "B1-031": true,
+}
+
 // vaccineScheduleRow is one row of book1_vaccine_schedule, read verbatim. age_min_months is
 // kept as the provider's own text: most rows are numeric, but the risk-based rows ("Varies",
 // "Any") are not, and forcing them to a number here would be a guess this project has no
@@ -107,7 +137,12 @@ type developmentMilestoneRow struct {
 // full book of general-population milestone tables in their own name with no mention of the
 // clinician's stop. The provider's rule is a stop on generation, not a recipe filter, so the
 // gate has to sit here too. Blocking needs no clinical sign-off; issuing the document does.
-func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, asOf time.Time) (Book1, []string, error) {
+func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, asOf time.Time, opts ...AssembleOption) (Book1, []string, error) {
+	cfg := assembleOptions{drafter: aidraft.Disabled}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	cp, dropped, err := s.ToChildProfile(asOf)
 	if err != nil {
 		return Book1{}, nil, fmt.Errorf("book: derive engine input: %w", err)
@@ -188,12 +223,21 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		return Book1{}, nil, fmt.Errorf("book: load safety card: %w", err)
 	}
 
+	// The evidence join is LEFT, not INNER: three block_id/source_id values (B1-010, B1-018,
+	// B1-022) have no matching book1_evidence_source row (verified live -- 13 evidence rows
+	// against 32 blocks' source_id values), and none of doctorApproachEligible's eight blocks
+	// is one of the three, so the join resolves cleanly for every block this feature actually
+	// drafts for. See docs/phase-3-book-engine.md's dated amendment for the verification.
 	rows, err := pool.Query(ctx, `
-		SELECT block_id, book_order, coalesce(section, ''), coalesce(subsection, ''),
-		       age_from_mo, age_to_mo, coalesce(part, ''), coalesce(content_purpose, ''),
-		       coalesce(parent_facing_output, ''), coalesce(writable_fields, '')
-		FROM book1_content_block
-		ORDER BY book_order`)
+		SELECT b.block_id, b.book_order, coalesce(b.section, ''), coalesce(b.subsection, ''),
+		       b.age_from_mo, b.age_to_mo, coalesce(b.part, ''), coalesce(b.content_purpose, ''),
+		       coalesce(b.parent_facing_output, ''), coalesce(b.writable_fields, ''),
+		       b.ai_can_draft, coalesce(b.source_id, ''),
+		       coalesce(e.authority, ''), coalesce(e.topic, ''),
+		       coalesce(e.how_used, ''), coalesce(e.important_limitation, '')
+		FROM book1_content_block b
+		LEFT JOIN book1_evidence_source e ON e.source_id = b.source_id
+		ORDER BY b.book_order`)
 	if err != nil {
 		return Book1{}, nil, fmt.Errorf("book: load blocks: %w", err)
 	}
@@ -202,10 +246,13 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 	skipped := append([]string{}, dropped...)
 	for rows.Next() {
 		var blockID, sectionTitle, subsection, part, purpose, facing, writable string
+		var aiCanDraft, evidenceSourceID, evidenceAuthority, evidenceTopic string
+		var evidenceHowUsed, evidenceLimitation string
 		var order int
 		var ageFrom, ageTo *int
 		if err := rows.Scan(&blockID, &order, &sectionTitle, &subsection, &ageFrom, &ageTo,
-			&part, &purpose, &facing, &writable); err != nil {
+			&part, &purpose, &facing, &writable, &aiCanDraft, &evidenceSourceID,
+			&evidenceAuthority, &evidenceTopic, &evidenceHowUsed, &evidenceLimitation); err != nil {
 			return Book1{}, nil, fmt.Errorf("book: scan block: %w", err)
 		}
 		if (ageFrom != nil && cp.AgeMonths < *ageFrom) || (ageTo != nil && cp.AgeMonths > *ageTo) {
@@ -229,6 +276,28 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			// introductory prose these pages carry, and it is theirs rather than drafted here.
 			Purpose: purpose,
 			Covers:  splitDeclared(facing),
+		}
+
+		// The ai_can_draft gate is checked here, at data-load time, before this block is ever
+		// a drafting candidate -- not after a draft comes back, which would mean the five
+		// gated blocks were drafted for and then discarded. See TestDoctorApproachNoteNeverReachesGatedBlocks.
+		if doctorApproachEligible[blockID] && aiCanDraft == "Y" && cfg.drafter != aidraft.Disabled {
+			note, err := cfg.drafter.DraftDoctorApproachNote(ctx, aidraft.DoctorApproachRequest{
+				BlockID:             blockID,
+				Section:             sectionTitle,
+				ContentPurpose:      purpose,
+				ParentFacingOutput:  facing,
+				EvidenceSourceID:    evidenceSourceID,
+				EvidenceAuthority:   evidenceAuthority,
+				EvidenceTopic:       evidenceTopic,
+				HowUsed:             evidenceHowUsed,
+				ImportantLimitation: evidenceLimitation,
+			})
+			if err == nil {
+				sec.DoctorApproachNote = &note
+			}
+			// Drafting unavailable or the call failed: no note, never a half-built one, and
+			// never a reason to fail the block -- the same fallback clinical_notes.go uses.
 		}
 
 		// A rendered section must carry content. Populating Rows/Cards/Callout here, per

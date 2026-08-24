@@ -51,6 +51,10 @@ func (disabledClient) DraftInventedRecipe(context.Context, InventedRecipeRequest
 	return InventedRecipe{}, ErrDraftingUnavailable
 }
 
+func (disabledClient) DraftDoctorApproachNote(context.Context, DoctorApproachRequest) (DraftedText, error) {
+	return DraftedText{}, ErrDraftingUnavailable
+}
+
 // geminiClient is the real implementation, defined in draft.go.
 type geminiClient struct {
 	client *genai.Client
