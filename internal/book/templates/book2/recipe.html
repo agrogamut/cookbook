@@ -8,16 +8,23 @@
      fragmenter has nowhere to put. That failure was measured on the earlier layout: a card
      with break-inside: avoid under a section band left the band alone on a blank sheet.
 
-     There is no photograph, here or anywhere in this book, and none is coming from a dataset
-     (GAP-025). No provider workbook carries an image column; the one external corpus that does
-     carry image URLs photographs a different dish under an unstated licence, and printing from
-     it would mean this service fetching arbitrary remote files into a document handed to a
-     family. The full refusal is in marks.go. Filling this needs photographs commissioned
-     against the recipe list.
+     A per-recipe, this-exact-dish photograph still does not exist and is not coming from a
+     dataset (GAP-025, still open). No provider workbook carries an image column, and the one
+     external corpus that does carry image URLs photographs a different dish under an unstated
+     licence -- printing from it would mean this service fetching arbitrary remote files into a
+     document handed to a family. The full refusal of that kind of photograph is in marks.go.
 
-     What the page carries instead is a drawing of the dish *format* -- a provider-recorded
-     value read out of the recipe name -- captioned with that format, so its claim is explicit
-     and a reader can check it against the title beside it. */}}
+     What this page carries instead, when the archetype has one, is a real photograph of the
+     dish *format* -- fetched and matched by internal/photomatch, stored in
+     dish_format_photo, reused across every recipe sharing that format the same way the drawn
+     mark already is. That reuse is exactly what GAP-029 names ("no per-recipe commissioned
+     photograph, format-level stock photo only") so the distinction from a photograph of this
+     specific dish stays on the record rather than implied. See photo.go's RepresentativePhoto.
+
+     When no stored photo exists for the archetype -- the common case; the seeded gap covers 11
+     archetypes and only some have a matched photo -- the page falls back to the drawing of the
+     dish format, a provider-recorded value read out of the recipe name, captioned with that
+     format so its claim is explicit and a reader can check it against the title beside it. */}}
 <div class="recipe">
   {{ if .Photo }}
   <figure class="dish-mark">

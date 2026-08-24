@@ -319,11 +319,12 @@ func buildInventedCard(ctx context.Context, pool *pgxpool.Pool, recipeID, versio
 		Source:           "ai-invented",
 		Mark:             Mark(invented.DishFormatID, archetypeLabel(invented.DishFormatID)),
 	}
-	if photo, err := RepresentativePhoto(ctx, pool, invented.DishFormatID); err != nil {
-		return RecipeCard{}, fmt.Errorf("invented recipe photo lookup: %w", err)
-	} else {
-		card.Photo = photo
+	photo, err := RepresentativePhoto(ctx, pool, invented.DishFormatID)
+	if err != nil {
+		return RecipeCard{}, fmt.Errorf("invented recipe %s photo lookup for dish format %s: %w",
+			recipeID, invented.DishFormatID, err)
 	}
+	card.Photo = photo
 	return card, nil
 }
 

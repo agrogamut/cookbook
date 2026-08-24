@@ -3,7 +3,9 @@ package book
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
+	"html/template"
 	"os"
 	"strings"
 	"testing"
@@ -513,6 +515,179 @@ func TestLoadRecipeCardsReportsAJoinMiss(t *testing.T) {
 	if !found {
 		t.Fatalf("recipe id %s has no method card row; it must be named in the skip list, got %v",
 			missingID, skipped)
+	}
+}
+
+// loadRecipeCards actually resolves card.Photo from a real dish_format_photo row, not just
+// from a struct a test handed the template layer directly. render_test.go's
+// TestRecipePageShowsPhotoWhenPresentAndMarkOtherwise proves the template renders whatever
+// RecipeCard.Photo already holds; it cannot catch a wrong query or a wrong argument to
+// RepresentativePhoto inside loadRecipeCards itself, because it never asks the database for
+// one -- the same gap TestLoadRecipeCardsReportsAJoinMiss exists to close for a join miss.
+//
+// Two real, currently-photo-less archetypes are found dynamically (recipe_mark EXCEPT
+// dish_format_photo) rather than hardcoded, so the test does not silently stop exercising the
+// positive case the day cmd/photomatch happens to gain coverage for whichever archetype used
+// to be named here. A fixture row is inserted for one of them and removed again in cleanup;
+// the other is left exactly as found, to prove the no-photo path off real data too.
+func TestLoadRecipeCardsResolvesAStoredPhoto(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	rows, err := pool.Query(ctx, `
+		SELECT DISTINCT mark_id FROM recipe_mark
+		EXCEPT SELECT mark_id FROM dish_format_photo
+		ORDER BY mark_id LIMIT 2`)
+	if err != nil {
+		t.Fatalf("find photo-less archetypes: %v", err)
+	}
+	var bare []string
+	for rows.Next() {
+		var m string
+		if err := rows.Scan(&m); err != nil {
+			t.Fatalf("scan archetype: %v", err)
+		}
+		bare = append(bare, m)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("archetype rows: %v", err)
+	}
+	rows.Close()
+	if len(bare) < 2 {
+		t.Skip("fewer than two archetypes are currently without a stored photo; cannot set up " +
+			"both the positive and negative case from real data")
+	}
+	withPhotoMark, noPhotoMark := bare[0], bare[1]
+
+	var withPhotoRecipe, noPhotoRecipe string
+	if err := pool.QueryRow(ctx,
+		`SELECT recipe_id FROM recipe_mark WHERE mark_id = $1 LIMIT 1`, withPhotoMark,
+	).Scan(&withPhotoRecipe); err != nil {
+		t.Fatalf("find a recipe carrying mark %s: %v", withPhotoMark, err)
+	}
+	if err := pool.QueryRow(ctx,
+		`SELECT recipe_id FROM recipe_mark WHERE mark_id = $1 LIMIT 1`, noPhotoMark,
+	).Scan(&noPhotoRecipe); err != nil {
+		t.Fatalf("find a recipe carrying mark %s: %v", noPhotoMark, err)
+	}
+
+	const fixtureBytes = "fixture-photo-bytes"
+	if _, err := pool.Exec(ctx,
+		`DELETE FROM dish_format_photo WHERE mark_id = $1 AND source_dataset = 'TEST'`, withPhotoMark,
+	); err != nil {
+		t.Fatalf("clear any stale fixture: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO dish_format_photo
+			(mark_id, media_type, bytes, credit, licence, source_dataset, source_row_id, source_label, added_by)
+		VALUES ($1, 'image/jpeg', $2, 'c', 'l', 'TEST', 'task-7-fix', 'label', 'test')`,
+		withPhotoMark, []byte(fixtureBytes)); err != nil {
+		t.Fatalf("insert fixture photo: %v", err)
+	}
+	t.Cleanup(func() {
+		if _, err := pool.Exec(context.Background(),
+			`DELETE FROM dish_format_photo WHERE mark_id = $1 AND source_dataset = 'TEST'`, withPhotoMark,
+		); err != nil {
+			t.Errorf("cleanup fixture photo: %v", err)
+		}
+	})
+
+	ids := []string{withPhotoRecipe, noPhotoRecipe}
+	cards, skipped, err := loadRecipeCards(ctx, pool, ids, "MC-TEST", "v-test",
+		map[string]bool{}, map[string][]string{}, map[string]string{}, map[string]models.RankedRecipe{},
+		models.ChildProfile{}, models.EngineResult{}, aidraft.Disabled, nil)
+	if err != nil {
+		t.Fatalf("loadRecipeCards: %v", err)
+	}
+	if len(skipped) != 0 {
+		t.Fatalf("unexpected skips: %v", skipped)
+	}
+	byID := make(map[string]RecipeCard, len(cards))
+	for _, c := range cards {
+		byID[c.RecipeID] = c
+	}
+
+	withPhoto, ok := byID[withPhotoRecipe]
+	if !ok {
+		t.Fatalf("recipe %s (mark %s) was not rendered", withPhotoRecipe, withPhotoMark)
+	}
+	if withPhoto.Photo == nil {
+		t.Fatalf("recipe %s: mark %s has a stored dish_format_photo row, but card.Photo is nil -- "+
+			"loadRecipeCards did not resolve it from the database", withPhotoRecipe, withPhotoMark)
+	}
+	wantURI := template.URL("data:image/jpeg;base64," + base64.StdEncoding.EncodeToString([]byte(fixtureBytes)))
+	if withPhoto.Photo.DataURI != wantURI {
+		t.Fatalf("card.Photo.DataURI = %q, want %q", withPhoto.Photo.DataURI, wantURI)
+	}
+	if withPhoto.Mark == nil || withPhoto.Mark.ID != withPhotoMark {
+		t.Fatalf("card.Mark must still resolve to %q even when a photo is present, got %+v",
+			withPhotoMark, withPhoto.Mark)
+	}
+
+	noPhoto, ok := byID[noPhotoRecipe]
+	if !ok {
+		t.Fatalf("recipe %s (mark %s) was not rendered", noPhotoRecipe, noPhotoMark)
+	}
+	if noPhoto.Photo != nil {
+		t.Fatalf("recipe %s: mark %s carries no stored photo, but card.Photo = %+v, want nil",
+			noPhotoRecipe, noPhotoMark, noPhoto.Photo)
+	}
+	if noPhoto.Mark == nil || noPhoto.Mark.ID != noPhotoMark {
+		t.Fatalf("card.Mark must still print when Photo is nil, got %+v", noPhoto.Mark)
+	}
+}
+
+// The same wiring, exercised through the real assembly path rather than loadRecipeCards
+// directly -- AssembleBook2 for a broad profile against the dev database's own real
+// cmd/photomatch output (no fixtures here), so the full loadRecipeCards call inside the real
+// engine run is what is under test, not a hand-built argument list.
+func TestAssembledBook2CardsCarryStoredPhotosWhereMatched(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	s := profile.Stored{
+		ChildID:     "BOOK-TEST-PHOTO",
+		DateOfBirth: time.Date(2022, 5, 1, 0, 0, 0, 0, time.UTC),
+		DietType:    "Vegetarian",
+	}
+	b, _, err := AssembleBook2(ctx, pool, s, time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("AssembleBook2: %v", err)
+	}
+
+	sawAPhoto := false
+	for _, sec := range b.MealSections {
+		for _, card := range sec.Recipes {
+			if card.Mark == nil {
+				continue
+			}
+			want, err := RepresentativePhoto(ctx, pool, card.Mark.ID)
+			if err != nil {
+				t.Fatalf("RepresentativePhoto(%s): %v", card.Mark.ID, err)
+			}
+			switch {
+			case want == nil && card.Photo != nil:
+				t.Fatalf("recipe %s (mark %s): card.Photo = %+v, but the archetype has no "+
+					"stored photo", card.RecipeID, card.Mark.ID, card.Photo)
+			case want != nil && card.Photo == nil:
+				t.Fatalf("recipe %s (mark %s): card.Photo is nil, but the archetype has a "+
+					"stored photo", card.RecipeID, card.Mark.ID)
+			case want != nil && card.Photo.DataURI != want.DataURI:
+				t.Fatalf("recipe %s (mark %s): card.Photo.DataURI does not match "+
+					"RepresentativePhoto's own result for the same mark", card.RecipeID, card.Mark.ID)
+			}
+			if card.Photo != nil {
+				sawAPhoto = true
+			}
+		}
+	}
+	// A broad vegetarian profile reaching Breakfast, Lunch and Dinner draws from most of the
+	// 11 dish-format archetypes, and 9 of 11 carry a real matched photo today -- so a run that
+	// saw none at all would mean the wiring silently stopped resolving photos in the real
+	// assembly path, not just an unlucky sample.
+	if !sawAPhoto {
+		t.Fatal("no card in the assembled book carried a Photo, though most archetypes have " +
+			"a stored one -- the real AssembleBook2 path may not be resolving it")
 	}
 }
 
