@@ -1,8 +1,10 @@
 package book
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -89,5 +91,52 @@ func TestParsePhotoReencodesFromValidatedBytes(t *testing.T) {
 	}
 	if strings.ContainsAny(string(got.DataURI), "\n\r ") {
 		t.Fatalf("the rebuilt URI must carry no whitespace: %q", got.DataURI)
+	}
+}
+
+func TestRepresentativePhotoReturnsNilWhenArchetypeHasNone(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `DELETE FROM dish_format_photo WHERE mark_id = 'no-such-archetype'`); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+
+	p, err := RepresentativePhoto(ctx, pool, "no-such-archetype")
+	if err != nil {
+		t.Fatalf("RepresentativePhoto: %v", err)
+	}
+	if p != nil {
+		t.Fatalf("got %+v, want nil for an archetype with no stored photo", p)
+	}
+}
+
+func TestRepresentativePhotoReturnsTheLowestIDDeterministically(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `DELETE FROM dish_format_photo WHERE mark_id = 'test-archetype'`); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	for i := 0; i < 2; i++ {
+		if _, err := pool.Exec(ctx, `
+			INSERT INTO dish_format_photo (mark_id, media_type, bytes, credit, licence, source_dataset, source_row_id, source_label, added_by)
+			VALUES ('test-archetype', 'image/jpeg', $1, 'c', 'l', 'TEST', $2, 'label', 'test')`,
+			[]byte("fake-bytes"), fmt.Sprintf("row-%d", i)); err != nil {
+			t.Fatalf("insert fixture %d: %v", i, err)
+		}
+	}
+
+	p1, err := RepresentativePhoto(ctx, pool, "test-archetype")
+	if err != nil || p1 == nil {
+		t.Fatalf("RepresentativePhoto: %+v, %v", p1, err)
+	}
+	p2, err := RepresentativePhoto(ctx, pool, "test-archetype")
+	if err != nil || p2 == nil {
+		t.Fatalf("RepresentativePhoto (second call): %+v, %v", p2, err)
+	}
+	if p1.DataURI != p2.DataURI {
+		t.Fatalf("two calls returned different photos for the same archetype; must be deterministic")
+	}
+	if !strings.HasPrefix(string(p1.DataURI), "data:image/jpeg;base64,") {
+		t.Fatalf("DataURI has the wrong prefix: %s", p1.DataURI)
 	}
 }
