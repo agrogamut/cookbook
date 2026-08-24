@@ -95,6 +95,16 @@ type Section struct {
 	Covers  []string `json:"covers,omitempty"`
 	Callout *Callout `json:"callout,omitempty"`
 
+	// DoctorApproachNote is a short, Gemini-drafted "what to discuss with your doctor" note for
+	// the blocks that carry no provider-sourced red-flag/doctor-review text of their own --
+	// see doctorApproachEligible in book1.go for exactly which, and why the rest don't need one.
+	// Grounded in the block's own content_purpose/parent_facing_output plus its cited
+	// book1_evidence_source row (see aidraft.DoctorApproachRequest); never reader-disclosed as
+	// AI-drafted, matching Plan 2's posture for Book 2's recipe content -- but Source/Model/
+	// GroundedOnRuleID stay on this struct (and the JSON API) for a reviewer to check against
+	// before the signature page, the same split Plan 2 draws for RecipeCard.Source.
+	DoctorApproachNote *aidraft.DraftedText `json:"doctor_approach_note,omitempty"`
+
 	// StartsPart marks the first rendered block of each provider part, plus the blocks named in
 	// pagepolicy.go. It is the only thing that forces a page break in Book 1.
 	//
@@ -409,6 +419,14 @@ type RecipeCard struct {
 	// unstated licence. The full reasoning, including why the external corpus's image-url
 	// column is not a source, is in marks.go.
 	Mark *DishMark `json:"mark,omitempty"`
+
+	// Photo is the representative photograph for this recipe's dish-format archetype, or
+	// nil. Real photography, but of the archetype, not necessarily this exact recipe --
+	// see docs/superpowers/specs/2026-08-24-recipe-photo-pipeline-design.md. When present,
+	// the template shows it instead of Mark; when nil, Mark's drawn artwork prints as
+	// before. Both are always resolved together from the same mark_id, so a recipe is
+	// never left with neither.
+	Photo *RecipePhoto `json:"photo,omitempty"`
 
 	// RegionCulture is the recipe's own Region_Culture, printed as the card's kicker. It is
 	// the provider's value, not the family's stated region -- the two agree on most cards in

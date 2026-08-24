@@ -196,7 +196,11 @@ func findStoredInventedCard(ctx context.Context, pool *pgxpool.Pool, cat mealCat
 				Quantity: fmt.Sprintf("%.0f g", ing.QuantityG),
 			})
 		}
-		return buildInventedCard(c.id, version, cat, invented, ingredients, res, cp, archetypes), true, nil
+		card, err := buildInventedCard(ctx, pool, c.id, version, cat, invented, ingredients, res, cp, archetypes)
+		if err != nil {
+			return RecipeCard{}, false, err
+		}
+		return card, true, nil
 	}
 	return RecipeCard{}, false, nil
 }
@@ -252,7 +256,7 @@ func generateInventedCard(ctx context.Context, pool *pgxpool.Pool, drafter aidra
 		})
 	}
 
-	return buildInventedCard(recipeID, version, cat, invented, ingredients, res, cp, archetypes), nil
+	return buildInventedCard(ctx, pool, recipeID, version, cat, invented, ingredients, res, cp, archetypes)
 }
 
 // persistInventedRecipe writes a freshly-drafted, already-validated recipe to ai_recipe and
@@ -299,10 +303,11 @@ func persistInventedRecipe(ctx context.Context, pool *pgxpool.Pool, cat mealCate
 // Source stays "ai-invented" on the struct and in the JSON API, where the operator console's
 // fact-check pass needs it; recipe.html never reads this field, so the printed page carries no
 // distinction from a provider recipe.
-func buildInventedCard(recipeID, version string, cat mealCategory, invented aidraft.InventedRecipe,
-	ingredients []IngredientLine, res models.EngineResult, cp models.ChildProfile, archetypes []string) RecipeCard {
+func buildInventedCard(ctx context.Context, pool *pgxpool.Pool, recipeID, version string, cat mealCategory,
+	invented aidraft.InventedRecipe, ingredients []IngredientLine, res models.EngineResult, cp models.ChildProfile,
+	archetypes []string) (RecipeCard, error) {
 
-	return RecipeCard{
+	card := RecipeCard{
 		RecipeID:         recipeID,
 		RecipeVersion:    version,
 		Title:            invented.Name,
@@ -314,6 +319,12 @@ func buildInventedCard(recipeID, version string, cat mealCategory, invented aidr
 		Source:           "ai-invented",
 		Mark:             Mark(invented.DishFormatID, archetypeLabel(invented.DishFormatID)),
 	}
+	if photo, err := RepresentativePhoto(ctx, pool, invented.DishFormatID); err != nil {
+		return RecipeCard{}, fmt.Errorf("invented recipe photo lookup: %w", err)
+	} else {
+		card.Photo = photo
+	}
+	return card, nil
 }
 
 // inventedSelectionReasons draws the same kind of reason selectionReasons builds for a real

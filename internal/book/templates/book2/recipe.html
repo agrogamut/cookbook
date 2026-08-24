@@ -19,11 +19,17 @@
      value read out of the recipe name -- captioned with that format, so its claim is explicit
      and a reader can check it against the title beside it. */}}
 <div class="recipe">
+  {{ if .Photo }}
+  <figure class="dish-mark">
+    <img class="dish-photo" src="{{ .Photo.DataURI }}" alt="Photograph of this dish format">
+  </figure>
+  {{ else }}
   {{ with .Mark }}
   <figure class="dish-mark">
     {{ .SVG }}
     <figcaption class="dish-mark-caption">{{ .FormatLabel }}</figcaption>
   </figure>
+  {{ end }}
   {{ end }}
   <div class="recipe-head">
     <span class="recipe-num">{{ printf "%02d" .Number }}</span>

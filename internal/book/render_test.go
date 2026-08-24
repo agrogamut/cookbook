@@ -404,6 +404,55 @@ func TestARecipeWithNoMarkPrintsNoFrame(t *testing.T) {
 	}
 }
 
+// A stored photo takes precedence over the drawn mark, and the two never both print. When no
+// photo has been matched for the archetype, the drawn mark still prints exactly as it always
+// has -- this task is a same-footprint swap, not a change to the no-photo path.
+func TestRecipePageShowsPhotoWhenPresentAndMarkOtherwise(t *testing.T) {
+	withPhoto := RecipeCard{
+		RecipeID: "MG-R-00003", Title: "West Bengal Rice & Rohu fish Soft rice bowl",
+		Number: 1, ReviewStatus: "Draft",
+		Mark:  Mark("bowl-grain", "Soft rice bowl"),
+		Photo: &RecipePhoto{DataURI: template.URL("data:image/jpeg;base64,ZmFrZQ==")},
+	}
+	b := Book2{MealSections: []MealSection{{
+		MealCategoryID: "MC-01", Title: "Breakfast", Number: 1, Recipes: []RecipeCard{withPhoto},
+	}}}
+	var buf bytes.Buffer
+	if err := RenderHTML(&buf, Kind2, Metadata{Language: "en"}, b); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html := buf.String()
+	if !strings.Contains(html, `<img class="dish-photo"`) {
+		t.Fatalf("expected a dish-photo img tag when Photo is set, got:\n%s", html)
+	}
+	// The bare class name "dish-mark-caption" also appears in the inlined stylesheet's own
+	// selector on every page (base.html inlines all of tokens.css into <style>), so the
+	// assertion has to look for the element itself, not the substring.
+	if strings.Contains(html, `<figcaption class="dish-mark-caption"`) {
+		t.Fatalf("must not print the drawn-mark caption when a real photo is shown")
+	}
+
+	withMarkOnly := RecipeCard{
+		RecipeID: "MG-R-00004", Title: "West Bengal Rice & Rohu fish Soft rice bowl",
+		Number: 1, ReviewStatus: "Draft",
+		Mark: Mark("bowl-grain", "Soft rice bowl"),
+	}
+	b2 := Book2{MealSections: []MealSection{{
+		MealCategoryID: "MC-01", Title: "Breakfast", Number: 1, Recipes: []RecipeCard{withMarkOnly},
+	}}}
+	var buf2 bytes.Buffer
+	if err := RenderHTML(&buf2, Kind2, Metadata{Language: "en"}, b2); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	html2 := buf2.String()
+	if !strings.Contains(html2, `<figcaption class="dish-mark-caption">Soft rice bowl<`) {
+		t.Fatalf("expected the drawn mark to print when Photo is nil, got:\n%s", html2)
+	}
+	if strings.Contains(html2, `class="dish-photo"`) {
+		t.Fatalf("must not print an img tag when Photo is nil")
+	}
+}
+
 // The stylesheet has a screen half.
 //
 // Without one the console's iframe lays the document out at the iframe's own width -- about

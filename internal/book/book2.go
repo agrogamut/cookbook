@@ -565,6 +565,13 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 			// never routed through here.
 			Source: "provider",
 		}
+		if markID != "" {
+			photo, err := RepresentativePhoto(ctx, pool, markID)
+			if err != nil {
+				return nil, nil, fmt.Errorf("recipe %s: %w", recipeID, err)
+			}
+			card.Photo = photo
+		}
 		card.ModificationNote = modificationNoteFor(ctx, drafter, cp, clinicalActions, recipeName, clinicalTag)
 		byRecipeID[recipeID] = card
 	}

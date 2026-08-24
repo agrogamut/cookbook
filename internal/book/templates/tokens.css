@@ -693,6 +693,12 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   color: var(--brand);
 }
 .dish-mark svg { width: 22mm; height: 22mm; display: block; }
+.dish-mark img.dish-photo {
+  width: 22mm;
+  height: 22mm;
+  object-fit: cover;
+  display: block;
+}
 .dish-mark-caption {
   font-family: var(--font-sans);
   /* --caption-size, which is the contract's 9.5pt body floor exactly, not --small-size. The
