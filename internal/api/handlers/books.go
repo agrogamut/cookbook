@@ -100,28 +100,12 @@ func (h *Handlers) renderBookHTML(w http.ResponseWriter, r *http.Request, s prof
 // writeBlocked returns 409 for a clinician's stop gate, distinct from the 503 an unavailable
 // PDF renderer gets: an operator who reads a clinical stop as a service fault will retry it,
 // and a stop is not a thing to retry.
-//
-// The reviewer name comes from a fresh, direct read of special_care_condition_gate rather
-// than from parsing err's text -- the assembler's message is prose for a human, and the hard
-// rule against inventing data applies just as much to a field pulled out of that prose by
-// string matching as to one guessed outright. A block can also come from the clinical-rule
-// filter rather than the special-care stop gate; that child carries no special-care
-// condition id, there is nothing to look up, and the field is omitted rather than filled
-// with a guess.
 func (h *Handlers) writeBlocked(w http.ResponseWriter, r *http.Request, s profile.Stored, asOf time.Time, err error) {
-	reason := strings.TrimPrefix(err.Error(), book.ErrBlocked.Error()+": ")
+	reason, reviewer := book.BlockedDetail(r.Context(), h.pool, s, asOf, err)
 	body := map[string]string{"error": reason}
-
-	if cp, _, cerr := s.ToChildProfile(asOf); cerr == nil && cp.SpecialCareCondition != "" {
-		var reviewer string
-		qerr := h.pool.QueryRow(r.Context(),
-			`SELECT coalesce(mandatory_reviewer, '') FROM special_care_condition_gate WHERE condition_id = $1`,
-			cp.SpecialCareCondition).Scan(&reviewer)
-		if qerr == nil && reviewer != "" {
-			body["reviewer"] = reviewer
-		}
+	if reviewer != "" {
+		body["reviewer"] = reviewer
 	}
-
 	writeJSON(w, http.StatusConflict, body)
 }
 
