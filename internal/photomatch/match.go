@@ -62,6 +62,15 @@ func Match(ctx context.Context, pool *pgxpool.Pool, dataDir string, maxPerArchet
 			continue
 		}
 
+		// The manifest is meant to be a trusted, locally-produced artifact -- but a
+		// tampered or corrupted row is a sign worth failing loudly on, not skipping
+		// quietly, unlike a single bad row from an external CSV in fetch.go. See
+		// isSafeRelativePath's own comment for what this guards against.
+		if !isSafeRelativePath(r.LocalFile) {
+			return s, fmt.Errorf("photomatch: manifest row for %s/%s has unsafe local_file %q",
+				r.SourceDataset, r.SourceRowID, r.LocalFile)
+		}
+
 		bytes, err := os.ReadFile(filepath.Join(dataDir, r.LocalFile))
 		if err != nil {
 			return s, fmt.Errorf("photomatch: read %s: %w", r.LocalFile, err)

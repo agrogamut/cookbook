@@ -87,3 +87,41 @@ func TestMatchIsIdempotent(t *testing.T) {
 		t.Fatalf("got %d rows after two runs, want 1 (re-running must clear and rewrite, not accumulate)", count)
 	}
 }
+
+// TestMatchRejectsPathTraversalInManifest proves a tampered or corrupted manifest row --
+// one whose local_file escapes dataDir with a "../" sequence -- fails the whole run loudly
+// rather than being silently skipped (unlike a single bad row from an external CSV in
+// fetch.go, the manifest is supposed to be this pipeline's own trusted, locally-produced
+// artifact, so a bad entry there is itself the finding).
+func TestMatchRejectsPathTraversalInManifest(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `DELETE FROM dish_format_photo`); err != nil {
+		t.Fatalf("clear dish_format_photo: %v", err)
+	}
+
+	dir := t.TempDir()
+	row := ManifestRow{
+		SourceDataset: "FOODBD",
+		SourceRowID:   "evil.jpg",
+		SourceLabel:   "khichuri",
+		MarkID:        "pot-khichdi",
+		LocalFile:     "../../../etc/passwd",
+		MediaType:     "image/jpeg",
+	}
+	if err := WriteManifest(filepath.Join(dir, "manifest.csv"), []ManifestRow{row}); err != nil {
+		t.Fatalf("WriteManifest: %v", err)
+	}
+
+	if _, err := Match(ctx, pool, dir, 5); err == nil {
+		t.Fatalf("Match: want an error for a manifest row with a path-traversal local_file, got nil")
+	}
+
+	var count int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM dish_format_photo`).Scan(&count); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("got %d rows written despite the rejected manifest row, want 0", count)
+	}
+}
