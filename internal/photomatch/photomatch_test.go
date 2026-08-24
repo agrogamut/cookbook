@@ -6,12 +6,14 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/madamgy/recipie/internal/db"
+	"github.com/madamgy/recipie/internal/importer"
 )
 
-// testPool acquires a database connection for the test suite. Tests run against a real
-// Postgres because photomatch reads from hand-written database tables. Point
-// TEST_DATABASE_URL at a throwaway database (scripts/dev_db.fish starts one) and the
-// suite connects to it.
+// The suite runs against a real Postgres because photomatch reads from hand-written
+// database tables. Point TEST_DATABASE_URL at a throwaway database (scripts/dev_db.fish
+// starts one) and the suite migrates and imports into it itself.
 //
 // Without TEST_DATABASE_URL the suite skips, so `go test ./...` stays green on a
 // machine with no database.
@@ -24,47 +26,23 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	}
 
 	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, url)
+	pool, err := db.Connect(ctx, url)
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
 	t.Cleanup(pool.Close)
 
-	// Ensure photo_label_archetype_map exists and is seeded. This table is normally
-	// created and seeded in migration 0026, but we create it manually here to avoid
-	// running migrations that may have pre-existing issues (migration 0024 references
-	// ingredient_master before it exists).
-	var tableExists bool
-	if err := pool.QueryRow(ctx, `
-		SELECT EXISTS(
-			SELECT FROM information_schema.tables
-			WHERE table_name = 'photo_label_archetype_map'
-		)
-	`).Scan(&tableExists); err != nil {
-		t.Fatalf("check photo_label_archetype_map: %v", err)
+	dir := os.Getenv("XLSX_DIR")
+	if dir == "" {
+		dir = "../../data/provider"
 	}
-
-	if !tableExists {
-		// Create and seed the table manually (from migration 0026)
-		if _, err := pool.Exec(ctx, `
-			CREATE TABLE photo_label_archetype_map (
-				source_dataset text NOT NULL,
-				source_label   text NOT NULL,
-				mark_id        text,
-				note           text NOT NULL,
-				PRIMARY KEY (source_dataset, source_label)
-			)
-		`); err != nil {
-			t.Fatalf("create photo_label_archetype_map: %v", err)
-		}
-
-		if _, err := pool.Exec(ctx, `
-			INSERT INTO photo_label_archetype_map (source_dataset, source_label, mark_id, note) VALUES
-				('BHARAT-INDIAN-FOODS', 'biryani',      'bowl-grain',    'rice dish, grain-led'),
-				('BHARAT-INDIAN-FOODS', 'dal',          NULL,            'lentil side, not a served format on its own'),
-				('FOODBD', 'khichuri',       'pot-khichdi',   'one-pot dal and rice')
-		`); err != nil {
-			t.Fatalf("seed photo_label_archetype_map: %v", err)
+	var loaded int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM photo_label_archetype_map`).Scan(&loaded); err != nil {
+		t.Fatalf("probe photo_label_archetype_map: %v", err)
+	}
+	if loaded == 0 {
+		if _, err := importer.Run(ctx, pool, dir); err != nil {
+			t.Fatalf("import: %v", err)
 		}
 	}
 
