@@ -426,9 +426,12 @@ type RecipeCard struct {
 	// Source distinguishes a real, provider-authored recipe from one Gemini invented as a
 	// last-resort fallback when a chapter fell short of its target after the real corpus was
 	// exhausted (see internal/book/invented.go). "provider" for every card loaded by
-	// loadRecipeCards; "ai-invented" is set only by the fallback path. Never left empty --
-	// a reader (and an operator checking a book before signing it) always sees which one this
-	// is, matching the project's "provenance is a column, never a footnote" rule.
+	// loadRecipeCards; "ai-invented" is set only by the fallback path (and persisted the same
+	// way in ai_recipe when the recipe is stored for reuse). Never left empty, but never read
+	// by recipe.html either -- the printed page reads identically whichever this is, and this
+	// field exists for the JSON API and the operator console's fact-check pass, the surface
+	// where "we fact-check everything manually before signing" needs something to check
+	// against.
 	Source string `json:"source"`
 
 	// ModificationNote is a short feeding note for a clinical condition the family's

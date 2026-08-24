@@ -148,7 +148,7 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			// as the 6-11 month iron-support gap CLAUDE.md names as the blocker this whole
 			// feature exists to answer. topUpInvented starts from an empty slice and tries
 			// to reach the whole target from nothing but the allow-listed ingredients.
-			cards, note := topUpInvented(ctx, pool, cfg.drafter, cp, cat, version, nil)
+			cards, note := topUpInvented(ctx, pool, cfg.drafter, cp, cat, version, res, nil)
 			if len(cards) == 0 {
 				skipped = append(skipped, omissionMealCategory+fmt.Sprintf(
 					"%s (%s) has no recipes mapped to it at all (GAP-023)",
@@ -196,7 +196,7 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			}
 		}
 		if len(survivors) == 0 {
-			cards, note := topUpInvented(ctx, pool, cfg.drafter, cp, cat, version, nil)
+			cards, note := topUpInvented(ctx, pool, cfg.drafter, cp, cat, version, res, nil)
 			if len(cards) == 0 {
 				skipped = append(skipped, omissionMealCategory+fmt.Sprintf(
 					"%s (%s) has %d recipes mapped to it, but none survived "+
@@ -229,7 +229,7 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			// this means an id is orphaned somewhere upstream. Still worth a top-up attempt
 			// before reporting the omission, on the same footing as the other two empty-start
 			// branches above.
-			cards, note := topUpInvented(ctx, pool, cfg.drafter, cp, cat, version, nil)
+			cards, note := topUpInvented(ctx, pool, cfg.drafter, cp, cat, version, res, nil)
 			if len(cards) == 0 {
 				skipped = append(skipped, omissionMealCategory+fmt.Sprintf(
 					"%s (%s) had %d surviving candidates but none could be "+
@@ -250,7 +250,7 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		// must never carry the omissionMealCategory prefix, or the conservation tests'
 		// "rendered + reported == total" accounting would double-count this category.
 		var note string
-		cards, note = topUpInvented(ctx, pool, cfg.drafter, cp, cat, version, cards)
+		cards, note = topUpInvented(ctx, pool, cfg.drafter, cp, cat, version, res, cards)
 		if note != "" {
 			skipped = append(skipped, note)
 		}
