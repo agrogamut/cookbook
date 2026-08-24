@@ -95,6 +95,14 @@ type Section struct {
 	Covers  []string `json:"covers,omitempty"`
 	Callout *Callout `json:"callout,omitempty"`
 
+	// Prose is plain paragraphs for the one section this book writes itself rather than reads
+	// from a provider table: B1-CONNECT-01, "Being Together". There is no book1_content_block
+	// row and no book1_daily_life_module domain for mother-child bonding or general parenting
+	// style -- verified against both tables -- so this is generic, non-specific, universal
+	// guidance rather than a per-child clinical claim, the same carve-out class as the
+	// gas/bloating illness entry. See connectSection in book1.go.
+	Prose []string `json:"prose,omitempty"`
+
 	// DoctorApproachNote is a short, Gemini-drafted "what to discuss with your doctor" note for
 	// the blocks that carry no provider-sourced red-flag/doctor-review text of their own --
 	// see doctorApproachEligible in book1.go for exactly which, and why the rest don't need one.
@@ -146,6 +154,13 @@ type IllnessBlock struct {
 	RedFlags          string `json:"red_flags,omitempty"`
 	// EngineLimit is the load-bearing string on the page. See IllnessFeedingBlock.EngineLimit.
 	EngineLimit string `json:"engine_limit,omitempty"`
+	// Source marks a situation that did not come from book1_illness_feeding_block -- currently
+	// only "Gas / bloating", which has zero provider backing (the table's five rows are fever,
+	// diarrhoea, vomiting, constipation, recovery; no gas row exists). Never printed on the
+	// page, the same split RecipeCard.Source draws for Book 2: a reviewer checking this book
+	// before the signature page can see which situations are provider data and which are the
+	// generic, non-specific carve-out text, without a family seeing a provenance label.
+	Source string `json:"source,omitempty"`
 }
 
 // TrackerSpec is a blank form: the provider's declared columns and a row count.
@@ -355,7 +370,26 @@ func (b Book1) SectionCount() int { return len(b.Sections) }
 type Book1 struct {
 	Metadata Metadata     `json:"book_metadata"`
 	Child    ChildSummary `json:"child_profile"`
+	Letter   LetterPage   `json:"letter"`
 	Sections []Section    `json:"sections"`
+}
+
+// LetterPage is Book 1's warm front-matter page: a short welcome from the book's authoring
+// team, printed right after the cover and before the contents page, plus the credits panel.
+// It is the same words for every family -- there is no per-child data behind a welcome page,
+// so it is a Go constant (see letterPage in book1.go) rather than a query result, and the
+// child's own name is the only thing interpolated into it.
+type LetterPage struct {
+	Body    []string    `json:"body"`
+	Credits []CreditRow `json:"credits"`
+}
+
+// CreditRow is one line of the credits panel. Name is printed as given for the two roles this
+// project was told to fill in; the other two print as a blank cell for a handwritten name,
+// the same "absence is a writing line, not an invented value" rule the rest of Book 1 follows.
+type CreditRow struct {
+	Role string `json:"role"`
+	Name string `json:"name,omitempty"`
 }
 
 // IngredientLine is one ingredient on a recipe card. Bengali is separate from Name rather

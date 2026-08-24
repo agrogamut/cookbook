@@ -9,8 +9,8 @@
     <h3>{{ .Situation }}</h3>
     <table>
       <tbody>
-        {{ with .SupportiveMessage }}<tr><td class="domain-label">Feeding approach</td><td>{{ . }}</td></tr>{{ end }}
-        {{ with .WhatToMonitor }}<tr><td class="domain-label">What to watch</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .SupportiveMessage }}<tr><td class="domain-label">What to do</td><td>{{ . }}</td></tr>{{ end }}
+        {{ with .WhatToMonitor }}<tr><td class="domain-label">Watch for</td><td>{{ . }}</td></tr>{{ end }}
       </tbody>
     </table>
     {{ with .RedFlags }}

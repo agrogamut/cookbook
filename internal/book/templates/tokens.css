@@ -334,12 +334,22 @@ tbody tr:last-child td { border-bottom: 0.2mm solid var(--rule); }
   max-width: var(--measure);
 }
 
-/* A blank the parent writes on. Used throughout instead of an empty cell, so a page reads as
-   a form rather than as data that failed to print. */
+/* A blank the parent or clinician writes on. Used throughout instead of an empty cell, so a
+   page reads as a form rather than as data that failed to print.
+
+   A bordered box rather than a ruled underline: a doctor filling in a printed form writes
+   more easily inside a bounded cell than on a bare line, and a box reads unambiguously as
+   "write here" even where it sits alone with no surrounding table lines. The box keeps the
+   same footprint the underline had -- same min-width, same 6.5mm line height set on .tracker
+   td/.domain td elsewhere in this file -- so this is a paint-only change and does not reopen
+   the page-fit budget documented at the top of pagefit_test.go. */
 .write-line {
   display: inline-block;
   min-width: 28mm;
-  border-bottom: 0.25mm solid var(--ink-faint);
+  min-height: 5mm;
+  border: 0.2mm solid var(--ink-faint);
+  border-radius: 0.5mm;
+  background: var(--paper-shade, rgba(0, 0, 0, 0.015));
 }
 
 /* Inside a table cell the line takes the column's width and asserts none of its own.

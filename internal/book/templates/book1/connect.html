@@ -1,0 +1,12 @@
+{{ define "B1-CONNECT-01" }}
+{{/* "Being Together". Synthetic block, not a book1_content_block row -- see connectSection in
+     book1.go and Section.Prose's doc comment in types.go for why: neither this table nor
+     book1_daily_life_module carries a row for mother-child bonding or general parenting
+     style. Generic, non-specific text only, the same carve-out class as the gas/bloating
+     illness entry -- nothing here is presented as sourced from provider data. */}}
+<p class="block-purpose">A short page on the parts of raising a child that no table can hold:
+  time together, everyday parenting style, and the ordinary routines that carry more weight
+  than they seem to.</p>
+
+{{ range .Prose }}<p>{{ . }}</p>{{ end }}
+{{ end }}

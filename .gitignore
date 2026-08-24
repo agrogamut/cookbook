@@ -10,3 +10,6 @@ data/external/*.csv
 # Recipe photo candidates are fetched, not authored here. cmd/photomatch -fetch pulls
 # them; SHA256SUMS covers the CSVs above but not these binaries directly.
 data/external/photos/
+
+# Sample books generated locally for a look-at-the-pages check, not source material.
+/sample-books/

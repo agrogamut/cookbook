@@ -175,6 +175,7 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			// Both lists, never only the confirmed one -- see allergyStatus.
 			AllergyStatus: allergyStatus(cp.Allergens, cp.SuspectedAllergens),
 		},
+		Letter: letterPage(s.DisplayName),
 	}
 
 	// Most recent measurement only, formatted as recorded. Growth[0] is newest: profile.Load
@@ -383,6 +384,26 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 						"not rendered", blockID, sectionTitle))
 				continue
 			}
+			// A plain-language explainer, not an interpretation. It names the standard the
+			// clinician's own z-score follows (WHO Child Growth Standards -- a real, citable
+			// reference) and stops there: it never classifies what this child's own recorded
+			// number means, because that is B1-004's job, and B1-004 stays deliberately
+			// unmapped for exactly this reason -- see its own comment. Reading a band
+			// ("within +/-2SD is typical") onto a specific recorded value here would be the
+			// same invented interpretation this project already refuses at B1-004, just
+			// relocated to a different page.
+			zScoreLegend := Callout{
+				Severity: "info",
+				Heading:  "What is a z-score?",
+				Body: "A z-score compares this child's measurement to the World Health " +
+					"Organization's Child Growth Standards for children of the same age and " +
+					"sex. It is recorded by the clinician at each visit, alongside their own " +
+					"written interpretation in the table above. This page reports the numbers " +
+					"as recorded; reading a trend across visits is a clinical judgement, not " +
+					"something this book calculates -- ask your clinician what a specific " +
+					"number means for this child.",
+			}
+			sec.Callout = &zScoreLegend
 
 		case "B1-DAILY-01":
 			sec.Domains, sec.Trackers = dailyDomains(src.Daily[blockID], src.Monitoring[blockID])
@@ -394,6 +415,18 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 					SupportiveMessage: i.SupportiveMessage, WhatToMonitor: i.WhatToMonitor,
 					RedFlags: i.RedFlags, EngineLimit: i.EngineLimit,
 				})
+			}
+			// All five book1_illness_feeding_block rows map to B1-015 alone (verified live
+			// against book1_block_source) -- B1-016 and B1-017 share the same subject and
+			// carry only a monitoring tracker, not their own illness rows. Gas/bloating is
+			// the everyday complaint parents ask about right alongside constipation, and
+			// book1_illness_feeding_block has no row for it: the table's five rows are fever,
+			// diarrhoea, vomiting, constipation, recovery. This is the same zero-provider-
+			// backing carve-out Book 2's clinical modification notes already use for
+			// conditions the provider data does not document: generic, non-specific safe text
+			// only, never a claim with no source behind it.
+			if blockID == "B1-015" {
+				sec.Illness = append(sec.Illness, gasBloatingSituation())
 			}
 			// B1-016 is the "supportive table" beside the situations and seeds a monitoring
 			// template rather than illness rows. It renders the grid under the same heading.
@@ -448,9 +481,131 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		return Book1{}, nil, fmt.Errorf("book: block rows: %w", err)
 	}
 
+	b.Sections = insertConnectSection(b.Sections)
+
 	markSheetStarts(b.Sections)
 
 	return b, skipped, nil
+}
+
+// letterPage is Book 1's front-matter welcome, the same words for every family plus the
+// child's own name. See LetterPage's doc comment for why this is a constant and not a query.
+func letterPage(childName string) LetterPage {
+	return LetterPage{
+		Body: []string{
+			fmt.Sprintf("Dear %s's family,", childName),
+			"This book was put together after a real consultation, and it is meant to sit " +
+				"on a shelf you actually reach for -- at 2am with a feverish toddler, at the " +
+				"kitchen counter figuring out what to cook, at a check-up trying to remember " +
+				"what the doctor said last time.",
+			"Every number and every table in here is either something your clinician " +
+				"recorded about your own child, or something the provider's own reference " +
+				"material states outright. Where something is not yet known -- and a few " +
+				"things genuinely are not -- we have left it blank rather than guess, because " +
+				"a guess dressed up as a fact is worse than an honest gap.",
+			"Raising a child is not a checklist, even though parts of this book look like " +
+				"one. The tables are here to catch the things that are easy to forget in a " +
+				"busy week; the rest -- the play, the meals, the ordinary time together -- is " +
+				"the part no book can do for you, and the part that matters most.",
+			"We hope this makes the everyday decisions a little easier.",
+		},
+		Credits: []CreditRow{
+			{Role: "Author", Name: "Dr. Arijit Sarkar"},
+			{Role: "Pediatrician"},
+			{Role: "Dietician"},
+			{Role: "Editor & co-author", Name: "Soumyabrata Ghosh"},
+		},
+	}
+}
+
+// gasBloatingSituation is the generic, non-specific carve-out entry for a condition
+// book1_illness_feeding_block does not document. Universal, non-clinical guidance only --
+// nothing here claims to be specific to this child or to any documented mechanism, the same
+// posture the Book 2 clinical-modification carve-out already uses for gas/bloating.
+func gasBloatingSituation() IllnessBlock {
+	return IllnessBlock{
+		ID:        "GENERIC-GAS",
+		Situation: "Gas / bloating",
+		SupportiveMessage: "Offer smaller, more frequent portions rather than one large " +
+			"meal. Feed slowly and let your child pace themselves. Keep your child upright " +
+			"for a while after feeding, and burp a younger baby during and after feeds.",
+		WhatToMonitor: "General comfort and feeding pattern.",
+		RedFlags: "Persistent crying, a hard or swollen belly, refusing feeds, fever, or " +
+			"anything that worries you -- mention it to your doctor.",
+		EngineLimit: "General guidance only, not specific to this child's condition or " +
+			"diagnosis; there is no provider-authored feeding rule for this situation.",
+		Source: "generic-no-provider-backing",
+	}
+}
+
+// insertConnectSection adds "Being Together" (B1-CONNECT-01) right after Self-Care & Adaptive
+// Skills (B1-027) and before Screen & Digital Habits (B1-028), verified live against
+// book1_content_block.book_order (19 and 20). It sits there rather than anywhere else in Part
+// J because it is thematically the page between "what this child can do for themselves" and
+// "what the family watches on screens together" -- the relationship the rest of Part J's
+// pages are implicitly about but never name.
+//
+// A synthetic section, not a book1_content_block row: there is no provider block for it, so
+// it carries a project-local BlockID ("B1-CONNECT-01") that MustStartASheet does not
+// recognise, meaning it flows onto whatever page has room exactly like every other Part J
+// page -- see markSheetStarts.
+func insertConnectSection(sections []Section) []Section {
+	sec := connectSection()
+	for i, s := range sections {
+		if s.BlockID == "B1-028" {
+			out := make([]Section, 0, len(sections)+1)
+			out = append(out, sections[:i]...)
+			out = append(out, sec)
+			out = append(out, sections[i:]...)
+			return out
+		}
+	}
+	// B1-028 was skipped for this child (age-excluded or omitted) -- append at the end of Part
+	// J's daily-life run instead of dropping the page. Same fallback shape as the loop's own
+	// insertion order: content the child's book can carry is never silently left out because
+	// its usual neighbour did not render.
+	for i := len(sections) - 1; i >= 0; i-- {
+		if sections[i].Part == "J" {
+			out := make([]Section, 0, len(sections)+1)
+			out = append(out, sections[:i+1]...)
+			out = append(out, sec)
+			out = append(out, sections[i+1:]...)
+			return out
+		}
+	}
+	return append(sections, sec)
+}
+
+// connectSection is "Being Together": generic, non-specific guidance on parent-child
+// connection and everyday parenting style. See Section.Prose's doc comment for why this is
+// hand-written rather than sourced -- neither book1_content_block nor
+// book1_daily_life_module has a row for it, verified live.
+func connectSection() Section {
+	return Section{
+		BlockID:    "B1-CONNECT-01",
+		TemplateID: "B1-CONNECT-01",
+		Title:      "Being Together",
+		Subtitle:   "Connection, quality time & everyday parenting",
+		Part:       "J",
+		Prose: []string{
+			"A few minutes of your full attention -- no phone, no chores, just talking, " +
+				"playing or reading together -- is one of the simplest things you can offer " +
+				"your child, and it does not need to be long to count. Children notice being " +
+				"listened to more than they notice being entertained.",
+			"There is no single right parenting style. What tends to help, across styles: " +
+				"clear and consistent expectations, warmth even when correcting behaviour, " +
+				"and treating mistakes as something to learn from rather than something to " +
+				"punish harshly. Children copy what they see more than what they are told.",
+			"Praise the effort, not just the result -- \"you kept trying\" lands differently " +
+				"than \"you're so smart\", and it holds up better when something is hard.",
+			"Mealtimes and bedtimes are also connection time, not just logistics. A short, " +
+				"predictable routine around both gives a child something steady to expect, " +
+				"which matters more to most children than the routine's exact content.",
+			"None of this replaces professional guidance if you are genuinely concerned " +
+				"about your child's behaviour, mood or development -- that is what the " +
+				"red-flag pages elsewhere in this book, and your own clinician, are for.",
+		},
+	}
 }
 
 // milestoneWidthCells is the milestone table's text content in the shape ColumnWidths wants:

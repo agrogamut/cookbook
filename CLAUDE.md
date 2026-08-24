@@ -102,6 +102,38 @@ What's unchanged:
   never overridden - this decision is about document-level banners and new
   AI-drafted prose, not about the provider's own data flags.
 
+### Amendment - Book 1 generic-guidance carve-out (2026-08-25)
+
+Two pieces of static, hand-written (not AI-drafted, not per-child) content were
+added to Book 1 for conditions with **zero provider backing**, extending the
+same zero-provider-backing carve-out the 24 August ruling already uses for
+Book 2's gas/bloating modification notes ("generic, non-specific safe text
+only, never a claim with no source behind it") to Book 1 for the first time:
+
+- **Gas / bloating**, appended to the illness-feeding page (`B1-015`).
+  `book1_illness_feeding_block` has five rows - fever, diarrhoea, vomiting,
+  constipation, recovery - and no sixth. Verified live against
+  `book1_block_source`.
+- **"Being Together"** (`B1-CONNECT-01`), a synthetic section with no
+  `book1_content_block` row, inserted between Self-Care & Adaptive Skills
+  (`B1-027`) and Screen & Digital Habits (`B1-028`). Neither
+  `book1_content_block` nor `book1_daily_life_module` carries anything on
+  mother-child bonding, quality time or general parenting style, verified
+  live against both tables.
+
+Both are static Go constants (`gasBloatingSituation`, `connectSection` in
+`internal/book/book1.go`), not Gemini-drafted and not reader-disclosed as a
+distinct content class - matching the existing recipe-content posture, the
+provenance lives on the struct (`IllnessBlock.Source`, never printed) for an
+operator to check before the signature page, not on the printed page.
+
+This does not touch the `ai_can_draft = 'N'` gate, does not draft against any
+of the five gated blocks, and does not classify a child's own recorded
+z-score - the growth page's new "what is a z-score?" explainer names WHO
+Child Growth Standards as the standard in use and stops there, deliberately:
+interpreting a specific recorded number stays `B1-004`'s job, and `B1-004`
+stays unmapped for exactly that reason.
+
 ## Communication and attribution rules
 
 - Never mention claude, anthropic, or ai anywhere: not in chat, code, comments, commit
