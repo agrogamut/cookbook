@@ -119,6 +119,55 @@ func TestInventedRecipeTopUpFillsAnUnmappedCategory(t *testing.T) {
 	}
 }
 
+// TestInventedRecipeFallbackNeverRunsBelowMinAge pins inventedRecipeMinAgeMonths: no
+// ingredient-level texture or choking-hazard rule exists anywhere in this codebase to check an
+// invented recipe against, so the fallback must never even ask the model below that age. The
+// fake's inventFn fails the test outright if called, rather than returning an error the caller
+// might swallow -- proving the gate stops the call before it happens, not merely that a
+// downstream check would have caught the response.
+func TestInventedRecipeFallbackNeverRunsBelowMinAge(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	catID, catName, _ := unmappedCategory(t, pool)
+
+	fake := fakeDrafter{
+		inventFn: func(ctx context.Context, req aidraft.InventedRecipeRequest) (aidraft.InventedRecipe, error) {
+			t.Fatalf("DraftInventedRecipe was called for a child below inventedRecipeMinAgeMonths; "+
+				"the age gate must stop this before any drafting request is made (req=%+v)", req)
+			return aidraft.InventedRecipe{}, nil
+		},
+	}
+
+	s := profile.Stored{
+		ChildID:     "BOOK-TEST-AIDRAFT-003",
+		DateOfBirth: time.Now().AddDate(0, -12, 0), // 12 months, below inventedRecipeMinAgeMonths (24)
+		DietType:    "Non-vegetarian",
+	}
+	b, skipped, err := AssembleBook2(ctx, pool, s, time.Now(), WithDrafter(fake))
+	if err != nil {
+		t.Fatalf("AssembleBook2: %v", err)
+	}
+
+	for _, sec := range b.MealSections {
+		if sec.MealCategoryID == catID {
+			t.Fatalf("category %s (%s) rendered for a 12-month-old from an unmapped category; "+
+				"the only possible source is the invented-recipe fallback, which must not run "+
+				"below the age gate", catID, catName)
+		}
+	}
+
+	found := false
+	for _, sk := range skipped {
+		if strings.HasPrefix(sk, omissionMealCategory) && strings.Contains(sk, catID) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("category %s must still be reported as an omission for a child below the "+
+			"invented-recipe age gate, got skipped=%v", catID, skipped)
+	}
+}
+
 // TestInventedRecipeOutsideAllowedSetIsRejected pins the guardrail that actually matters: a
 // model response naming an ingredient outside the child-safe allow-list must never reach a
 // printed card, even though the response schema was already supposed to prevent it -- this is
