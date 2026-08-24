@@ -239,9 +239,17 @@ func fetchIndianFoodsFrom(ctx context.Context, client *http.Client, base, outDir
 }
 
 // downloadTo streams an HTTP response body to a local file, capped at maxDownloadBytes and
-// gated on an allowed image Content-Type. Used for both datasets' image bytes. Returns the
-// response's own validated media type -- callers no longer hardcode "image/jpeg" for
-// every download regardless of what the server actually sent.
+// gated on an allowed image type. Used for both datasets' image bytes. Returns the image's
+// own validated media type -- callers no longer hardcode "image/jpeg" for every download
+// regardless of what was actually fetched.
+//
+// The media type is sniffed from the downloaded bytes (http.DetectContentType, the same
+// magic-byte check the standard library uses), not read from the response's Content-Type
+// header. Two independent reasons: a server's header is a claim, not a proof -- sniffing
+// closes the same gap a mislabelled or hostile response could otherwise walk through --
+// and, found live against the real HuggingFace dataset this pipeline fetches from, the
+// datasets-server CDN serves real JPEGs under Content-Type: binary/octet-stream, which a
+// header-only check rejects outright even though the bytes are exactly what was asked for.
 func downloadTo(ctx context.Context, client *http.Client, srcURL, destPath string) (string, error) {
 	req, err := newRequest(ctx, http.MethodGet, srcURL)
 	if err != nil {
@@ -256,32 +264,29 @@ func downloadTo(ctx context.Context, client *http.Client, srcURL, destPath strin
 		return "", fmt.Errorf("get %s: status %d", srcURL, resp.StatusCode)
 	}
 
-	mediaType := strings.ToLower(strings.TrimSpace(strings.SplitN(resp.Header.Get("Content-Type"), ";", 2)[0]))
-	if !allowedDownloadMediaTypes[mediaType] {
-		return "", fmt.Errorf("get %s: content-type %q is not an accepted image type", srcURL, mediaType)
-	}
-
-	f, err := os.Create(destPath)
+	// Buffered in memory rather than streamed straight to disk: the media type can only be
+	// known once the bytes are in hand, and writing an unvalidated response to destPath
+	// first (then possibly deleting it) is exactly the TOCTOU-shaped risk sniffing-before-
+	// write avoids. maxDownloadBytes (20 MB) bounds this comfortably for a batch job.
+	//
+	// The limit is one byte over the cap so a source sitting exactly at the boundary isn't
+	// mistaken for one over it, and a response strictly larger than the cap is caught below
+	// rather than silently truncated.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxDownloadBytes+1))
 	if err != nil {
-		return "", fmt.Errorf("create %s: %w", destPath, err)
+		return "", fmt.Errorf("read %s: %w", srcURL, err)
+	}
+	if len(body) > maxDownloadBytes {
+		return "", fmt.Errorf("get %s: image exceeds the %d byte (%d MB) limit", srcURL, maxDownloadBytes, maxDownloadBytes>>20)
 	}
 
-	// io.LimitReader is set one byte over the cap so a source sitting exactly at the
-	// boundary isn't mistaken for one over it, and so a response strictly larger than the
-	// cap is detected below rather than silently truncated to disk.
-	n, copyErr := io.Copy(f, io.LimitReader(resp.Body, maxDownloadBytes+1))
-	closeErr := f.Close()
-	if copyErr != nil {
-		os.Remove(destPath)
-		return "", fmt.Errorf("write %s: %w", destPath, copyErr)
+	mediaType := strings.ToLower(strings.SplitN(http.DetectContentType(body), ";", 2)[0])
+	if !allowedDownloadMediaTypes[mediaType] {
+		return "", fmt.Errorf("get %s: detected content is %q, not an accepted image type", srcURL, mediaType)
 	}
-	if closeErr != nil {
-		os.Remove(destPath)
-		return "", fmt.Errorf("close %s: %w", destPath, closeErr)
-	}
-	if n > maxDownloadBytes {
-		os.Remove(destPath)
-		return "", fmt.Errorf("get %s: image exceeds the %d byte (%d MB) limit", srcURL, maxDownloadBytes, maxDownloadBytes>>20)
+
+	if err := os.WriteFile(destPath, body, 0o644); err != nil {
+		return "", fmt.Errorf("write %s: %w", destPath, err)
 	}
 	return mediaType, nil
 }

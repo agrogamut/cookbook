@@ -58,6 +58,14 @@ services:
       - key: CHROMIUM_NO_SANDBOX
         value: "1"
 
+      # Optional -- read by internal/config, never fail-fast if unset (internal/aidraft.Disabled
+      # takes over and every AI-drafted feature no-ops cleanly: clinical modification notes, the
+      # invented-recipe chapter-shortfall fallback, Book 1 doctor-approach notes). sync: false
+      # means the blueprint declares the var exists but the value is never committed here --
+      # set the real key once in the Render dashboard (madamgy-api service > Environment).
+      - key: GEMINI_API_KEY
+        sync: false
+
   # ---------------------------------------------------------------------------------------
   # The operator console.
   # ---------------------------------------------------------------------------------------

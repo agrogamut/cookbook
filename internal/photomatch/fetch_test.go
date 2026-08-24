@@ -13,9 +13,14 @@ import (
 func TestFetchIndianFoodsDownloadsOnlyMappedLabels(t *testing.T) {
 	// A tiny fake of datasets-server's /rows response shape, with one mapped label
 	// (biryani -> bowl-grain) and one explicitly-excluded label (dal, no candidate).
+	// downloadTo now sniffs the actual bytes (http.DetectContentType) rather than trusting
+	// the Content-Type header -- found necessary against real production traffic, where
+	// HuggingFace's datasets-server CDN serves real JPEGs under
+	// Content-Type: binary/octet-stream. The Content-Type header below is set for realism
+	// but is no longer what determines the result; the leading JPEG magic bytes are.
 	imgSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/jpeg")
-		w.Write([]byte("fake-jpeg-bytes"))
+		w.Write([]byte("\xFF\xD8\xFFfake-jpeg-bytes"))
 	}))
 	defer imgSrv.Close()
 
@@ -64,11 +69,11 @@ func TestFetchFoodBDOnlyTakesSingleItemPlates(t *testing.T) {
 	})
 	mux.HandleFunc("/0120.jpg", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/jpeg")
-		w.Write([]byte("fake-jpeg"))
+		w.Write([]byte("\xFF\xD8\xFFfake-jpeg"))
 	})
 	mux.HandleFunc("/3026.jpg", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/jpeg")
-		w.Write([]byte("fake-jpeg"))
+		w.Write([]byte("\xFF\xD8\xFFfake-jpeg"))
 	})
 	imgSrv2 := httptest.NewServer(mux)
 	defer imgSrv2.Close()
@@ -113,7 +118,7 @@ func TestFetchFoodBDRejectsPathTraversalFilename(t *testing.T) {
 	})
 	mux.HandleFunc("/0120.jpg", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/jpeg")
-		w.Write([]byte("fake-jpeg"))
+		w.Write([]byte("\xFF\xD8\xFFfake-jpeg"))
 	})
 	imgSrv := httptest.NewServer(mux)
 	defer imgSrv.Close()
