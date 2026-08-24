@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -87,7 +88,7 @@ func runFetch(ctx context.Context, pool *pgxpool.Pool, dataDir string, perLabelC
 	}
 
 	all := append(indianRows, foodbdRows...)
-	manifestPath := dataDir + "/manifest.csv"
+	manifestPath := filepath.Join(dataDir, "manifest.csv")
 	if err := photomatch.WriteManifest(manifestPath, all); err != nil {
 		return err
 	}
@@ -96,10 +97,14 @@ func runFetch(ctx context.Context, pool *pgxpool.Pool, dataDir string, perLabelC
 	if err != nil {
 		return err
 	}
+	counts := map[string]int{
+		"BHARAT-INDIAN-FOODS": len(indianRows),
+		"FOODBD":              len(foodbdRows),
+	}
 	for _, key := range []string{"BHARAT-INDIAN-FOODS", "FOODBD"} {
 		if _, err := pool.Exec(ctx,
 			`UPDATE external_source SET sha256 = $1, rows_loaded = $2 WHERE source_key = $3`,
-			sha, len(all), key); err != nil {
+			sha, counts[key], key); err != nil {
 			return fmt.Errorf("record external_source for %s: %w", key, err)
 		}
 	}
