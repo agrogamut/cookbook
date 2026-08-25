@@ -818,17 +818,27 @@ func nutritionTargetDomainLabels(t nutritionTargetRow) []Row {
 	return out
 }
 
-// nutritionTargetSection builds the Personal Nutrition Target page. targetReason is the
-// engine's own explanation for why this target applies (age band, clinician marker, or the
-// NT00 fallback) -- engine.SelectTarget already computes it for Book 2's recipe pages, and
-// this reuses it rather than re-deriving a second explanation that could disagree with the
-// first.
+// nutritionTargetSection builds the Active Nutrition Target page.
+//
+// Deliberately not titled "Personal Nutrition Target": B1-005/B1-006 already carry that
+// exact section name verbatim from the provider's own book1_content_block ("Personal
+// Nutrition Target" / "Daily nutrition target" and "Meal-wise feeding plan") -- two blank
+// writable forms, unrelated to nutrition_target_master. This page sits right beside them in
+// the book, and printing near-identical titles for two different things was found by
+// printing the book and reading it. "Active Nutrition Target" reuses this project's own
+// existing term for the same concept (models.EngineResult.ActiveTarget) rather than
+// coining a new name.
+//
+// targetReason is the engine's own explanation for why this target applies (age band,
+// clinician marker, or the NT00 fallback) -- engine.SelectTarget already computes it for
+// Book 2's recipe pages, and this reuses it rather than re-deriving a second explanation
+// that could disagree with the first.
 func nutritionTargetSection(targetCode, targetReason string, t nutritionTargetRow) Section {
 	return Section{
 		BlockID:    "B1-NUTRITION-01",
 		TemplateID: "B1-NUTRITION-01",
-		Title:      "Nutrition",
-		Subtitle:   "Personal Daily Nutrition Target",
+		Title:      "Nutrition Ranking",
+		Subtitle:   "Active Nutrition Target",
 		Part:       "B",
 		Purpose: fmt.Sprintf(
 			"Ranked against the %s target (%s) -- the same rubric this child's Book 2 recipes "+
@@ -937,6 +947,44 @@ func insertDataQualitySection(sections []Section, sec Section) []Section {
 		}
 	}
 	return append([]Section{sec}, sections...)
+}
+
+// recipeLinkIndexSection builds the Recipe Link Index page from an already-computed
+// []ChapterRange -- see ChapterRecipeIndex in book2.go for where the real data comes from.
+// Only ever built by AssembleSet, since it needs a Book 2 to cross-reference.
+func recipeLinkIndexSection(chapters []ChapterRange) Section {
+	return Section{
+		BlockID:    "B1-RECIPEINDEX-01",
+		TemplateID: "B1-RECIPEINDEX-01",
+		Title:      "Recipes",
+		Subtitle:   "Recipe Link Index",
+		Part:       "B",
+		Purpose: "Which of this book's recipes back each Book 2 chapter, by their real " +
+			"recipe number and ID -- a page reference here always points at something the " +
+			"accompanying Book 2 actually contains. No day is assigned to any recipe: which " +
+			"one a family cooks on which day is theirs to choose, not this book's to decide.",
+		RecipeLinkIndex: chapters,
+	}
+}
+
+// insertRecipeLinkIndexSection places the Recipe Link Index immediately after Food Groups &
+// Nutrient Priorities (B1-FOODGROUPS-01) if that page rendered for this child, else
+// immediately after Personal Nutrition Target (B1-NUTRITION-01) -- the reference document's
+// own order, held correct regardless of which of this project's own new pages a given
+// child's book actually carries.
+func insertRecipeLinkIndexSection(sections []Section, sec Section) []Section {
+	for _, anchor := range []string{"B1-FOODGROUPS-01", "B1-NUTRITION-01"} {
+		for i, s := range sections {
+			if s.BlockID == anchor {
+				out := make([]Section, 0, len(sections)+1)
+				out = append(out, sections[:i+1]...)
+				out = append(out, sec)
+				out = append(out, sections[i+1:]...)
+				return out
+			}
+		}
+	}
+	return append(sections, sec)
 }
 
 // parseAgeMonths reads book1_vaccine_schedule.age_min_months, which is text so that the

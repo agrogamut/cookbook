@@ -894,3 +894,33 @@ func numberBook(sections []MealSection) {
 		}
 	}
 }
+
+// ChapterRecipeIndex reads Book 1's "Recipe Link Index" straight off an already-assembled
+// Book 2 -- one entry per non-empty chapter, real numbering from numberBook, real RecipeIDs.
+//
+// Deliberately not recomputed independently: a second, separate call into the engine (or
+// worse, a second topUpInvented/Gemini call for a short chapter) could legitimately select
+// or invent a different recipe than the one actually printed in the Book 2 sitting next to
+// it, making the cross-reference point at content that does not exist in that specific
+// generated copy. This only ever reads MealSections that already survived one real run.
+func ChapterRecipeIndex(sections []MealSection) []ChapterRange {
+	var out []ChapterRange
+	for _, sec := range sections {
+		if len(sec.Recipes) == 0 {
+			continue
+		}
+		ids := make([]string, len(sec.Recipes))
+		for i, r := range sec.Recipes {
+			ids[i] = r.RecipeID
+		}
+		out = append(out, ChapterRange{
+			ChapterNumber:     sec.Number,
+			Title:             sec.Title,
+			FirstRecipeNumber: sec.Recipes[0].Number,
+			LastRecipeNumber:  sec.Recipes[len(sec.Recipes)-1].Number,
+			RecipeCount:       len(sec.Recipes),
+			RecipeIDs:         ids,
+		})
+	}
+	return out
+}

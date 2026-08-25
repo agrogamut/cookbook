@@ -1,0 +1,24 @@
+{{/* B1-RECIPEINDEX-01: which real Book 2 recipes back each chapter.
+
+     Built from an already-assembled Book 2 (see ChapterRecipeIndex in book2.go), never
+     recomputed independently -- a second engine run could select or invent a different
+     recipe than the one actually printed in the accompanying Book 2. No day of the week is
+     assigned to any recipe: this is a range within a chapter, never a schedule. */}}
+{{ define "B1-RECIPEINDEX-01" }}
+<table>
+  <thead>
+    <tr><th>Chapter</th><th>Recipes</th><th>Real IDs</th></tr>
+  </thead>
+  <tbody>
+    {{ range .RecipeLinkIndex }}
+    <tr>
+      <td>{{ printf "%02d" .ChapterNumber }} &nbsp; {{ .Title }}</td>
+      <td>{{ if eq .FirstRecipeNumber .LastRecipeNumber }}Recipe {{ .FirstRecipeNumber }}
+          {{ else }}Recipes {{ .FirstRecipeNumber }}&ndash;{{ .LastRecipeNumber }}{{ end }}
+          &nbsp;({{ .RecipeCount }})</td>
+      <td class="mono">{{ range $i, $id := .RecipeIDs }}{{ if $i }}, {{ end }}{{ $id }}{{ end }}</td>
+    </tr>
+    {{ end }}
+  </tbody>
+</table>
+{{ end }}

@@ -114,6 +114,13 @@ type Section struct {
 	// gas/bloating illness entry. See connectSection in book1.go.
 	Prose []string `json:"prose,omitempty"`
 
+	// RecipeLinkIndex carries B1-RECIPEINDEX-01's real chapter-to-recipe cross-reference --
+	// see ChapterRange and ChapterRecipeIndex in book2.go. Only ever set by AssembleSet, once
+	// both books exist: a standalone Book1-only request has no Book2 to cross-reference and
+	// this stays nil rather than a second, independent engine run that could invent-fill a
+	// different short chapter than the one actually printed alongside it.
+	RecipeLinkIndex []ChapterRange `json:"recipe_link_index,omitempty"`
+
 	// DoctorApproachNote is a short, Gemini-drafted "what to discuss with your doctor" note for
 	// the blocks that carry no provider-sourced red-flag/doctor-review text of their own --
 	// see doctorApproachEligible in book1.go for exactly which, and why the rest don't need one.
@@ -571,6 +578,19 @@ type RecipeMeta struct {
 	Value string `json:"value"`
 	// Mono marks a value set in the identity/quantity face rather than in prose.
 	Mono bool `json:"mono"`
+}
+
+// ChapterRange is one Book 2 chapter's recipe range as this specific child's book actually
+// assembled it -- real chapter title, real continuous recipe numbering, real RecipeIDs. No
+// day assignment: which recipe lands on which day of a week has no source data, so this
+// names a range within a chapter, never a schedule. See ChapterRecipeIndex.
+type ChapterRange struct {
+	ChapterNumber     int      `json:"chapter_number"`
+	Title             string   `json:"title"`
+	FirstRecipeNumber int      `json:"first_recipe_number"`
+	LastRecipeNumber  int      `json:"last_recipe_number"`
+	RecipeCount       int      `json:"recipe_count"`
+	RecipeIDs         []string `json:"recipe_ids"`
 }
 
 type MealSection struct {

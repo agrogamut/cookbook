@@ -56,6 +56,19 @@ func AssembleSet(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, asOf
 		return Set{}, fmt.Errorf("book2: %w", err)
 	}
 
+	// The Recipe Link Index only exists here, in AssembleSet, and nowhere inside
+	// AssembleBook1 itself: it cross-references a real Book 2, which a standalone
+	// Book-1-only request never has. A child generated as Book 1 alone carries no such
+	// page -- an honest structural omission, not a rendering gap, the same posture
+	// B1-PRESCRIPTION-01/B1-END-01 already have for content only a full run guarantees.
+	riSec := recipeLinkIndexSection(ChapterRecipeIndex(b2.MealSections))
+	if SectionHasContent(riSec) {
+		b1.Sections = insertRecipeLinkIndexSection(b1.Sections, riSec)
+		// Re-run after inserting: StartsPart depends on final section order, and
+		// AssembleBook1 already computed it once against a shorter list.
+		markSheetStarts(b1.Sections)
+	}
+
 	shared, only1, only2 := partitionOmissions(dropped1, dropped2)
 
 	return Set{

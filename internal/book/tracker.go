@@ -162,7 +162,8 @@ func trackerFromWritable(title, writableFields, frequency string) *TrackerSpec {
 // reported as an omission instead of being appended.
 func SectionHasContent(s Section) bool {
 	if len(s.Rows) > 0 || len(s.Growth) > 0 || len(s.Domains) > 0 ||
-		len(s.Illness) > 0 || len(s.Refs) > 0 || len(s.Prose) > 0 || s.Callout != nil {
+		len(s.Illness) > 0 || len(s.Refs) > 0 || len(s.Prose) > 0 || s.Callout != nil ||
+		len(s.RecipeLinkIndex) > 0 {
 		return true
 	}
 	if s.Stage != nil && s.Stage.Current != nil {
