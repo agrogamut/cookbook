@@ -134,6 +134,35 @@ Child Growth Standards as the standard in use and stops there, deliberately:
 interpreting a specific recorded number stays `B1-004`'s job, and `B1-004`
 stays unmapped for exactly that reason.
 
+### Amendment - per-recipe Draft label dropped from the printed page (2026-08-25)
+
+`RecipeCard.ReviewStatus` (verbatim from the provider's `Review_Status` column, e.g.
+`Draft - Culinary/Nutrition/Clinical Review Required`) stops printing on Book 2's recipe
+page (`internal/book/templates/book2/recipe.html`). Every one of 940 recipes carries the
+same value, so it printed as thirty identical "Draft" lines through one child's book -
+noise repeated at every card, not information a family could act on differently card to
+card. The same call applies to `food_safety_sop.review_status` (`SafetyGuideline.Status`)
+on the kitchen-safety chapter (`book2/safety.html`) - it dropped the `Status` column from
+both SOP tables, for the identical reason: eight more repeated "Draft" cells, one per rule
+row, on a page that is not where a document's review state belongs.
+
+This narrows, again, the same line the 24 August ruling drew and the 25 August carve-out
+above left standing: **document-level banners and repeated per-card status text are this
+project's call; the provider's own data flag is not.** `Review_Status` still stays
+verbatim in `RecipeCard.ReviewStatus` on the struct and the JSON API - the operator
+console's fact-check surface still needs it, and nothing here changes what
+`nutrition_discrepancy_report` or any audit view shows. What changes is one thing: a
+family reading a signed, physically-delivered book no longer sees the row's own draft
+status repeated as if it were still unresolved.
+
+This is sound specifically because the sign-off page (`book1/signoff.html`,
+`book2/signoff.html`) is the single place that status belongs now: one real clinician
+signature covers the whole document, rather than a legalese line repeated on every
+page nobody reads twice. A book with no sign-off page, or generated for internal
+console preview rather than a signed physical copy, still carries the same struct field
+- this decision is about what a family-facing recipe card prints, not about deleting the
+flag from the data model.
+
 ## Communication and attribution rules
 
 - Never mention claude, anthropic, or ai anywhere: not in chat, code, comments, commit

@@ -38,12 +38,11 @@
 
   <h3>Kitchen &amp; ingredient safety</h3>
   <table>
-    <thead><tr><th>Rule</th><th>Status</th></tr></thead>
+    <thead><tr><th>Rule</th></tr></thead>
     <tbody>
       {{ range .KitchenSafetyRules }}
       <tr>
         <td>{{ .Rule }}{{ if .EvidenceTitle }}<br><span class="citation">{{ if .EvidenceAuthority }}{{ .EvidenceAuthority }}, {{ end }}{{ .EvidenceTitle }}{{ if .EvidenceYear }} ({{ .EvidenceYear }}){{ end }}</span>{{ end }}</td>
-        <td class="mono">{{ .Status }}</td>
       </tr>
       {{ end }}
     </tbody>
@@ -51,12 +50,11 @@
 
   <h3>Hygiene, storage &amp; handling</h3>
   <table>
-    <thead><tr><th>Rule</th><th>Status</th></tr></thead>
+    <thead><tr><th>Rule</th></tr></thead>
     <tbody>
       {{ range .HygieneSafetyRules }}
       <tr>
         <td>{{ .Rule }}{{ if .EvidenceTitle }}<br><span class="citation">{{ if .EvidenceAuthority }}{{ .EvidenceAuthority }}, {{ end }}{{ .EvidenceTitle }}{{ if .EvidenceYear }} ({{ .EvidenceYear }}){{ end }}</span>{{ end }}</td>
-        <td class="mono">{{ .Status }}</td>
       </tr>
       {{ end }}
     </tbody>
@@ -82,8 +80,7 @@
 
   <div class="note warning">
     <h3>Safety</h3>
-    <p>These rules apply to every recipe in this book, regardless of which chapter it sits in.
-      Every row's status reflects the provider's own review state, shown as recorded.</p>
+    <p>These rules apply to every recipe in this book, regardless of which chapter it sits in.</p>
   </div>
 </section>
 {{ end }}

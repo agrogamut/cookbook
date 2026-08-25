@@ -18,7 +18,13 @@
     <span class="recipe-kicker">{{ with .RegionCulture }}{{ . }}{{ end }}</span>
   </div>
   <h2>{{ .Title }}</h2>
-  <p class="recipe-id"><span class="rid">{{ .RecipeID }}</span> &middot; {{ .ReviewStatus }}</p>
+  {{/* Per-card "Draft - Culinary/Nutrition/Clinical Review Required" no longer prints here.
+       This is a final, physically signed document (book1/signoff.html carries the real
+       sign-off), and repeating the row's own draft status on every single card read as an
+       unresolved warning on a book already reviewed. RecipeCard.ReviewStatus stays on the
+       struct/API unchanged -- the operator console still needs it to see what is
+       provider-provisional before the book is signed. See CLAUDE.md's dated amendment. */}}
+  <p class="recipe-id"><span class="rid">{{ .RecipeID }}</span></p>
 
   {{/* Production strip: prep, cook, serving, texture, cost band. Every value is a
        recipe_master column that has always been loaded and was never printed. An unset
