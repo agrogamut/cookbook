@@ -146,6 +146,32 @@ on the kitchen-safety chapter (`book2/safety.html`) - it dropped the `Status` co
 both SOP tables, for the identical reason: eight more repeated "Draft" cells, one per rule
 row, on a page that is not where a document's review state belongs.
 
+Three more printed sentences went the same day, same reasoning, none of them the
+per-row `Review_Status`/`Data_Quality` flag itself: the "Shared method (GAP-001)" side-note
+on a recipe page (told a family the paragraph beside it was generic and not written for
+their dish - `MethodIsProviderBoilerplate` stays true on the struct, the operator still
+sees it pre-signoff); the "unverified remainder stands on the provider's food-group
+planning figure..." sentence under a recipe's nutrition panel (the honest IFCT-coverage
+percentage and its bar stay exactly as printed - that is the derived-value confidence this
+file's hard rule requires, not a review-status caveat, and deleting the number itself would
+have been inventing full verification); and the kitchen-safety standfirst's "has not yet
+resolved to a full reference (GAP-028)" clause. All three said, in effect, "this specific
+line was not written or checked as carefully as the rest of the book" - which is a
+different claim from the provider's `Review_Status` flag (which says the whole dataset has
+not been through clinical review) and belongs even less on a signed, family-facing page.
+`GAP-001` and `GAP-028` are unaffected as gap-register entries; only their in-book
+footnotes are gone.
+
+**What this does not touch, on purpose:** `book1_illness_feeding_block.book_engine_limit`
+("General guidance only, not specific to this child's condition...") and the daily-life
+`AILimit`/stage `domain-limit` text keep printing verbatim. Those are a permanent clinical
+scope statement - the same kind of thing as "this book does not replace your doctor," which
+a fully reviewed, signed document still carries - not a temporary "not yet reviewed" flag.
+`B1-REFS-01`'s per-source `important_limitation` column (`book1_evidence_source`) is
+unaffected for the same reason: "Use validated z-score module," "Does not replace clinical
+assessment" are facts about what each cited source can and cannot support, not a statement
+about this book's own review status.
+
 This narrows, again, the same line the 24 August ruling drew and the 25 August carve-out
 above left standing: **document-level banners and repeated per-card status text are this
 project's call; the provider's own data flag is not.** `Review_Status` still stays

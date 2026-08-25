@@ -56,18 +56,10 @@
         {{ end }}
       </ul>
 
-      {{/* GAP-001 surfaced at the point of use: if this method text is one of the six shared
-           across the corpus, the reader is told so on the page rather than having to find it
-           in the register. It sits in this column because the narrow side of a five-step
-           method is empty below a short ingredient list, and full width it cost the page
-           enough height to push the tracker onto a sheet of its own. */}}
-      {{ if .MethodIsProviderBoilerplate }}
-      <div class="side-note">
-        <h3>Shared method</h3>
-        <p>The provider repeats this preparation text across many recipes (GAP-001). It
-          describes the format, not this dish.</p>
-      </div>
-      {{ end }}
+      {{/* GAP-001: MethodIsProviderBoilerplate stays on the struct/API for the operator to
+           check before signing (which recipes share the six generic method texts), but the
+           printed page no longer flags it -- a family reading a signed book does not need a
+           footnote telling them a paragraph is shared. */}}
     </div>
     <div class="method">
       <h3>Method</h3>
@@ -144,9 +136,7 @@
     </div>
   </div>
   <p class="nutri-basis">Totals for the {{ .BasisG }} of ingredients listed above, rebuilt from
-    IFCT 2017 values.{{ if not .FullyVerified }} The unverified remainder stands on the
-    provider's food-group planning figure, which is shared across a whole food group and is
-    not specific to the ingredient.{{ end }}</p>
+    IFCT 2017 values.</p>
 </div>
 {{ end }}
 {{ end }}
