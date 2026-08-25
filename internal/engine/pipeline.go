@@ -78,7 +78,7 @@ func Run(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (models
 	}
 	steps = append(steps, step4)
 
-	targetCode, targetReason, err := selectTarget(ctx, pool, p)
+	targetCode, targetReason, err := SelectTarget(ctx, pool, p)
 	if err != nil {
 		return models.EngineResult{}, err
 	}

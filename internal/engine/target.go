@@ -18,7 +18,7 @@ import (
 // operator -- not the engine -- decides which marker applies. NT03/NT04/NT05 (thinness,
 // overweight-under-5, overweight-5-19) all key on the same underlying concept
 // (weight-for-age concern) but are age-gated by nutrition_target_master.age_from_months/
-// age_to_months, so selectTarget re-checks the age band after the marker lookup rather
+// age_to_months, so SelectTarget re-checks the age band after the marker lookup rather
 // than trusting the operator's marker key alone.
 var clinicalMarkerToTarget = map[string]string{
 	"growth_faltering":  "NT02",
@@ -34,12 +34,12 @@ var clinicalMarkerToTarget = map[string]string{
 	"illness_recovery":  "NT12",
 }
 
-// selectTarget is engine step 5's target-selection half. NT01 auto-activates for ages
+// SelectTarget is engine step 5's target-selection half. NT01 auto-activates for ages
 // 6-23 months per nutrition_target_master's own trigger_input ("Automatically active for
 // complementary-feeding age"); an explicit operator marker is checked first because a
 // clinician-entered condition should not be silently overridden by the age default.
 // NT00 is the fallback, matching nt_engine_priority_logic priority 4's default.
-func selectTarget(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (string, string, error) {
+func SelectTarget(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (string, string, error) {
 	// Set when an operator chose a marker whose target does not cover this child's age. The
 	// age gate is correct -- NT04 is an under-five target and NT08 starts at 24 months, so
 	// applying either outside its band would rank against a rubric the provider scoped

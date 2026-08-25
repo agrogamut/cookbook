@@ -272,15 +272,20 @@ func TestEveryBlockIsEitherRenderedOrReported(t *testing.T) {
 				blockSkips++
 			}
 		}
-		// B1-CONNECT-01 ("Being Together") is synthetic -- inserted by insertConnectSection,
-		// not a book1_content_block row -- so it is deliberately outside this test's universe
-		// of `total`, the same way B1-COVER-01/B1-TOC-01/B1-SIGNOFF-01/B1-END-01 already are.
-		// Excluded here rather than counted against `total`, because `total` is specifically
-		// "how many real provider blocks does this table have," and that number does not
-		// change when this project adds its own page.
+		// B1-CONNECT-01 ("Being Together"), B1-NUTRITION-01 (Personal Nutrition Target) and
+		// B1-DATAQUALITY-01 (data quality checklist) are all synthetic -- inserted by their
+		// own insertXSection helpers, not book1_content_block rows -- so they are
+		// deliberately outside this test's universe of `total`, the same way
+		// B1-COVER-01/B1-TOC-01/B1-SIGNOFF-01/B1-END-01 already are. Excluded here rather
+		// than counted against `total`, because `total` is specifically "how many real
+		// provider blocks does this table have," and that number does not change when this
+		// project adds its own page.
+		synthetic := map[string]bool{
+			"B1-CONNECT-01": true, "B1-NUTRITION-01": true, "B1-DATAQUALITY-01": true,
+		}
 		rendered := 0
 		for _, sec := range b.Sections {
-			if sec.BlockID != "B1-CONNECT-01" {
+			if !synthetic[sec.BlockID] {
 				rendered++
 			}
 		}

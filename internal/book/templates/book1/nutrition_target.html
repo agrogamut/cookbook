@@ -1,0 +1,22 @@
+{{/* B1-NUTRITION-01: Personal Daily Nutrition Target.
+
+     Real data throughout, no drafting: nutrition_target_master's *_action columns are
+     already short, well-formed provider phrases ("High priority", "Avoid excess sodium"),
+     so this prints them as a labelled table rather than synthesizing a paragraph -- the
+     same restraint IllnessBlock.SupportiveMessage and Section.Purpose already apply to
+     provider prose elsewhere in this book. See nutritionTargetSection in book1.go. */}}
+{{ define "B1-NUTRITION-01" }}
+<table>
+  <thead>
+    <tr><th>Domain</th><th>Guidance</th></tr>
+  </thead>
+  <tbody>
+    {{ range .Rows }}
+    <tr>
+      <td>{{ .Label }}</td>
+      <td>{{ .Note }}</td>
+    </tr>
+    {{ end }}
+  </tbody>
+</table>
+{{ end }}

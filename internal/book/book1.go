@@ -126,17 +126,46 @@ type developmentMilestoneRow struct {
 	ActionIfConcern    string
 }
 
+// nutritionTargetRow is the subset of nutrition_target_master's ~35 columns the Personal
+// Nutrition Target page prints, read verbatim. TargetName and the ten *_action columns are
+// short provider-authored phrases ("High priority", "Avoid excess sodium"), not full
+// sentences -- verified live against NT00/NT01 -- so they print as a labelled table rather
+// than being stitched into a paragraph. Book1Output is the provider's own declaration of
+// what this page should contain ("Personal target summary; meal frequency; food-group
+// guidance; monitoring"), the same shape as book1_content_block.parent_facing_output, so it
+// is read the same way: split on its own separator and printed as the section's "this page
+// covers" line, never as body prose.
+type nutritionTargetRow struct {
+	TargetName         string
+	Book1Output        string
+	ProteinAction      string
+	IronAction         string
+	CalciumAction      string
+	FruitVegAction     string
+	HydrationAction    string
+	FreeSugarAction    string
+	SodiumAction       string
+	PortionAction      string
+	MealFreqAction     string
+	CarbohydrateAction string
+}
+
 // AssembleBook1 builds the Book 1 document for one child as of a given date.
 //
 // The second return names every block that was skipped and why, so a reviewer sees what the
 // book does not contain rather than assuming the absence is deliberate.
 //
 // The special-care stop gate is consulted before anything is assembled, and returns
-// ErrBlocked exactly as AssembleBook2 does. Book 1 runs no engine of its own -- it carries
-// no recipe to filter -- which is precisely how a child with a STOP-REVIEW diagnosis got a
-// full book of general-population milestone tables in their own name with no mention of the
-// clinician's stop. The provider's rule is a stop on generation, not a recipe filter, so the
-// gate has to sit here too. Blocking needs no clinical sign-off; issuing the document does.
+// ErrBlocked exactly as AssembleBook2 does. Book 1 runs no *ranking* engine of its own --
+// it carries no recipe to filter -- which is precisely how a child with a STOP-REVIEW
+// diagnosis got a full book of general-population milestone tables in their own name with
+// no mention of the clinician's stop. The provider's rule is a stop on generation, not a
+// recipe filter, so the gate has to sit here too. Blocking needs no clinical sign-off;
+// issuing the document does. It does call engine.SelectTarget (the target-selection half
+// of step 5), for the Personal Nutrition Target page -- narrower than a full engine.Run:
+// no age/allergy/clinical filter and no recipe ranking, only "which of the thirteen
+// NT00-NT12 rows applies to this child," the same question Book 2's recipe pages already
+// answer for themselves.
 func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, asOf time.Time, opts ...AssembleOption) (Book1, []string, error) {
 	cfg := assembleOptions{drafter: aidraft.Disabled}
 	for _, opt := range opts {
@@ -155,6 +184,16 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 	if blocked {
 		return Book1{}, nil, fmt.Errorf("%w: %s", ErrBlocked, reason)
 	}
+
+	targetCode, targetReason, err := engine.SelectTarget(ctx, pool, cp)
+	if err != nil {
+		return Book1{}, nil, fmt.Errorf("book: select nutrition target: %w", err)
+	}
+	nutritionTarget, err := loadNutritionTarget(ctx, pool, targetCode)
+	if err != nil {
+		return Book1{}, nil, fmt.Errorf("book: load nutrition target: %w", err)
+	}
+	dataQuality := dataQualityChecklist(s)
 
 	b := Book1{
 		Metadata: Metadata{
@@ -485,6 +524,19 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 
 	b.Sections = insertConnectSection(b.Sections)
 
+	ntSec := nutritionTargetSection(targetCode, targetReason, nutritionTarget)
+	if SectionHasContent(ntSec) {
+		b.Sections = insertNutritionTargetSection(b.Sections, ntSec)
+	} else {
+		skipped = append(skipped, omissionBlock+fmt.Sprintf(
+			"nutrition target %s has no printable guidance columns and was not rendered", targetCode))
+	}
+
+	dqSec := dataQualitySection(dataQuality)
+	if SectionHasContent(dqSec) {
+		b.Sections = insertDataQualitySection(b.Sections, dqSec)
+	}
+
 	markSheetStarts(b.Sections)
 
 	return b, skipped, nil
@@ -714,6 +766,177 @@ func loadDevelopmentMilestones(ctx context.Context, pool *pgxpool.Pool) ([]devel
 		return nil, fmt.Errorf("development milestone rows: %w", err)
 	}
 	return out, nil
+}
+
+// loadNutritionTarget reads the one nutrition_target_master row for an already-selected
+// target code. A single row, not a slice: unlike the vaccine/milestone masters, this page
+// needs only the child's own active target, not the other twelve.
+func loadNutritionTarget(ctx context.Context, pool *pgxpool.Pool, targetCode string) (nutritionTargetRow, error) {
+	var t nutritionTargetRow
+	err := pool.QueryRow(ctx, `
+		SELECT target_name, coalesce(book1_output, ''),
+		       coalesce(protein_action, ''), coalesce(iron_action, ''),
+		       coalesce(calcium_action, ''), coalesce(fruit_vegetable_action, ''),
+		       coalesce(hydration_action, ''), coalesce(free_sugar_action, ''),
+		       coalesce(sodium_action, ''), coalesce(portion_action, ''),
+		       coalesce(meal_frequency_action, ''), coalesce(carbohydrate_action, '')
+		FROM nutrition_target_master WHERE target_code = $1`, targetCode).Scan(
+		&t.TargetName, &t.Book1Output, &t.ProteinAction, &t.IronAction, &t.CalciumAction,
+		&t.FruitVegAction, &t.HydrationAction, &t.FreeSugarAction, &t.SodiumAction,
+		&t.PortionAction, &t.MealFreqAction, &t.CarbohydrateAction)
+	if err != nil {
+		return nutritionTargetRow{}, fmt.Errorf("query nutrition target %s: %w", targetCode, err)
+	}
+	return t, nil
+}
+
+// nutritionTargetDomainLabels pairs each *_action column with the label it prints under, in
+// print order. A fixed order rather than column order in the query, because the reference
+// page groups protein/iron/calcium/fruit-veg before the feeding-pattern columns
+// (portion/frequency/carbohydrate) and free-sugar/sodium/hydration sit with the group they
+// read closest to -- this is a presentation choice, not a data one, and every value printed
+// is still the provider's own verbatim column.
+func nutritionTargetDomainLabels(t nutritionTargetRow) []Row {
+	var out []Row
+	for _, d := range []struct{ label, value string }{
+		{"Protein", t.ProteinAction},
+		{"Iron", t.IronAction},
+		{"Calcium", t.CalciumAction},
+		{"Fruit & vegetables", t.FruitVegAction},
+		{"Hydration", t.HydrationAction},
+		{"Free sugar", t.FreeSugarAction},
+		{"Sodium", t.SodiumAction},
+		{"Portion", t.PortionAction},
+		{"Meal frequency", t.MealFreqAction},
+		{"Carbohydrate", t.CarbohydrateAction},
+	} {
+		if d.value == "" {
+			continue
+		}
+		out = append(out, Row{Label: d.label, Note: d.value})
+	}
+	return out
+}
+
+// nutritionTargetSection builds the Personal Nutrition Target page. targetReason is the
+// engine's own explanation for why this target applies (age band, clinician marker, or the
+// NT00 fallback) -- engine.SelectTarget already computes it for Book 2's recipe pages, and
+// this reuses it rather than re-deriving a second explanation that could disagree with the
+// first.
+func nutritionTargetSection(targetCode, targetReason string, t nutritionTargetRow) Section {
+	return Section{
+		BlockID:    "B1-NUTRITION-01",
+		TemplateID: "B1-NUTRITION-01",
+		Title:      "Nutrition",
+		Subtitle:   "Personal Daily Nutrition Target",
+		Part:       "B",
+		Purpose: fmt.Sprintf(
+			"Ranked against the %s target (%s) -- the same rubric this child's Book 2 recipes "+
+				"are scored against, so the two books agree on what \"a good recipe for this "+
+				"child\" means.", t.TargetName, targetReason),
+		Covers: splitDeclared(t.Book1Output),
+		Rows:   nutritionTargetDomainLabels(t),
+	}
+}
+
+// insertNutritionTargetSection places the nutrition-target page immediately after Growth
+// (B1-003, Part B) -- the reference document's own placement, and the natural one: a
+// family reads what was measured, then what it is being ranked against. Falls back to the
+// end of Part B if B1-003 was age-excluded or otherwise not rendered for this child, the
+// same fallback shape insertConnectSection uses for its own anchor block.
+func insertNutritionTargetSection(sections []Section, sec Section) []Section {
+	for i, s := range sections {
+		if s.BlockID == "B1-003" {
+			out := make([]Section, 0, len(sections)+1)
+			out = append(out, sections[:i+1]...)
+			out = append(out, sec)
+			out = append(out, sections[i+1:]...)
+			return out
+		}
+	}
+	for i := len(sections) - 1; i >= 0; i-- {
+		if sections[i].Part == "B" {
+			out := make([]Section, 0, len(sections)+1)
+			out = append(out, sections[:i+1]...)
+			out = append(out, sec)
+			out = append(out, sections[i+1:]...)
+			return out
+		}
+	}
+	return append(sections, sec)
+}
+
+// dataQualityRow is one line of the "what's recorded" checklist: a fact this project can
+// actually check (a row exists in a per-child table), never a field with no query behind
+// it. book1_vaccine_schedule and book1_monitoring_template are reference masters, not a
+// per-child vaccination or medicine record -- there is no child_vaccination or
+// child_medicine table in this schema -- so "vaccination status known" and "medicines
+// noted", both on the reference page, are deliberately not asked here: a field that would
+// read "Recorded" for every child regardless of what actually happened is not an
+// information-quality signal, it is a decoration.
+type dataQualityRow struct {
+	Field    string
+	Recorded bool
+}
+
+// dataQualityChecklist checks what is actually on file for this child, reading the already-
+// loaded profile.Stored directly rather than querying child_growth_measurement/child_allergen/
+// child_clinical_condition/child_preference.
+//
+// Deliberately not a DB query: generation does not require a stored child at all (see
+// internal/book/set.go and POST /api/books/generate's own doc comment) -- a growth
+// measurement or allergen declared inline on a one-off request never reaches those tables,
+// so querying them would misreport a real, present answer as "Not recorded" for exactly the
+// console's primary action. s.Growth/s.Allergens/s.Conditions/s.Preferences are populated
+// identically whichever path built s, which is the one property this function actually
+// needs.
+func dataQualityChecklist(s profile.Stored) []dataQualityRow {
+	return []dataQualityRow{
+		{Field: "Growth measurement recorded", Recorded: len(s.Growth) > 0},
+		{Field: "Allergy status declared", Recorded: len(s.Allergens) > 0},
+		{Field: "Clinical condition history recorded", Recorded: len(s.Conditions) > 0},
+		{Field: "Feeding / diet practice declared", Recorded: s.DietType != ""},
+		{Field: "Food preferences recorded", Recorded: len(s.Preferences) > 0},
+	}
+}
+
+// dataQualitySection builds the "What Is Known" checklist page. A summary of what is
+// already true, not a form -- no writing lines, no callout, just what this project can
+// actually verify against the child's own stored rows.
+func dataQualitySection(rows []dataQualityRow) Section {
+	sec := Section{
+		BlockID:    "B1-DATAQUALITY-01",
+		TemplateID: "B1-DATAQUALITY-01",
+		Title:      "Data Quality",
+		Subtitle:   "What Is Known So Far",
+		Part:       "A",
+		Purpose: "What this book actually has on file for this child, checked against the " +
+			"stored record rather than assumed.",
+	}
+	for _, r := range rows {
+		status := "Not recorded"
+		if r.Recorded {
+			status = "Recorded"
+		}
+		sec.Rows = append(sec.Rows, Row{Label: r.Field, Note: status})
+	}
+	return sec
+}
+
+// insertDataQualitySection places the checklist immediately after Child Profile (B1-001,
+// Part A) -- the reference document's own placement, and the natural one: identity first,
+// then what is and isn't known about this child, before anything built from either.
+func insertDataQualitySection(sections []Section, sec Section) []Section {
+	for i, s := range sections {
+		if s.BlockID == "B1-001" {
+			out := make([]Section, 0, len(sections)+1)
+			out = append(out, sections[:i+1]...)
+			out = append(out, sec)
+			out = append(out, sections[i+1:]...)
+			return out
+		}
+	}
+	return append([]Section{sec}, sections...)
 }
 
 // parseAgeMonths reads book1_vaccine_schedule.age_min_months, which is text so that the

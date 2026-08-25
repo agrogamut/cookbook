@@ -1,0 +1,23 @@
+{{/* B1-DATAQUALITY-01: what is actually on file for this child.
+
+     A summary of what is already true, not a form -- no writing lines, no callout. Every
+     row is a real EXISTS check against a per-child table (see loadDataQualityChecklist in
+     book1.go); "vaccination status known" and "medicines noted" from the reference document
+     are deliberately absent here, because no child_vaccination or child_medicine table
+     exists in this schema and a field that reads "Recorded" for every child regardless of
+     what actually happened would not be an honest quality signal. */}}
+{{ define "B1-DATAQUALITY-01" }}
+<table>
+  <thead>
+    <tr><th>Field</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    {{ range .Rows }}
+    <tr>
+      <td>{{ .Label }}</td>
+      <td class="mono">{{ .Note }}</td>
+    </tr>
+    {{ end }}
+  </tbody>
+</table>
+{{ end }}

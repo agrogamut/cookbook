@@ -9,9 +9,9 @@ import (
 
 func TestSelectTargetAutoActivatesNT01ForComplementaryAge(t *testing.T) {
 	pool := testPool(t)
-	code, reason, err := selectTarget(context.Background(), pool, models.ChildProfile{AgeMonths: 8})
+	code, reason, err := SelectTarget(context.Background(), pool, models.ChildProfile{AgeMonths: 8})
 	if err != nil {
-		t.Fatalf("selectTarget: %v", err)
+		t.Fatalf("SelectTarget: %v", err)
 	}
 	if code != "NT01" {
 		t.Fatalf("age 8mo must auto-activate NT01, got %q (%s)", code, reason)
@@ -20,9 +20,9 @@ func TestSelectTargetAutoActivatesNT01ForComplementaryAge(t *testing.T) {
 
 func TestSelectTargetFallsBackToNT00(t *testing.T) {
 	pool := testPool(t)
-	code, _, err := selectTarget(context.Background(), pool, models.ChildProfile{AgeMonths: 60})
+	code, _, err := SelectTarget(context.Background(), pool, models.ChildProfile{AgeMonths: 60})
 	if err != nil {
-		t.Fatalf("selectTarget: %v", err)
+		t.Fatalf("SelectTarget: %v", err)
 	}
 	if code != "NT00" {
 		t.Fatalf("60mo with no clinical marker must fall back to NT00, got %q", code)
