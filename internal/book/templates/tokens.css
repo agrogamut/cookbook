@@ -352,6 +352,20 @@ tbody tr:last-child td { border-bottom: 0.2mm solid var(--rule); }
   background: var(--paper-shade, rgba(0, 0, 0, 0.015));
 }
 
+/* .write-block is .write-line's freeform sibling: a whole paragraph's worth of blank space
+   (the prescription page's "Clinical finding" and "Nutrition & home advice" areas) rather
+   than one line's worth beside a label. Same border/background so the two read as the same
+   kind of thing at different sizes, not two different conventions. */
+.write-block {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 18mm;
+  border: 0.2mm solid var(--ink-faint);
+  border-radius: 0.5mm;
+  background: var(--paper-shade, rgba(0, 0, 0, 0.015));
+}
+
 /* Inside a table cell the line takes the column's width and asserts none of its own.
    ==========================================================================================
    This is not a tidying rule. The 28mm minimum was applying in table cells too, and Book 1's

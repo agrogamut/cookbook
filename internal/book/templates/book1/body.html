@@ -88,6 +88,11 @@
   </section>
 {{ end }}
 {{ template "B1-SIGNOFF-01" $b }}
+{{/* Between sign-off and the back cover, mirroring where a prescription belongs in a printed
+     clinical companion -- see B1-PRESCRIPTION-01's own doc comment for why the page is blank
+     rather than generated content. Printed unconditionally, the same way B1-SIGNOFF-01 and
+     B1-END-01 are: no book_order row maps to it, since no provider table declares it. */}}
+{{ template "B1-PRESCRIPTION-01" $b }}
 {{/* B1-END-01 is the book's own back page, not a provider block, so it never comes through
      the range above -- no book_order row maps to it. Printed unconditionally, the same way
      B2-IMPRINT-01 always closes Book 2, so Book 1 always ends on a real page instead of

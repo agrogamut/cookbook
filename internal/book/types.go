@@ -391,6 +391,24 @@ type Book1 struct {
 	SignoffCredits []CreditRow `json:"signoff_credits"`
 }
 
+// prescriptionPriorities is the row-label scaffold for B1-PRESCRIPTION-01's "Priority
+// recommendations" table. No provider table defines a prescription, so these six labels are
+// a static, hand-written constant (matching the gas/bloating and Being Together carve-out in
+// CLAUDE.md's 25 August amendment) -- generic clinical-note headings, not this child's data.
+// Every recommendation cell beside them is a blank writing line.
+var prescriptionPriorities = []string{
+	"Growth evaluation",
+	"Growth record",
+	"Clinical history",
+	"Examination",
+	"Investigations",
+	"Feeding support",
+}
+
+// PrescriptionPriorities is read by B1-PRESCRIPTION-01, not stored on the struct itself --
+// the labels are fixed across every book, so there is nothing per-child to carry in JSON.
+func (b Book1) PrescriptionPriorities() []string { return prescriptionPriorities }
+
 // LetterPage is Book 1's warm front-matter page: a short welcome from the book's authoring
 // team, printed right after the cover and before the contents page. It is the same words for
 // every family -- there is no per-child data behind a welcome page, so it is a Go constant

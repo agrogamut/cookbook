@@ -1,0 +1,105 @@
+{{/* B1-PRESCRIPTION-01: a blank clinical note and follow-up sheet, for the examining doctor to
+     complete by hand at or after consultation.
+
+     No provider workbook defines a prescription -- verified live, nothing in the imported
+     schema mentions one. Everything a prescription would actually state (a finding, a
+     diagnosis, a drug name, a dose, a referral) is a clinical judgement this project has no
+     basis to compute: the same reason B1-004 (growth trend interpretation) stays permanently
+     unmapped, applied to an entire page rather than one callout. So this page prints exactly
+     two kinds of thing -- the child's own identity, already recorded and printed everywhere
+     else in this book, and blank writing lines for everything a clinician alone can supply.
+     A blank form drawn from a declared layout invents nothing; this is that, for a form no
+     provider table declares, which is why even the six priority-recommendation labels below
+     are a static, hand-written scaffold (see prescriptionPriorities in book1.go) rather than
+     five distinct question types this project would have had to invent from nothing.
+
+     The examining doctor's own name is a writing line too, not prefilled from anywhere on the
+     stored profile -- nothing this project collects names who will actually see this specific
+     child, and printing a guess would misattribute a real clinical document. */}}
+{{ define "B1-PRESCRIPTION-01" }}
+<section class="page-break">
+  <div class="page-head">
+    <p class="kicker">Clinical</p>
+    <h2>Prescription &amp; Recommendation</h2>
+    <p class="block-purpose">Personalised clinical note and follow-up sheet, for {{ .Child.DisplayName }}. To be completed by the examining doctor.</p>
+  </div>
+
+  <table>
+    <colgroup><col style="width:26%"><col style="width:20%"><col style="width:18%"><col style="width:36%"></colgroup>
+    <thead><tr><th>Child</th><th>Date of birth</th><th>Age</th><th>Examining doctor</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>{{ .Child.DisplayName }}</td>
+        <td class="mono">{{ .Child.DateOfBirth }}</td>
+        <td>{{ .Child.AgeLabel }}</td>
+        <td><span class="write-line"></span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Clinical finding</h3>
+  <span class="write-block"></span>
+
+  <h3>Prescription</h3>
+  <table>
+    <colgroup><col style="width:26%"><col style="width:14%"><col style="width:18%"><col style="width:14%"><col style="width:28%"></colgroup>
+    <thead><tr><th>Medicine</th><th>Dose</th><th>Frequency</th><th>Duration</th><th>Instruction</th></tr></thead>
+    <tbody>
+      {{ range rows 4 }}
+      <tr>
+        <td><span class="write-line"></span></td>
+        <td><span class="write-line"></span></td>
+        <td><span class="write-line"></span></td>
+        <td><span class="write-line"></span></td>
+        <td><span class="write-line"></span></td>
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+
+  <h3>Priority recommendations</h3>
+  {{/* Row labels are generic clinical-note headings, not this child's data -- the same
+       "generic, non-specific, zero-provider-backing" class CLAUDE.md's 25 August amendment
+       already covers for Book 1. Every recommendation cell is blank. */}}
+  <table>
+    <colgroup><col style="width:26%"><col style="width:74%"></colgroup>
+    <thead><tr><th>Priority</th><th>Recommendation</th></tr></thead>
+    <tbody>
+      {{ range .PrescriptionPriorities }}
+      <tr>
+        <td>{{ . }}</td>
+        <td><span class="write-line"></span></td>
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+
+  <table>
+    <colgroup><col style="width:50%"><col style="width:50%"></colgroup>
+    <thead><tr><th>Nutrition &amp; home advice</th><th>Follow-up</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="write-block"></span></td>
+        <td>
+          <p><span class="label">Review date</span><br><span class="write-line"></span></p>
+          <p><span class="label">Next appointment</span><br><span class="write-line"></span></p>
+          <p><span class="label">Reports reviewed on</span><br><span class="write-line"></span></p>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <table>
+    <colgroup><col style="width:25%"><col style="width:25%"><col style="width:25%"><col style="width:25%"></colgroup>
+    <thead><tr><th>Doctor</th><th>Signature</th><th>Registration no.</th><th>Date</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="write-line"></span></td>
+        <td><span class="write-line"></span></td>
+        <td><span class="write-line"></span></td>
+        <td><span class="write-line"></span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+{{ end }}

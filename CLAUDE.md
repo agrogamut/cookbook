@@ -189,6 +189,44 @@ console preview rather than a signed physical copy, still carries the same struc
 - this decision is about what a family-facing recipe card prints, not about deleting the
 flag from the data model.
 
+### Amendment - generated blank prescription page in Book 1 (2026-08-25)
+
+Book 1 gained a new unconditional page, `B1-PRESCRIPTION-01`
+(`internal/book/templates/book1/prescription.html`), printed between the sign-off page and
+the back cover for every child. It answers a real request - "generate the prescription from
+the form inputs, not just merge a file in" - with a boundary rather than a feature: no
+provider workbook defines a prescription (verified live against the imported schema), and
+a real prescription's actual content - a clinical finding, a diagnosis, a drug name and
+dose, a referral priority - is clinical judgement, not data. That is a harder line than
+anything else this project auto-drafts: the Book 2 recipe-content ruling (18/24 August)
+licenses paraphrasing real provider rows into prose; generating a drug name and dose from
+form answers would be prescribing, which nothing in this codebase has a basis to do and
+which the special-care stop gate exists precisely to keep out of an automated path.
+
+So the page prints exactly two kinds of thing:
+
+- **The child's own identity** - name, date of birth, age - already recorded on
+  `child_profile` and printed everywhere else in this book, prefilled the same way B1-001
+  already does.
+- **Blank writing lines for everything else**, including the examining doctor's own name.
+  Nothing this project collects names who will actually see a specific child at a specific
+  visit, and printing a guess would misattribute a real clinical document to the wrong
+  person - worse than leaving it blank.
+
+The six "Priority recommendations" row labels (Growth evaluation, Growth record, Clinical
+history, Examination, Investigations, Feeding support) are a static, hand-written scaffold
+(`prescriptionPriorities` in `types.go`) - generic clinical-note headings, not this child's
+data, the same "static, hand-written, zero-provider-backing" class the 25 August
+generic-guidance carve-out already established for Book 1. Every recommendation cell beside
+them is blank.
+
+This is the honest version of the page a real doctor separately produced for one child
+(`prescription.pdf`, merged into that child's Book 1 by hand rather than generated - see the
+per-book physical sign-off amendment: a printed name is not an approval, and neither is a
+filled prescription until the physical page carries a real signature). This page is what
+every other child's Book 1 carries instead: the layout, with nothing claimed that no
+clinician has yet said.
+
 ## Communication and attribution rules
 
 - Never mention claude, anthropic, or ai anywhere: not in chat, code, comments, commit
