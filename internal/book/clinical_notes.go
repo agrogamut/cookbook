@@ -3,11 +3,47 @@ package book
 import (
 	"context"
 	"strings"
+	"sync"
 
 	"github.com/madamgy/recipie/internal/aidraft"
 	"github.com/madamgy/recipie/internal/engine"
 	"github.com/madamgy/recipie/internal/models"
 )
+
+// maxDraftConcurrency bounds how many real Gemini network calls run at once. Serial
+// drafting -- one clinical modification note per matching recipe, one doctor-approach note
+// per eligible Book 1 block -- was enough on its own to push real generation time past even
+// the print route's 180s budget the first time GEMINI_API_KEY was actually wired to
+// production (a 30-recipe Book 2 with an active clinical condition can trigger a dozen or
+// more matching recipes). Bounded rather than unbounded, so a large book does not open
+// enough simultaneous connections to look like abuse to the API.
+const maxDraftConcurrency = 6
+
+// draftConcurrently runs n independent drafting calls, do(ctx, i) for i in [0, n), with at
+// most maxDraftConcurrency in flight at once. Each call is expected to write its own result
+// to a distinct location the caller owns (a slice index, or a map key populated only after
+// every goroutine has joined) -- draftConcurrently itself holds no shared mutable state
+// across calls, so as long as callers respect "one call writes one location, never shared
+// with another call," no further synchronization is needed. ctx is passed through to each
+// call exactly as a synchronous caller would pass it, so a real Gemini request still
+// returns promptly on cancellation.
+func draftConcurrently(ctx context.Context, n int, do func(ctx context.Context, i int)) {
+	if n == 0 {
+		return
+	}
+	sem := make(chan struct{}, maxDraftConcurrency)
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			do(ctx, i)
+		}(i)
+	}
+	wg.Wait()
+}
 
 // staticModificationNotes holds the fixed, non-AI feeding notes for conditions the provider's
 // clinical_rule_master carries zero backing text for at all -- gas/bloating and "child wants
@@ -47,31 +83,27 @@ func clinicalDomainMatchesTag(domain, tag string) bool {
 	return strings.Contains(d, tg) || strings.Contains(tg, d)
 }
 
-// modificationNoteFor finds the one active clinical rule action (if any) whose domain matches
-// this recipe's own clinical tag and asks drafter to paraphrase its book2_action/
-// required_modification text. Nil, not an error, whenever nothing matches or drafting is
-// unavailable -- a missing note is the common case, not a failure.
-func modificationNoteFor(ctx context.Context, drafter aidraft.Drafter, p models.ChildProfile,
-	actions []engine.ClinicalRuleAction, recipeName, clinicalTag string) *aidraft.DraftedText {
+// modificationRequestFor finds the one active clinical rule action (if any) whose domain
+// matches this recipe's own clinical tag, and builds the request DraftModificationNote would
+// need to paraphrase it -- without making the call. Split from the actual draft so the real
+// network round trip can be deferred and run concurrently across a whole chapter's recipes
+// rather than blocking the row scan one recipe at a time; see draftConcurrently and its call
+// site in loadRecipeCards. ok is false whenever nothing matches, the common case.
+func modificationRequestFor(p models.ChildProfile, actions []engine.ClinicalRuleAction,
+	recipeName, clinicalTag string) (req aidraft.ModificationRequest, ok bool) {
 
 	for _, a := range actions {
 		if !clinicalDomainMatchesTag(a.ClinicalDomain, clinicalTag) {
 			continue
 		}
-		note, err := drafter.DraftModificationNote(ctx, aidraft.ModificationRequest{
+		return aidraft.ModificationRequest{
 			RuleID:               a.RuleID,
 			ClinicalDomain:       a.ClinicalDomain,
 			BookAction:           a.Book2Action,
 			RequiredModification: a.RequiredModification,
 			RecipeName:           recipeName,
 			ChildAgeMonths:       p.AgeMonths,
-		})
-		if err != nil {
-			// Drafting unavailable (no API key) or the call itself failed: no note is the
-			// safe fallback, never a half-built one, and never a reason to fail the card.
-			return nil
-		}
-		return &note
+		}, true
 	}
-	return nil
+	return aidraft.ModificationRequest{}, false
 }

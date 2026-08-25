@@ -107,6 +107,16 @@ var doctorApproachEligible = map[string]bool{
 // kept as the provider's own text: most rows are numeric, but the risk-based rows ("Varies",
 // "Any") are not, and forcing them to a number here would be a guess this project has no
 // basis for.
+// pendingDoctorNote is one deferred DraftDoctorApproachNote request, collected while
+// AssembleBook1's block loop runs and drafted concurrently afterward -- see
+// draftConcurrently (clinical_notes.go). idx is the section's position in b.Sections at the
+// moment it was appended, which is stable afterward since nothing reorders b.Sections
+// between collection and drafting.
+type pendingDoctorNote struct {
+	idx int
+	req aidraft.DoctorApproachRequest
+}
+
 type vaccineScheduleRow struct {
 	ScheduleID   string
 	Age          string
@@ -192,6 +202,10 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 	nutritionTarget, err := loadNutritionTarget(ctx, pool, targetCode)
 	if err != nil {
 		return Book1{}, nil, fmt.Errorf("book: load nutrition target: %w", err)
+	}
+	macroGroups, err := loadMacroGroups(ctx, pool)
+	if err != nil {
+		return Book1{}, nil, fmt.Errorf("book: load macro groups: %w", err)
 	}
 	dataQuality := dataQualityChecklist(s)
 	clinicalActions, err := engine.ActiveClinicalRuleActions(ctx, pool, cp)
@@ -290,6 +304,12 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 	defer rows.Close()
 
 	skipped := append([]string{}, dropped...)
+	// Doctor-approach requests are collected here, not drafted inline: real Gemini calls are
+	// network round trips, and up to eight of them run serially inside this loop was enough
+	// on its own to push real generation time past even the print route's 180s budget once
+	// GEMINI_API_KEY was actually wired to production. Drafted concurrently, bounded, after
+	// the loop -- see draftConcurrently.
+	var pendingDoctorNotes []pendingDoctorNote
 	for rows.Next() {
 		var blockID, sectionTitle, subsection, part, purpose, facing, writable string
 		var aiCanDraft, evidenceSourceID, evidenceAuthority, evidenceTopic string
@@ -327,8 +347,14 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		// The ai_can_draft gate is checked here, at data-load time, before this block is ever
 		// a drafting candidate -- not after a draft comes back, which would mean the five
 		// gated blocks were drafted for and then discarded. See TestDoctorApproachNoteNeverReachesGatedBlocks.
-		if doctorApproachEligible[blockID] && aiCanDraft == "Y" && cfg.drafter != aidraft.Disabled {
-			note, err := cfg.drafter.DraftDoctorApproachNote(ctx, aidraft.DoctorApproachRequest{
+		//
+		// The request is only built here; the real Gemini call is deferred to after this loop
+		// (see pendingDoctorNotes above) so eight potential network round trips run
+		// concurrently instead of serially blocking every other block's rendering.
+		wantsDoctorNote := doctorApproachEligible[blockID] && aiCanDraft == "Y" && cfg.drafter != aidraft.Disabled
+		var doctorReq aidraft.DoctorApproachRequest
+		if wantsDoctorNote {
+			doctorReq = aidraft.DoctorApproachRequest{
 				BlockID:             blockID,
 				Section:             sectionTitle,
 				ContentPurpose:      purpose,
@@ -338,12 +364,7 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 				EvidenceTopic:       evidenceTopic,
 				HowUsed:             evidenceHowUsed,
 				ImportantLimitation: evidenceLimitation,
-			})
-			if err == nil {
-				sec.DoctorApproachNote = &note
 			}
-			// Drafting unavailable or the call failed: no note, never a half-built one, and
-			// never a reason to fail the block -- the same fallback clinical_notes.go uses.
 		}
 
 		// A rendered section must carry content. Populating Rows/Cards/Callout here, per
@@ -521,10 +542,26 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		}
 
 		b.Sections = append(b.Sections, sec)
+		if wantsDoctorNote {
+			pendingDoctorNotes = append(pendingDoctorNotes,
+				pendingDoctorNote{idx: len(b.Sections) - 1, req: doctorReq})
+		}
 	}
 	if err := rows.Err(); err != nil {
 		return Book1{}, nil, fmt.Errorf("book: block rows: %w", err)
 	}
+
+	// Drafted concurrently, bounded, all writing to their own distinct b.Sections index --
+	// see draftConcurrently's own doc comment for why that needs no further synchronization.
+	draftConcurrently(ctx, len(pendingDoctorNotes), func(ctx context.Context, i int) {
+		p := pendingDoctorNotes[i]
+		note, err := cfg.drafter.DraftDoctorApproachNote(ctx, p.req)
+		if err == nil {
+			b.Sections[p.idx].DoctorApproachNote = &note
+		}
+		// Drafting unavailable or the call failed: no note, never a half-built one, and
+		// never a reason to fail the block -- the same fallback clinical_notes.go uses.
+	})
 
 	b.Sections = insertConnectSection(b.Sections)
 
@@ -534,6 +571,15 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 	} else {
 		skipped = append(skipped, omissionBlock+fmt.Sprintf(
 			"nutrition target %s has no printable guidance columns and was not rendered", targetCode))
+	}
+
+	// Omitted, not reported as a block-level skip: this page exists only when drafting
+	// succeeds (see foodGroupPrioritySection's own doc comment), and "the model was not
+	// asked" or "GEMINI_API_KEY is unset" is not the same category of absence as a real
+	// provider block with no data for this child's age.
+	fgSec := foodGroupPrioritySection(ctx, cfg.drafter, macroGroups, targetCode, nutritionTarget.TargetName, nutritionTarget)
+	if SectionHasContent(fgSec) {
+		b.Sections = insertFoodGroupPrioritiesSection(b.Sections, fgSec)
 	}
 
 	dqSec := dataQualitySection(dataQuality)
@@ -876,6 +922,139 @@ func insertNutritionTargetSection(sections []Section, sec Section) []Section {
 	}
 	for i := len(sections) - 1; i >= 0; i-- {
 		if sections[i].Part == "B" {
+			out := make([]Section, 0, len(sections)+1)
+			out = append(out, sections[:i+1]...)
+			out = append(out, sec)
+			out = append(out, sections[i+1:]...)
+			return out
+		}
+	}
+	return append(sections, sec)
+}
+
+// loadMacroGroups reads the real, closed food_group_macro vocabulary -- the only food-source
+// names DraftFoodGroupPriorities is allowed to use. Deduplicated: food_group_macro has one
+// row per fine-grained ingredient food_group, several of which share a macro_group.
+func loadMacroGroups(ctx context.Context, pool *pgxpool.Pool) ([]string, error) {
+	rows, err := pool.Query(ctx, `SELECT DISTINCT macro_group FROM food_group_macro ORDER BY 1`)
+	if err != nil {
+		return nil, fmt.Errorf("query macro groups: %w", err)
+	}
+	defer rows.Close()
+
+	var out []string
+	for rows.Next() {
+		var g string
+		if err := rows.Scan(&g); err != nil {
+			return nil, fmt.Errorf("scan macro group: %w", err)
+		}
+		out = append(out, g)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("macro group rows: %w", err)
+	}
+	return out, nil
+}
+
+// nutritionActionsByLabel builds the nutrient-name -> guidance-text map
+// DraftFoodGroupPriorities grounds on, reusing the same nutritionTargetRow the Active
+// Nutrition Target page already loaded rather than a second query. Only the four nutrients
+// this project actually has a well-established food-group link for are offered -- portion,
+// meal frequency and carbohydrate describe *how much/how often*, not *which food group*, and
+// feeding a nutrient with no real food-group answer to the model would only invite it to
+// guess one.
+func nutritionActionsByLabel(t nutritionTargetRow) map[string]string {
+	return map[string]string{
+		"Protein":            t.ProteinAction,
+		"Iron":               t.IronAction,
+		"Calcium":            t.CalciumAction,
+		"Fruit & vegetables": t.FruitVegAction,
+	}
+}
+
+// validateFoodGroupPriorities is the mechanical guardrail the schema's enum is not trusted to
+// be sufficient on its own (the same posture validateInventedRecipe already takes toward
+// inventedRecipeSchema's ingredient_id enum): every row's FoodGroup must be one of the real
+// macro groups fed in, and every row's Nutrient must be one of the real nutrients fed in. A
+// row that fails either check is dropped rather than the whole page failing -- one bad row
+// from the model is not a reason to withhold the rows that did ground correctly.
+func validateFoodGroupPriorities(rows []aidraft.FoodGroupPriority, allowedGroups, allowedNutrients map[string]bool) []aidraft.FoodGroupPriority {
+	var out []aidraft.FoodGroupPriority
+	for _, r := range rows {
+		if !allowedGroups[r.FoodGroup] || !allowedNutrients[r.Nutrient] {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// foodGroupPrioritySection asks the configured Drafter to link the child's active nutrition
+// target's real per-nutrient guidance to real food-group names, and builds the page from
+// whatever survives validateFoodGroupPriorities.
+//
+// Why a grounded LLM draft rather than a hand-written Go rule table (e.g. "iron priority ->
+// pulses, leafy greens, animal protein"): no table in this schema maps a nutrient to a food
+// group. nutrition_target_master's *_action columns state a nutrient's role in prose but name
+// no food source; food_group_macro groups ingredients by mass composition, not by nutrient
+// relevance. A hand-written rule linking the two would be this project's own invented
+// nutrition-science claim, sourced from nothing in the corpus -- worse than a disclosed,
+// grounded draft, because it would read as authoritative fact with no source attached at all.
+// The grounded version at least names its two real sources and is Go-side re-validated
+// against the real, closed food_group_macro vocabulary before a word of it prints.
+//
+// Related but distinct from migration 0020's "recipe_composition_share is deliberately NOT
+// PRINTED IN BOOK 2" call: that decision was about page-budget cost on a recipe card, a
+// different page shape (a per-recipe bar chart) and a different question (mass composition of
+// one dish) than this page's macro-group labels on a Book 1 page with no recipe card
+// competing for space. Named here rather than treated as silently re-opening that decision.
+//
+// Returns a zero Section (no content, never inserted) when drafting is unavailable -- no
+// GEMINI_API_KEY, a failed call, or every returned row failing validation -- the same
+// omit-rather-than-half-build convention every other Drafter caller in this package follows.
+func foodGroupPrioritySection(ctx context.Context, drafter aidraft.Drafter, macroGroups []string, targetCode, targetName string, t nutritionTargetRow) Section {
+	actions := nutritionActionsByLabel(t)
+	draft, err := drafter.DraftFoodGroupPriorities(ctx, aidraft.FoodGroupPriorityRequest{
+		TargetCode: targetCode, TargetName: targetName, Actions: actions, MacroGroups: macroGroups,
+	})
+	if err != nil {
+		return Section{}
+	}
+
+	allowedGroups := make(map[string]bool, len(macroGroups))
+	for _, g := range macroGroups {
+		allowedGroups[g] = true
+	}
+	allowedNutrients := make(map[string]bool, len(actions))
+	for n := range actions {
+		allowedNutrients[n] = true
+	}
+	rows := validateFoodGroupPriorities(draft.Rows, allowedGroups, allowedNutrients)
+	if len(rows) == 0 {
+		return Section{}
+	}
+
+	sec := Section{
+		BlockID:    "B1-FOODGROUPS-01",
+		TemplateID: "B1-FOODGROUPS-01",
+		Title:      "Nutrition Ranking",
+		Subtitle:   "Food Groups & Nutrient Priorities",
+		Part:       "B",
+		Purpose: fmt.Sprintf("Where the %s target's own priority nutrients are commonly "+
+			"found, among the food groups this book actually uses.", targetName),
+	}
+	for _, r := range rows {
+		sec.Rows = append(sec.Rows, Row{Label: r.Nutrient, Note: r.FoodGroup})
+	}
+	return sec
+}
+
+// insertFoodGroupPrioritiesSection places Food Groups & Nutrient Priorities immediately
+// after the Active Nutrition Target page (B1-NUTRITION-01) -- the reference document's own
+// order.
+func insertFoodGroupPrioritiesSection(sections []Section, sec Section) []Section {
+	for i, s := range sections {
+		if s.BlockID == "B1-NUTRITION-01" {
 			out := make([]Section, 0, len(sections)+1)
 			out = append(out, sections[:i+1]...)
 			out = append(out, sec)

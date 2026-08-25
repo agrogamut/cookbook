@@ -1,0 +1,25 @@
+{{/* B1-FOODGROUPS-01: Food Groups & Nutrient Priorities.
+
+     The one page in this book built from a grounded LLM draft, not a raw column read. No
+     table in this schema maps a nutrient to a food group -- see foodGroupPrioritySection's
+     own doc comment in book1.go for why a disclosed, grounded draft was chosen over a
+     hand-written rule table this project has no nutrition-science basis for. Every row here
+     already passed validateFoodGroupPriorities: FoodGroup is one of the real
+     food_group_macro values, Nutrient is one of the real nutrition_target_master action
+     columns fed in. This page simply does not render at all when drafting is unavailable --
+     see AssembleBook1's omission comment. */}}
+{{ define "B1-FOODGROUPS-01" }}
+<table>
+  <thead>
+    <tr><th>Nutrient</th><th>Commonly found in</th></tr>
+  </thead>
+  <tbody>
+    {{ range .Rows }}
+    <tr>
+      <td>{{ .Label }}</td>
+      <td>{{ .Note }}</td>
+    </tr>
+    {{ end }}
+  </tbody>
+</table>
+{{ end }}

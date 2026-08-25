@@ -227,6 +227,108 @@ filled prescription until the physical page carries a real signature). This page
 every other child's Book 1 carries instead: the layout, with nothing claimed that no
 clinician has yet said.
 
+### Amendment - Gemini wired to production, four real-data Book 1 pages added (2026-08-26)
+
+`GEMINI_API_KEY` was loaded by `internal/config` from the start but nothing ever built an
+`aidraft.Drafter` from it - every real `/api/books/generate*` request ran with
+`aidraft.Disabled` regardless of whether the key was set. `internal/api/handlers.Handlers`
+now carries a `Drafter`, constructed once at boot in `cmd/server/main.go` via
+`aidraft.NewClient` (fail-open on an empty key, same as it has always been optional), and
+threaded through every `AssembleBook1`/`AssembleBook2`/`AssembleSet` call site via
+`WithDrafter`.
+
+Four new Book 1 pages followed, matching a user-supplied external reference document
+page-for-page except where this project's existing hard rules already forbid the match (no
+diagnosis, no drug name/dose, no invented weekly meal schedule - see the Prescription
+amendment above and the standing `RotationPlan = nil` refusal in `book2.go`):
+
+- **Active Nutrition Target** (`B1-NUTRITION-01`) - `engine.selectTarget` is now exported
+  (`SelectTarget`) so Book 1 can call the same target-selection step Book 2's recipes are
+  already ranked against, then prints `nutrition_target_master`'s real per-axis `*_action`
+  columns as a labelled table. No drafting: the columns are already short, well-formed
+  provider phrases, and stitching them into a paragraph would be a formatting choice
+  dressed as content. Named "Active Nutrition Target," not "Personal Nutrition Target" -
+  `book1_content_block`'s own B1-005/B1-006 blocks already carry that exact section title
+  verbatim (two unrelated blank writable forms), found by printing the book and reading it.
+- **Data Quality** (`B1-DATAQUALITY-01`) - a checklist of what is actually on file for this
+  child, reading the already-loaded `profile.Stored` directly rather than querying
+  `child_growth_measurement`/`child_allergen`/etc: a book generated inline via
+  `POST /api/books/generate` (the console's primary action) never writes those tables at
+  all, so querying them would misreport real, present inline data as "Not recorded" for
+  every request that does not persist a child first. "Vaccination status known" and
+  "medicines noted," both on the reference page, are deliberately absent - no
+  `child_vaccination` or `child_medicine` table exists in this schema, and a field that
+  would read "Recorded" for every child regardless of what happened is not an honest
+  quality signal.
+- **Recipe Link Index** (`B1-RECIPEINDEX-01`) - real chapter title, real continuous recipe
+  numbering, real `RecipeID`s, built from an *already-assembled* Book 2
+  (`ChapterRecipeIndex` in `book2.go`) rather than a second independent selection - a
+  second engine run could legitimately invent-fill a different short chapter than the one
+  actually printed alongside it. Only buildable in `AssembleSet`, since a standalone Book 1
+  request has no Book 2 to reference; that book carries no such page, an honest structural
+  omission. No day of the week is ever assigned to a recipe - the range is within a
+  chapter, never a schedule, per the standing rotation-plan refusal.
+- **Why These Recipes Fit** (`B1-WHYFIT-01`) - rule-based, not drafted: one canned sentence
+  per real profile flag the child actually has (diet, confirmed/suspected allergens,
+  region, budget, active clinical domains, the active nutrition target), built in Go and
+  keyed on real data, the same static-constant posture `gasBloatingSituation`/
+  `connectSection` already use. No sentence for an absent flag.
+
+**Food Groups & Nutrient Priorities** (`B1-FOODGROUPS-01`) is the one new page built from a
+grounded LLM draft rather than a raw column read or a hand-written rule - the first place
+this project's drafting is used to *synthesize* two real sources rather than paraphrase one.
+No table anywhere in this schema maps a nutrient to a food group:
+`nutrition_target_master`'s `*_action` columns state a nutrient's role in prose but name no
+food source, and `food_group_macro` groups ingredients by mass composition, not by nutrient
+relevance. A hand-written Go rule linking the two ("iron priority -> pulses, leafy greens,
+animal protein") would be this project's own invented nutrition-science claim, sourced from
+nothing in the corpus - worse than a disclosed, grounded draft, because it would read as
+authoritative fact with no source attached at all. `aidraft.DraftFoodGroupPriorities` grounds
+on the child's real active-target action text plus the real, closed `food_group_macro`
+vocabulary; the prompt forbids naming any food group outside that list and any nutrient claim
+absent from the fed-in text; the response schema constrains `food_group` to an enum over the
+real vocabulary; and `internal/book`'s `validateFoodGroupPriorities` re-checks every returned
+row against the same real lists before a word reaches a page, dropping any row that fails
+rather than withholding the whole page for one bad row. Related but distinct from migration
+`0020`'s "`recipe_composition_share` is deliberately NOT PRINTED IN BOOK 2" call: that
+decision was about page-budget cost on a recipe card, a different page shape (a per-recipe
+bar chart) and a different question (mass composition of one dish) than this page's
+macro-group labels on a Book 1 page with no recipe card competing for space. Named here
+rather than treated as silently re-opening that decision. The page does not render at all -
+never a half-built one - when drafting is unavailable, matching every other `Drafter` caller's
+omit-rather-than-half-build convention.
+
+**Two defects found only by actually turning Gemini on**, neither visible with
+`aidraft.Disabled` (which is what every prior test run and every prior review of this
+feature exercised):
+
+1. `internal/api/router.go`'s print-route group wrapped a `middleware.Timeout(180s)` inside
+   a router that had already applied `middleware.Timeout(30s)` globally. Nested
+   `context.WithTimeout` calls compose as the *minimum* of the two deadlines, so the outer
+   30s always won regardless of the inner 180s - a pre-existing bug the router's own comment
+   had once (correctly) diagnosed and (incorrectly) "fixed" by nesting a longer timeout
+   inside the shorter one, which never actually took effect. It stayed invisible because no
+   request got close enough to 30s to expose it until real, serial Gemini calls did. Fixed
+   by making the two timeout scopes sibling route groups off the bare router instead of
+   nested ones.
+2. Real per-recipe/per-block Gemini calls were made serially - inline inside
+   `AssembleBook1`'s block-loading loop and Book 2's `loadRecipeCards` row scan - which is
+   fine at zero real network latency (`aidraft.Disabled` returns instantly) but is a real,
+   additive cost against a live API: up to eight `DraftDoctorApproachNote` calls in Book 1,
+   and one `DraftModificationNote` call per matching recipe in Book 2 (a 30-recipe book with
+   an active clinical condition can match a dozen or more). Both call sites now collect their
+   requests during the synchronous DB scan and defer the actual network calls to
+   `draftConcurrently` (`clinical_notes.go`), bounded at `maxDraftConcurrency = 6`, run once
+   the scan finishes. Each concurrent call writes to its own distinct location (a
+   `b.Sections` index in Book 1, a result slice merged into the `byRecipeID` map
+   single-threaded after every goroutine joins in Book 2) rather than a shared one, so no
+   further synchronization was needed beyond that discipline.
+
+Also: `aidraft.modelName` was pinned to `gemini-2.5-flash`, which the API now rejects with
+`404 Not Found` ("no longer available to new users") - found the same way, by making a real
+call instead of trusting `aidraft.Disabled` to prove the wiring. Bumped to
+`gemini-3.6-flash`, the model the API's own error message named as the replacement.
+
 ## Communication and attribution rules
 
 - Never mention claude, anthropic, or ai anywhere: not in chat, code, comments, commit

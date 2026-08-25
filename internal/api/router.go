@@ -39,47 +39,59 @@ func NewRouter(pool *pgxpool.Pool, drafter aidraft.Drafter) http.Handler {
 		ExposedHeaders: []string{"X-Book-Omissions"},
 		MaxAge:         300,
 	}))
-	// 30s suits every JSON endpoint here. The PDF routes do not fit under it and get their
-	// own budget below -- see printTimeout.
-	r.Use(middleware.Timeout(30 * time.Second))
-
 	h := handlers.New(pool, drafter)
 
-	r.Get("/healthz", h.Healthz)
-	r.Post("/api/search", h.Search)
-	r.Get("/api/recipes/{recipeID}", h.RecipeDetail)
-	r.Get("/api/ingredients", h.Ingredients)
-	r.Get("/api/audit/nutrition", h.NutritionAudit)
-	r.Get("/api/gaps", h.Gaps)
-	r.Get("/api/runs", h.Runs)
-	r.Get("/api/reference/regions", h.ReferenceRegions)
-	r.Get("/api/reference/cuisines", h.ReferenceCuisines)
-	r.Get("/api/reference/nutrition-targets", h.ReferenceNutritionTargets)
-	r.Get("/api/reference/allergens", h.ReferenceAllergens)
-	r.Get("/api/reference/clinical-markers", h.ReferenceClinicalMarkers)
-	r.Get("/api/reference/enums", h.ReferenceEnums)
-	r.Get("/api/reference/book1-blocks", h.ReferenceBook1Blocks)
-	r.Get("/api/reference/special-care-conditions", h.ReferenceSpecialCareConditions)
-	r.Put("/api/profiles/{childID}", h.PutProfile)
-	r.Get("/api/profiles/{childID}", h.GetProfile)
-	r.Get("/api/profiles/{childID}/engine-input", h.GetProfileEngineInput)
-	// The set is the primary surface: one run, both books, one profile read. The per-book
-	// routes below remain for fetching one book directly.
-	// Generation from inline inputs: no child id, nothing persisted. This is what the
-	// console calls. The {childID} routes below serve a profile already in the database.
-	r.Post("/api/books/generate", h.BookGenerate)
-	r.Get("/api/books/{childID}/preview", h.BookSetPreview)
-	r.Get("/api/books/{childID}/{book}/preview", h.BookPreview)
+	// Two sibling groups, not nested: a chi middleware.Timeout wraps the request context in
+	// context.WithTimeout, and two of those nested inside one another compose as the
+	// *minimum* of the two deadlines -- an outer 30s always wins over an inner 180s
+	// regardless of which route the inner one names. Book1/generate.zip's own doc comment
+	// once (correctly) diagnosed this exact failure and (incorrectly) "fixed" it by nesting
+	// a longer Timeout inside the 30s one, which never actually took effect; it only stayed
+	// invisible because no request got close enough to 30s to expose it, until Gemini
+	// drafting (BookGenerate's per-block/per-recipe DraftDoctorApproachNote/
+	// DraftModificationNote/DraftFoodGroupPriorities calls, serial, real network round
+	// trips) started pushing real generation time past it. Two groups off the bare router,
+	// each stacking only Recoverer/Logger/CORS plus its own single Timeout, actually gives
+	// the print routes the full printTimeout.
+	r.Group(func(r chi.Router) {
+		// 30s suits every JSON endpoint here.
+		r.Use(middleware.Timeout(30 * time.Second))
+
+		r.Get("/healthz", h.Healthz)
+		r.Post("/api/search", h.Search)
+		r.Get("/api/recipes/{recipeID}", h.RecipeDetail)
+		r.Get("/api/ingredients", h.Ingredients)
+		r.Get("/api/audit/nutrition", h.NutritionAudit)
+		r.Get("/api/gaps", h.Gaps)
+		r.Get("/api/runs", h.Runs)
+		r.Get("/api/reference/regions", h.ReferenceRegions)
+		r.Get("/api/reference/cuisines", h.ReferenceCuisines)
+		r.Get("/api/reference/nutrition-targets", h.ReferenceNutritionTargets)
+		r.Get("/api/reference/allergens", h.ReferenceAllergens)
+		r.Get("/api/reference/clinical-markers", h.ReferenceClinicalMarkers)
+		r.Get("/api/reference/enums", h.ReferenceEnums)
+		r.Get("/api/reference/book1-blocks", h.ReferenceBook1Blocks)
+		r.Get("/api/reference/special-care-conditions", h.ReferenceSpecialCareConditions)
+		r.Put("/api/profiles/{childID}", h.PutProfile)
+		r.Get("/api/profiles/{childID}", h.GetProfile)
+		r.Get("/api/profiles/{childID}/engine-input", h.GetProfileEngineInput)
+		// The set is the primary surface: one run, both books, one profile read. The
+		// per-book routes below remain for fetching one book directly.
+		// Generation from inline inputs: no child id, nothing persisted. This is what the
+		// console calls. The {childID} routes below serve a profile already in the database.
+		r.Post("/api/books/generate", h.BookGenerate)
+		r.Get("/api/books/{childID}/preview", h.BookSetPreview)
+		r.Get("/api/books/{childID}/{book}/preview", h.BookPreview)
+	})
 
 	// Printing gets its own timeout. Launching a browser and laying out a 22-page book is
-	// slow work in a way a database query is not: it takes under a second on a developer's
-	// machine and about twenty on a small cloud instance, so the pair of prints a set needs
-	// silently exceeded the 30s global budget in production while passing every local test.
-	// The failure surfaced as "context deadline exceeded" from deep inside chromedp, which
-	// reads like a browser fault rather than a timeout someone chose.
-	//
-	// Scoped to these two routes rather than raised globally, so a hung query on any other
-	// endpoint still fails in 30s instead of holding a connection for three minutes.
+	// slow work in a way a database query is not, and with Gemini drafting now wired in
+	// (see the comment above), assembly itself can take real, serial network time on top of
+	// that. Generous because it covers the slowest real case -- two books, several drafted
+	// notes, printed in one request on a small instance -- and because the alternative to
+	// waiting is an operator retrying a request that was going to succeed. Scoped to these
+	// four routes rather than raised globally, so a hung query on any other endpoint still
+	// fails in 30s instead of holding a connection for three minutes.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Timeout(printTimeout))
 		r.Post("/api/books/generate.zip", h.BookGenerateZip)

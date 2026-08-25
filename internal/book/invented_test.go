@@ -19,8 +19,9 @@ import (
 // aidraft.ErrDraftingUnavailable unless the matching field is set, mirroring the real
 // disabled client's default behaviour so a test only has to wire up what it actually exercises.
 type fakeDrafter struct {
-	inventFn func(ctx context.Context, req aidraft.InventedRecipeRequest) (aidraft.InventedRecipe, error)
-	doctorFn func(ctx context.Context, req aidraft.DoctorApproachRequest) (aidraft.DraftedText, error)
+	inventFn    func(ctx context.Context, req aidraft.InventedRecipeRequest) (aidraft.InventedRecipe, error)
+	doctorFn    func(ctx context.Context, req aidraft.DoctorApproachRequest) (aidraft.DraftedText, error)
+	foodGroupFn func(ctx context.Context, req aidraft.FoodGroupPriorityRequest) (aidraft.FoodGroupPriorities, error)
 }
 
 func (f fakeDrafter) DraftModificationNote(context.Context, aidraft.ModificationRequest) (aidraft.DraftedText, error) {
@@ -39,6 +40,13 @@ func (f fakeDrafter) DraftDoctorApproachNote(ctx context.Context, req aidraft.Do
 		return aidraft.DraftedText{}, aidraft.ErrDraftingUnavailable
 	}
 	return f.doctorFn(ctx, req)
+}
+
+func (f fakeDrafter) DraftFoodGroupPriorities(ctx context.Context, req aidraft.FoodGroupPriorityRequest) (aidraft.FoodGroupPriorities, error) {
+	if f.foodGroupFn == nil {
+		return aidraft.FoodGroupPriorities{}, aidraft.ErrDraftingUnavailable
+	}
+	return f.foodGroupFn(ctx, req)
 }
 
 // unmappedCategory returns one meal_category_target row (GAP-023: a category with zero rows

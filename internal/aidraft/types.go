@@ -27,6 +27,7 @@ type Drafter interface {
 	DraftModificationNote(ctx context.Context, req ModificationRequest) (DraftedText, error)
 	DraftInventedRecipe(ctx context.Context, req InventedRecipeRequest) (InventedRecipe, error)
 	DraftDoctorApproachNote(ctx context.Context, req DoctorApproachRequest) (DraftedText, error)
+	DraftFoodGroupPriorities(ctx context.Context, req FoodGroupPriorityRequest) (FoodGroupPriorities, error)
 }
 
 // DraftedText is one piece of AI-drafted prose plus a provenance record -- the same "every
@@ -112,4 +113,40 @@ type InventedRecipe struct {
 	DishFormatID string
 	Model        string
 	GeneratedAt  time.Time
+}
+
+// FoodGroupPriorityRequest grounds a Book 1 "Food Groups and Nutrient Priorities" page in two
+// real sources: the child's active nutrition_target_master row's own *_action text (already
+// loaded for the Active Nutrition Target page) and the real food_group_macro vocabulary. No
+// nutrient-to-food-group mapping exists anywhere in this schema, so the model is asked to
+// synthesize one from these two real sources rather than this project hand-writing a rule
+// table it has no nutrition-science basis for -- see the caller's own doc comment
+// (foodGroupPrioritySection in book1.go) for the full reasoning. MacroGroups is the complete,
+// closed vocabulary the model may choose from; it may name nothing outside it.
+type FoodGroupPriorityRequest struct {
+	TargetCode  string
+	TargetName  string
+	Actions     map[string]string // action column name -> its real text, e.g. "iron_action" -> "High priority"
+	MacroGroups []string          // real food_group_macro.macro_group values, the closed vocabulary
+}
+
+// FoodGroupPriority is one nutrient's food-group recommendation, exactly as the model
+// returned it -- internal/book must still reject any FoodGroup value outside the real
+// MacroGroups list before this reaches a page (see validateFoodGroupPriorities).
+type FoodGroupPriority struct {
+	Nutrient  string // the action column's plain-English name, e.g. "Iron"
+	FoodGroup string // must be one of req.MacroGroups
+}
+
+// FoodGroupPriorities is the whole drafted page: one row per nutrient the model chose to
+// cover (it may skip a nutrient with no clear food-group link rather than force one), plus
+// the same provenance every DraftedText carries.
+type FoodGroupPriorities struct {
+	Rows        []FoodGroupPriority
+	Source      string
+	Model       string
+	GeneratedAt time.Time
+	// GroundedOnRuleID names the nutrition_target_master row this page paraphrases, the same
+	// field DraftedText uses for the same purpose against a different master.
+	GroundedOnRuleID string
 }

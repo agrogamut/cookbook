@@ -630,6 +630,16 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 	defer rows.Close()
 
 	byRecipeID := make(map[string]RecipeCard, len(ids))
+	// Modification-note requests are collected here, not drafted inline: a chapter can hold
+	// a dozen or more recipes matching an active clinical condition, and one real Gemini
+	// call per recipe run serially inside this loop was enough on its own to push real
+	// generation time past even the print route's 180s budget once GEMINI_API_KEY was
+	// actually wired to production. Drafted concurrently, bounded, after the loop.
+	type pendingMod struct {
+		recipeID string
+		req      aidraft.ModificationRequest
+	}
+	var pendingMods []pendingMod
 	for rows.Next() {
 		var (
 			recipeID, recipeName, method, reviewStatus    string
@@ -693,11 +703,36 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 			}
 			card.Photo = photo
 		}
-		card.ModificationNote = modificationNoteFor(ctx, drafter, cp, clinicalActions, recipeName, clinicalTag)
+		if req, ok := modificationRequestFor(cp, clinicalActions, recipeName, clinicalTag); ok {
+			pendingMods = append(pendingMods, pendingMod{recipeID: recipeID, req: req})
+		}
 		byRecipeID[recipeID] = card
 	}
 	if err := rows.Err(); err != nil {
 		return nil, nil, fmt.Errorf("recipe card rows: %w", err)
+	}
+
+	// Results land in their own slice, one per pendingMods entry by index -- never written
+	// into byRecipeID from inside a goroutine, since concurrent map writes are unsafe even
+	// to distinct keys. Merged into byRecipeID single-threaded below, after every goroutine
+	// has joined.
+	modResults := make([]*aidraft.DraftedText, len(pendingMods))
+	draftConcurrently(ctx, len(pendingMods), func(ctx context.Context, i int) {
+		note, err := drafter.DraftModificationNote(ctx, pendingMods[i].req)
+		if err != nil {
+			// Drafting unavailable or the call failed: no note, never a half-built one, and
+			// never a reason to fail the card.
+			return
+		}
+		modResults[i] = &note
+	})
+	for i, p := range pendingMods {
+		if modResults[i] == nil {
+			continue
+		}
+		card := byRecipeID[p.recipeID]
+		card.ModificationNote = modResults[i]
+		byRecipeID[p.recipeID] = card
 	}
 
 	// Rebuild in the caller's rank order rather than the query's arbitrary row order, so a

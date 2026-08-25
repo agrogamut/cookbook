@@ -11,7 +11,7 @@ import (
 // is" silently changing what reaches a printed book is exactly the kind of drift this project
 // avoids everywhere else (recipe_master_version, import content hashes); bumping this is a
 // deliberate, reviewable edit instead.
-const modelName = "gemini-2.5-flash"
+const modelName = "gemini-3.6-flash"
 
 // NewClient returns a Drafter backed by the real Gemini API when apiKey is non-empty, or a
 // disabledClient that always reports ErrDraftingUnavailable when it is empty. Callers never
@@ -53,6 +53,10 @@ func (disabledClient) DraftInventedRecipe(context.Context, InventedRecipeRequest
 
 func (disabledClient) DraftDoctorApproachNote(context.Context, DoctorApproachRequest) (DraftedText, error) {
 	return DraftedText{}, ErrDraftingUnavailable
+}
+
+func (disabledClient) DraftFoodGroupPriorities(context.Context, FoodGroupPriorityRequest) (FoodGroupPriorities, error) {
+	return FoodGroupPriorities{}, ErrDraftingUnavailable
 }
 
 // geminiClient is the real implementation, defined in draft.go.

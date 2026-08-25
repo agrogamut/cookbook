@@ -63,6 +63,39 @@ func (g *geminiClient) DraftDoctorApproachNote(ctx context.Context, req DoctorAp
 	}, nil
 }
 
+// DraftFoodGroupPriorities asks Gemini to link the child's active nutrition target's real
+// per-nutrient guidance to real food-group names. See buildFoodGroupPriorityPrompt for the
+// grounding contract: the model may only choose from req.MacroGroups, and only for a
+// nutrient whose guidance text is already fed in.
+func (g *geminiClient) DraftFoodGroupPriorities(ctx context.Context, req FoodGroupPriorityRequest) (FoodGroupPriorities, error) {
+	resp, err := g.client.Models.GenerateContent(ctx, modelName, genai.Text(buildFoodGroupPriorityPrompt(req)),
+		&genai.GenerateContentConfig{
+			ResponseMIMEType: "application/json",
+			ResponseSchema:   foodGroupPrioritySchema(req.MacroGroups),
+		})
+	if err != nil {
+		return FoodGroupPriorities{}, fmt.Errorf("%w: gemini food group priorities request: %v", ErrDraftingUnavailable, err)
+	}
+
+	var out foodGroupPriorityResponse
+	if err := json.Unmarshal([]byte(resp.Text()), &out); err != nil {
+		return FoodGroupPriorities{}, fmt.Errorf("%w: decode food group priorities response: %v", ErrDraftingUnavailable, err)
+	}
+
+	rows := make([]FoodGroupPriority, 0, len(out.Rows))
+	for _, r := range out.Rows {
+		rows = append(rows, FoodGroupPriority{Nutrient: r.Nutrient, FoodGroup: r.FoodGroup})
+	}
+
+	return FoodGroupPriorities{
+		Rows:             rows,
+		Source:           "gemini",
+		Model:            modelName,
+		GeneratedAt:      time.Now(),
+		GroundedOnRuleID: req.TargetCode,
+	}, nil
+}
+
 // DraftInventedRecipe asks Gemini for a whole fallback recipe constrained to req's allowed
 // ingredients and dish formats. The response is returned exactly as decoded -- this function
 // performs no safety validation. internal/book must re-check every ingredient id against

@@ -150,6 +150,70 @@ func inventedRecipeSchema(allowed []AllowedIngredient, archetypes []string) *gen
 	}
 }
 
+// foodGroupPriorityResponse is the JSON shape a Food Groups & Nutrient Priorities draft is
+// constrained to: a list of nutrient/food-group pairs, nothing else.
+type foodGroupPriorityResponse struct {
+	Rows []foodGroupPriorityRowJSON `json:"rows"`
+}
+
+type foodGroupPriorityRowJSON struct {
+	Nutrient  string `json:"nutrient"`
+	FoodGroup string `json:"food_group"`
+}
+
+// foodGroupPrioritySchema constrains food_group to an enum over exactly the real macro-group
+// vocabulary fed in -- the same enum-constraint pattern inventedRecipeSchema already uses for
+// ingredient_id. nutrient is free text (it just needs to name which of the fed-in *_action
+// columns a row is about) but validateFoodGroupPriorities in internal/book still checks it
+// against the real action-column names before printing, since the schema alone cannot express
+// "one of these ten specific strings, exactly."
+func foodGroupPrioritySchema(macroGroups []string) *genai.Schema {
+	return &genai.Schema{
+		Type:     genai.TypeObject,
+		Required: []string{"rows"},
+		Properties: map[string]*genai.Schema{
+			"rows": {
+				Type: genai.TypeArray,
+				Items: &genai.Schema{
+					Type:     genai.TypeObject,
+					Required: []string{"nutrient", "food_group"},
+					Properties: map[string]*genai.Schema{
+						"nutrient":   {Type: genai.TypeString},
+						"food_group": {Type: genai.TypeString, Enum: macroGroups},
+					},
+				},
+			},
+		},
+	}
+}
+
+// buildFoodGroupPriorityPrompt hands the model the child's real active-target action text and
+// the real macro-group vocabulary as the only two sources of fact, and instructs it to link
+// them rather than invent either a nutrient claim or a food source absent from both.
+func buildFoodGroupPriorityPrompt(req FoodGroupPriorityRequest) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "You are linking nutrients to food groups for a page in a children's "+
+		"nutrition handbook. Below is a nutrition target's real guidance text for several "+
+		"nutrients, and a closed list of real food-group names this book actually uses. For "+
+		"each nutrient below that has a clear, well-established link to one or more of the "+
+		"listed food groups, name that food group. Use ONLY food-group names from the list "+
+		"given -- do not invent a food source, and do not name a food group not in the list. "+
+		"Do not add a claim about a nutrient that is not already implied by its guidance text "+
+		"below. Skip a nutrient entirely rather than guessing a food-group link for it.\n\n")
+
+	fmt.Fprintf(&b, "Nutrition target: %s (%s)\n\n", req.TargetName, req.TargetCode)
+	fmt.Fprintf(&b, "Nutrient guidance (the ONLY source of fact about what each nutrient needs):\n")
+	for nutrient, action := range req.Actions {
+		if action == "" {
+			continue
+		}
+		fmt.Fprintf(&b, "- %s: %s\n", nutrient, action)
+	}
+	fmt.Fprintf(&b, "\nAllowed food groups (the ONLY food-group vocabulary you may use): %s\n",
+		strings.Join(req.MacroGroups, ", "))
+	return b.String()
+}
+
 // buildInventedRecipePrompt states the constraints as prose too, not just as schema, because a
 // schema alone doesn't explain *why* an ingredient list is short -- the model should choose
 // from what's allowed rather than treat the enum as a suggestion it can wander from with a

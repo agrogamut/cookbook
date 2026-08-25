@@ -106,3 +106,58 @@ func TestInventedRecipePromptListsOnlyAllowedIngredients(t *testing.T) {
 		t.Error("prompt is missing the allowed-ingredients-only instruction")
 	}
 }
+
+// TestFoodGroupPriorityPromptGroundsOnRealSourcesOnly pins that the prompt carries every
+// fed-in nutrient action verbatim and the exact closed macro-group vocabulary, plus the
+// paraphrase-only / closed-vocabulary instructions -- the same "grounding must be a visible
+// diff" discipline TestModificationPromptGroundsOnProviderTextOnly holds.
+func TestFoodGroupPriorityPromptGroundsOnRealSourcesOnly(t *testing.T) {
+	req := FoodGroupPriorityRequest{
+		TargetCode: "NT01",
+		TargetName: "Complementary-feeding nutrient density",
+		Actions: map[string]string{
+			"Iron":    "High priority",
+			"Calcium": "High priority",
+		},
+		MacroGroups: []string{"Pulse & legume", "Dairy", "Vegetable"},
+	}
+	prompt := buildFoodGroupPriorityPrompt(req)
+
+	for _, want := range []string{
+		req.TargetName, req.TargetCode, "Iron: High priority", "Calcium: High priority",
+		"Pulse & legume", "Dairy", "Vegetable",
+	} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("prompt missing verbatim grounding text %q\nprompt:\n%s", want, prompt)
+		}
+	}
+	if !strings.Contains(prompt, "ONLY food-group names from the list") {
+		t.Error("prompt is missing the closed-vocabulary instruction")
+	}
+	if !strings.Contains(prompt, "Do not add a claim about a nutrient") {
+		t.Error("prompt is missing the paraphrase-only instruction")
+	}
+}
+
+// TestFoodGroupPrioritySchemaConstrainsToRealMacroGroups pins the API-level guardrail: the
+// schema's food_group enum is exactly the real macro-group list handed in, nothing more --
+// the same enum-construction check TestInventedRecipeSchemaConstrainsToAllowedIngredients
+// runs for ingredient_id.
+func TestFoodGroupPrioritySchemaConstrainsToRealMacroGroups(t *testing.T) {
+	macroGroups := []string{"Pulse & legume", "Dairy", "Vegetable"}
+	schema := foodGroupPrioritySchema(macroGroups)
+
+	rowsProp := schema.Properties["rows"]
+	if rowsProp == nil || rowsProp.Items == nil {
+		t.Fatal("schema has no rows/items definition")
+	}
+	foodGroupEnum := rowsProp.Items.Properties["food_group"].Enum
+	if len(foodGroupEnum) != len(macroGroups) {
+		t.Fatalf("food_group enum has %d entries, want %d", len(foodGroupEnum), len(macroGroups))
+	}
+	for i, g := range macroGroups {
+		if foodGroupEnum[i] != g {
+			t.Errorf("food_group enum[%d] = %q, want %q", i, foodGroupEnum[i], g)
+		}
+	}
+}
