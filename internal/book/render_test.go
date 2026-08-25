@@ -352,18 +352,15 @@ func renderOneSection(t *testing.T, sec Section) string {
 	return buf.String()
 }
 
-// The mark reaches the page, and it is captioned with the format it depicts.
-//
-// The caption is not decoration. A drawing of a bowl beside a recipe called "West Bengal Oats &
-// Chhena Regional rice bowl" makes a claim, and the caption is what makes that claim checkable:
-// it names the provider-recorded format the drawing is of, so a reader can see it is a picture
-// of the format and not a photograph of this dish. No photograph of any recipe in this corpus
-// exists (GAP-025), so a page that implied one would be worse than a page with no picture.
-func TestARecipePagePrintsItsMarkAndNamesTheFormat(t *testing.T) {
+// Pictures were removed from the recipe page by decision -- neither the drawn dish-format
+// mark nor a stored photograph prints, regardless of whether RecipeCard.Mark/.Photo are set.
+// The struct fields stay (the API still resolves them), only the template stopped printing.
+func TestARecipePagePrintsNoPictureEvenWhenMarkAndPhotoAreSet(t *testing.T) {
 	card := RecipeCard{
 		RecipeID: "MG-R-00001", Title: "West Bengal Rice & Rohu fish Soft rice bowl",
 		Number: 1, ReviewStatus: "Draft",
-		Mark: Mark("bowl-grain", "Soft rice bowl"),
+		Mark:  Mark("bowl-grain", "Soft rice bowl"),
+		Photo: &RecipePhoto{DataURI: template.URL("data:image/jpeg;base64,ZmFrZQ==")},
 	}
 	b := Book2{MealSections: []MealSection{{
 		MealCategoryID: "MC-01", Title: "Breakfast", Number: 1, Recipes: []RecipeCard{card},
@@ -374,20 +371,15 @@ func TestARecipePagePrintsItsMarkAndNamesTheFormat(t *testing.T) {
 		t.Fatalf("render: %v", err)
 	}
 	got := buf.String()
-	if !strings.Contains(got, `class="dish-mark"`) {
-		t.Error("a recipe page must carry its dish mark")
+	if strings.Contains(got, `class="dish-mark"`) {
+		t.Error("the recipe page must not print the dish mark frame")
 	}
-	if !strings.Contains(got, `class="dish-mark-caption">Soft rice bowl<`) {
-		t.Error("the mark must be captioned with the format it depicts")
-	}
-	if !strings.Contains(got, "<svg") {
-		t.Error("the mark's markup must reach the page unescaped")
+	if strings.Contains(got, `<img class="dish-photo"`) {
+		t.Error("the recipe page must not print a dish photo")
 	}
 }
 
-// A recipe with no mark prints without one -- no placeholder, no empty frame. A frame with
-// nothing in it reads as a picture that failed to load, which is a different and worse claim
-// than no picture at all. Same rule the cover portrait follows.
+// A recipe with no mark and no photo prints without either -- no placeholder, no empty frame.
 func TestARecipeWithNoMarkPrintsNoFrame(t *testing.T) {
 	b := Book2{MealSections: []MealSection{{
 		MealCategoryID: "MC-01", Title: "Breakfast", Number: 1,
@@ -401,55 +393,6 @@ func TestARecipeWithNoMarkPrintsNoFrame(t *testing.T) {
 	// the element.
 	if strings.Contains(buf.String(), `<figure class="dish-mark"`) {
 		t.Error("a recipe with no mark must print no mark frame")
-	}
-}
-
-// A stored photo takes precedence over the drawn mark, and the two never both print. When no
-// photo has been matched for the archetype, the drawn mark still prints exactly as it always
-// has -- this task is a same-footprint swap, not a change to the no-photo path.
-func TestRecipePageShowsPhotoWhenPresentAndMarkOtherwise(t *testing.T) {
-	withPhoto := RecipeCard{
-		RecipeID: "MG-R-00003", Title: "West Bengal Rice & Rohu fish Soft rice bowl",
-		Number: 1, ReviewStatus: "Draft",
-		Mark:  Mark("bowl-grain", "Soft rice bowl"),
-		Photo: &RecipePhoto{DataURI: template.URL("data:image/jpeg;base64,ZmFrZQ==")},
-	}
-	b := Book2{MealSections: []MealSection{{
-		MealCategoryID: "MC-01", Title: "Breakfast", Number: 1, Recipes: []RecipeCard{withPhoto},
-	}}}
-	var buf bytes.Buffer
-	if err := RenderHTML(&buf, Kind2, Metadata{Language: "en"}, b); err != nil {
-		t.Fatalf("render: %v", err)
-	}
-	html := buf.String()
-	if !strings.Contains(html, `<img class="dish-photo"`) {
-		t.Fatalf("expected a dish-photo img tag when Photo is set, got:\n%s", html)
-	}
-	// The bare class name "dish-mark-caption" also appears in the inlined stylesheet's own
-	// selector on every page (base.html inlines all of tokens.css into <style>), so the
-	// assertion has to look for the element itself, not the substring.
-	if strings.Contains(html, `<figcaption class="dish-mark-caption"`) {
-		t.Fatalf("must not print the drawn-mark caption when a real photo is shown")
-	}
-
-	withMarkOnly := RecipeCard{
-		RecipeID: "MG-R-00004", Title: "West Bengal Rice & Rohu fish Soft rice bowl",
-		Number: 1, ReviewStatus: "Draft",
-		Mark: Mark("bowl-grain", "Soft rice bowl"),
-	}
-	b2 := Book2{MealSections: []MealSection{{
-		MealCategoryID: "MC-01", Title: "Breakfast", Number: 1, Recipes: []RecipeCard{withMarkOnly},
-	}}}
-	var buf2 bytes.Buffer
-	if err := RenderHTML(&buf2, Kind2, Metadata{Language: "en"}, b2); err != nil {
-		t.Fatalf("render: %v", err)
-	}
-	html2 := buf2.String()
-	if !strings.Contains(html2, `<figcaption class="dish-mark-caption">Soft rice bowl<`) {
-		t.Fatalf("expected the drawn mark to print when Photo is nil, got:\n%s", html2)
-	}
-	if strings.Contains(html2, `class="dish-photo"`) {
-		t.Fatalf("must not print an img tag when Photo is nil")
 	}
 }
 

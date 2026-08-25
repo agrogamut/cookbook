@@ -8,36 +8,11 @@
      fragmenter has nowhere to put. That failure was measured on the earlier layout: a card
      with break-inside: avoid under a section band left the band alone on a blank sheet.
 
-     A per-recipe, this-exact-dish photograph still does not exist and is not coming from a
-     dataset (GAP-025, still open). No provider workbook carries an image column, and the one
-     external corpus that does carry image URLs photographs a different dish under an unstated
-     licence -- printing from it would mean this service fetching arbitrary remote files into a
-     document handed to a family. The full refusal of that kind of photograph is in marks.go.
-
-     What this page carries instead, when the archetype has one, is a real photograph of the
-     dish *format* -- fetched and matched by internal/photomatch, stored in
-     dish_format_photo, reused across every recipe sharing that format the same way the drawn
-     mark already is. That reuse is exactly what GAP-029 names ("no per-recipe commissioned
-     photograph, format-level stock photo only") so the distinction from a photograph of this
-     specific dish stays on the record rather than implied. See photo.go's RepresentativePhoto.
-
-     When no stored photo exists for the archetype -- the common case; the seeded gap covers 11
-     archetypes and only some have a matched photo -- the page falls back to the drawing of the
-     dish format, a provider-recorded value read out of the recipe name, captioned with that
-     format so its claim is explicit and a reader can check it against the title beside it. */}}
+     No picture prints on this page -- neither a per-recipe photograph (still nonexistent,
+     GAP-025) nor the drawn dish-format mark. Removed by decision: the pictures were not
+     needed. RecipeCard.Mark/.Photo stay on the struct (loadRecipeCards/RepresentativePhoto
+     still resolve them for the API), only the template stopped printing them. */}}
 <div class="recipe">
-  {{ if .Photo }}
-  <figure class="dish-mark">
-    <img class="dish-photo" src="{{ .Photo.DataURI }}" alt="Photograph of this dish format">
-  </figure>
-  {{ else }}
-  {{ with .Mark }}
-  <figure class="dish-mark">
-    {{ .SVG }}
-    <figcaption class="dish-mark-caption">{{ .FormatLabel }}</figcaption>
-  </figure>
-  {{ end }}
-  {{ end }}
   <div class="recipe-head">
     <span class="recipe-num">{{ printf "%02d" .Number }}</span>
     <span class="recipe-kicker">{{ with .RegionCulture }}{{ . }}{{ end }}</span>

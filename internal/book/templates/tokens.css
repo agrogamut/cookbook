@@ -698,35 +698,6 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    currentColor, so the mark inherits the book's brand ink and cannot introduce a colour of its
    own -- avoid_color_only_meaning applies to a drawing as much as to a badge, and this one
    carries no meaning colour could encode. */
-.dish-mark {
-  float: right;
-  width: 22mm;
-  /* No bottom margin. The strip below clears the float, so any margin here is height added to
-     every recipe page -- and at 26mm with a 5mm margin it was enough to push the last recipe's
-     tracker onto a sheet of its own. 22mm still reads: the marks were drawn as single
-     silhouettes with two or three interior lines precisely so they survive this size. */
-  margin: 0 0 0 7mm;
-  color: var(--brand);
-}
-.dish-mark svg { width: 22mm; height: 22mm; display: block; }
-.dish-mark img.dish-photo {
-  width: 22mm;
-  height: 22mm;
-  object-fit: cover;
-  display: block;
-}
-.dish-mark-caption {
-  font-family: var(--font-sans);
-  /* --caption-size, which is the contract's 9.5pt body floor exactly, not --small-size. The
-     caption is prose a reader reads -- it is what makes the drawing checkable against the title
-     -- so it takes the prose floor rather than the table floor. TestTableSizingDoesNotLeakOntoProse
-     caught this set at 8.5pt. */
-  font-size: var(--caption-size);
-  color: var(--ink-soft);
-  text-align: center;
-  margin-top: 1.5mm;
-  line-height: 1.25;
-}
 /* The production strip sits beside the mark rather than clearing it.
    
    It cleared, and every recipe page paid the mark's full height whatever the title did. On the
