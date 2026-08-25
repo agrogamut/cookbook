@@ -194,6 +194,10 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		return Book1{}, nil, fmt.Errorf("book: load nutrition target: %w", err)
 	}
 	dataQuality := dataQualityChecklist(s)
+	clinicalActions, err := engine.ActiveClinicalRuleActions(ctx, pool, cp)
+	if err != nil {
+		return Book1{}, nil, fmt.Errorf("book: load active clinical rule actions: %w", err)
+	}
 
 	b := Book1{
 		Metadata: Metadata{
@@ -537,6 +541,12 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		b.Sections = insertDataQualitySection(b.Sections, dqSec)
 	}
 
+	wfSec := whyTheseRecipesFitSection(cp, nutritionTarget.TargetName, targetReason,
+		clinicalDomainNames(clinicalActions))
+	if SectionHasContent(wfSec) {
+		b.Sections = insertWhyRecipesFitSection(b.Sections, wfSec)
+	}
+
 	markSheetStarts(b.Sections)
 
 	return b, skipped, nil
@@ -871,6 +881,102 @@ func insertNutritionTargetSection(sections []Section, sec Section) []Section {
 			out = append(out, sec)
 			out = append(out, sections[i+1:]...)
 			return out
+		}
+	}
+	return append(sections, sec)
+}
+
+// whyTheseRecipesFitSection is a rule-based, static-sentence page -- never a query, never a
+// drafted paragraph. Same posture as gasBloatingSituation/connectSection: one canned
+// sentence per real flag the child's profile actually carries, and no sentence at all for a
+// flag that is empty (no "diet: not specified" filler -- absence is silence here, the same
+// rule the rest of this book applies to a missing value).
+func whyTheseRecipesFitSection(cp models.ChildProfile, targetName, targetReason string, clinicalDomains []string) Section {
+	var prose []string
+
+	if cp.DietType != "" {
+		diet := strings.ToLower(cp.DietType)
+		if cp.Vegan {
+			diet = "vegan"
+		}
+		prose = append(prose, fmt.Sprintf(
+			"This book only includes %s recipes, matching what your family told us.", diet))
+	}
+	if len(cp.Allergens) > 0 {
+		prose = append(prose, fmt.Sprintf(
+			"Every recipe in this book excludes %s -- a confirmed allergy is a hard filter "+
+				"here, with no override.", strings.Join(cp.Allergens, ", ")))
+	}
+	if len(cp.SuspectedAllergens) > 0 {
+		prose = append(prose, fmt.Sprintf(
+			"Recipes containing %s are ranked lower rather than excluded, because this is "+
+				"recorded as suspected, not confirmed.", strings.Join(cp.SuspectedAllergens, ", ")))
+	}
+	if cp.RegionCulture != "" {
+		prose = append(prose, fmt.Sprintf(
+			"Recipes are drawn from %s cuisine, matching your declared region.", cp.RegionCulture))
+	}
+	if cp.BudgetBand != "" {
+		prose = append(prose, fmt.Sprintf(
+			"Recipes are filtered to your declared %s budget.", strings.ToLower(cp.BudgetBand)))
+	}
+	for _, domain := range clinicalDomains {
+		prose = append(prose, fmt.Sprintf(
+			"%s is factored into every chapter's recipe selection -- look for the \"Feeding "+
+				"note\" box on affected recipes.", domain))
+	}
+	if targetName != "" {
+		prose = append(prose, fmt.Sprintf(
+			"Recipes are ranked against the %s target (%s), the same target the Active "+
+				"Nutrition Target page names.", targetName, targetReason))
+	}
+
+	return Section{
+		BlockID:    "B1-WHYFIT-01",
+		TemplateID: "B1-WHYFIT-01",
+		Title:      "Personalisation",
+		Subtitle:   "Why These Recipes Fit",
+		Part:       "B",
+		Purpose:    "What this child's own recorded profile changed about this book, and how.",
+		Prose:      prose,
+	}
+}
+
+// clinicalDomainNames dedupes ActiveClinicalRuleActions down to the distinct
+// ClinicalDomain values -- a child can trigger several rules in the same domain (e.g. two
+// constipation-related rules), and whyTheseRecipesFitSection wants one sentence per domain,
+// not one per rule.
+func clinicalDomainNames(actions []engine.ClinicalRuleAction) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, a := range actions {
+		if a.ClinicalDomain == "" || seen[a.ClinicalDomain] {
+			continue
+		}
+		seen[a.ClinicalDomain] = true
+		out = append(out, a.ClinicalDomain)
+	}
+	return out
+}
+
+// insertWhyRecipesFitSection uses the same anchor cascade as insertRecipeLinkIndexSection:
+// after Food Groups & Nutrient Priorities if it rendered, else after the Active Nutrition
+// Target page. Because AssembleSet's own Recipe Link Index insertion targets the identical
+// anchor, inserting there always lands the two in the reference document's own order --
+// Nutrition Target, Food Groups, Recipe Link Index, Why These Recipes Fit -- regardless of
+// which of the two insertions runs first (this one always runs first, inside AssembleBook1,
+// since it needs no Book 2; AssembleSet's insertion at the same anchor point then lands
+// between the anchor and this section, never after it).
+func insertWhyRecipesFitSection(sections []Section, sec Section) []Section {
+	for _, anchor := range []string{"B1-FOODGROUPS-01", "B1-NUTRITION-01"} {
+		for i, s := range sections {
+			if s.BlockID == anchor {
+				out := make([]Section, 0, len(sections)+1)
+				out = append(out, sections[:i+1]...)
+				out = append(out, sec)
+				out = append(out, sections[i+1:]...)
+				return out
+			}
 		}
 	}
 	return append(sections, sec)

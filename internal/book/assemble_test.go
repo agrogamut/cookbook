@@ -282,6 +282,7 @@ func TestEveryBlockIsEitherRenderedOrReported(t *testing.T) {
 		// project adds its own page.
 		synthetic := map[string]bool{
 			"B1-CONNECT-01": true, "B1-NUTRITION-01": true, "B1-DATAQUALITY-01": true,
+			"B1-WHYFIT-01": true,
 		}
 		rendered := 0
 		for _, sec := range b.Sections {

@@ -1046,6 +1046,11 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 /* A pair of side-by-side blocks. Kept for the few pages that genuinely compare two things;
    it is a grid with a rule between, not two filled cards. */
 .card-row { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm 8mm; margin: 5mm 0; break-inside: avoid; }
+
+/* "Why These Recipes Fit" (B1-WHYFIT-01): a short list of one-line sentences that must move
+   as a block. See why_fit.html's own comment for the defect this fixes -- a dense table
+   ahead of it left two sentences stranded alone on the next sheet. */
+.why-fit { break-inside: avoid; }
 /* nth-child(even), not the adjacent-sibling form this replaced: with two cards the two
    selectors agree, but Book 1's sign-off page now runs four cards in this same two-column
    grid (see signoff.html), and "every card after the first" put a stray divider on the

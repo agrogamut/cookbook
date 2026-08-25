@@ -1,0 +1,19 @@
+{{/* B1-WHYFIT-01: "Why These Recipes Fit" -- rule-based, not drafted.
+
+     One canned sentence per real profile flag the child actually has, built in Go by
+     whyTheseRecipesFitSection (book1.go), never a query and never an LLM call. No intro
+     line of its own: body.html's generic wrapper already prints .Purpose above every
+     section before this template ever runs, so this stays a plain Prose loop rather than
+     duplicating that with a second hardcoded opener the way B1-CONNECT-01 has one. */}}
+{{ define "B1-WHYFIT-01" }}
+{{/* .why-fit is break-inside: avoid (tokens.css) -- this page follows the Recipe Link
+     Index's dense table, and letting the two flow together the way this book's pages
+     normally do split Why-Fit's handful of sentences with two orphaned on a sheet of their
+     own at 12% fill, found by printing the book and reading it. Short enough as a block
+     (five or six one-line sentences) that keeping it whole never itself overflows a page,
+     unlike a tracker grid, which is why this is the narrow exception rather than a change
+     to how sections flow generally. */}}
+<div class="why-fit">
+{{ range .Prose }}<p>{{ . }}</p>{{ end }}
+</div>
+{{ end }}
