@@ -61,7 +61,7 @@ func (h *Handlers) renderBookHTML(w http.ResponseWriter, r *http.Request, s prof
 	// issued in the child's name, not only the recipe book, so the two books must not
 	// answer a clinician's stop differently.
 	case "book1":
-		b1, dropped, err := book.AssembleBook1(ctx, h.pool, s, asOf)
+		b1, dropped, err := book.AssembleBook1(ctx, h.pool, s, asOf, book.WithDrafter(h.drafter))
 		if err != nil {
 			if errors.Is(err, book.ErrBlocked) {
 				h.writeBlocked(w, r, s, asOf, err)
@@ -73,7 +73,7 @@ func (h *Handlers) renderBookHTML(w http.ResponseWriter, r *http.Request, s prof
 		data, meta, omissions, bookKind = b1, b1.Metadata, dropped, book.Kind1
 
 	case "book2":
-		b2, dropped, err := book.AssembleBook2(ctx, h.pool, s, asOf)
+		b2, dropped, err := book.AssembleBook2(ctx, h.pool, s, asOf, book.WithDrafter(h.drafter))
 		if err != nil {
 			if errors.Is(err, book.ErrBlocked) {
 				h.writeBlocked(w, r, s, asOf, err)

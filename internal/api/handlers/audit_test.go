@@ -1,12 +1,13 @@
 package handlers
 
 import (
+	"github.com/madamgy/recipie/internal/aidraft"
 	"net/http/httptest"
 	"testing"
 )
 
 func TestNutritionAuditReturnsDiscrepancyReport(t *testing.T) {
-	h := New(testPool(t))
+	h := New(testPool(t), aidraft.Disabled)
 	req := httptest.NewRequest("GET", "/api/audit/nutrition", nil)
 	rec := httptest.NewRecorder()
 
@@ -18,7 +19,7 @@ func TestNutritionAuditReturnsDiscrepancyReport(t *testing.T) {
 }
 
 func TestGapsReturnsAllSixteenEntries(t *testing.T) {
-	h := New(testPool(t))
+	h := New(testPool(t), aidraft.Disabled)
 	req := httptest.NewRequest("GET", "/api/gaps", nil)
 	rec := httptest.NewRecorder()
 

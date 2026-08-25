@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/madamgy/recipie/internal/aidraft"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -27,7 +28,7 @@ const putProfileBody = `{
 
 func profileRouter(t *testing.T) (*chi.Mux, *Handlers) {
 	t.Helper()
-	h := New(testPool(t))
+	h := New(testPool(t), aidraft.Disabled)
 	r := chi.NewRouter()
 	r.Put("/api/profiles/{childID}", h.PutProfile)
 	r.Get("/api/profiles/{childID}", h.GetProfile)

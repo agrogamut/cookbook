@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/madamgy/recipie/internal/aidraft"
 	"github.com/madamgy/recipie/internal/api/handlers"
 )
 
@@ -24,7 +25,7 @@ import (
 // rather than a gateway's.
 const printTimeout = 180 * time.Second
 
-func NewRouter(pool *pgxpool.Pool) http.Handler {
+func NewRouter(pool *pgxpool.Pool, drafter aidraft.Drafter) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Logger)
@@ -42,7 +43,7 @@ func NewRouter(pool *pgxpool.Pool) http.Handler {
 	// own budget below -- see printTimeout.
 	r.Use(middleware.Timeout(30 * time.Second))
 
-	h := handlers.New(pool)
+	h := handlers.New(pool, drafter)
 
 	r.Get("/healthz", h.Healthz)
 	r.Post("/api/search", h.Search)

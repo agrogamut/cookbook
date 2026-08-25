@@ -3,13 +3,14 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"github.com/madamgy/recipie/internal/aidraft"
 	"net/http/httptest"
 	"testing"
 	"time"
 )
 
 func TestReferenceCuisinesNeverOffersAZeroRecipeCuisine(t *testing.T) {
-	h := New(testPool(t))
+	h := New(testPool(t), aidraft.Disabled)
 	req := httptest.NewRequest("GET", "/api/reference/cuisines", nil)
 	rec := httptest.NewRecorder()
 
@@ -32,7 +33,7 @@ func TestReferenceCuisinesNeverOffersAZeroRecipeCuisine(t *testing.T) {
 }
 
 func TestRunsReturnsImportHistoryWithTimestamptz(t *testing.T) {
-	h := New(testPool(t))
+	h := New(testPool(t), aidraft.Disabled)
 	req := httptest.NewRequest("GET", "/api/runs", nil)
 	rec := httptest.NewRecorder()
 
@@ -72,7 +73,7 @@ func TestRunsReturnsImportHistoryWithTimestamptz(t *testing.T) {
 }
 
 func TestReferenceAllergensReportsWhetherEachGroupScreens(t *testing.T) {
-	h := New(testPool(t))
+	h := New(testPool(t), aidraft.Disabled)
 	req := httptest.NewRequest("GET", "/api/reference/allergens", nil)
 	rec := httptest.NewRecorder()
 
@@ -131,7 +132,7 @@ func TestEveryOfferedAllergenScreensSomething(t *testing.T) {
 	}
 }
 func TestReferenceClinicalMarkersCoversEveryTriggerField(t *testing.T) {
-	h := New(testPool(t))
+	h := New(testPool(t), aidraft.Disabled)
 	req := httptest.NewRequest("GET", "/api/reference/clinical-markers", nil)
 	rec := httptest.NewRecorder()
 
@@ -308,7 +309,7 @@ func TestReferenceClinicalMarkersCoversEveryTriggerField(t *testing.T) {
 // this test fails -- and the right response is to classify that rule in the engine, not to
 // relax this assertion.
 func TestUnclassifiedMarkerValuesArePinned(t *testing.T) {
-	h := New(testPool(t))
+	h := New(testPool(t), aidraft.Disabled)
 	req := httptest.NewRequest("GET", "/api/reference/clinical-markers", nil)
 	rec := httptest.NewRecorder()
 
@@ -370,7 +371,7 @@ func TestUnclassifiedMarkerValuesArePinned(t *testing.T) {
 }
 
 func TestReferenceEnumsCarryLiveCounts(t *testing.T) {
-	h := New(testPool(t))
+	h := New(testPool(t), aidraft.Disabled)
 	req := httptest.NewRequest("GET", "/api/reference/enums", nil)
 	rec := httptest.NewRecorder()
 
@@ -411,7 +412,7 @@ func TestReferenceEnumsCarryLiveCounts(t *testing.T) {
 }
 
 func TestReferenceBook1BlocksAreInBookOrder(t *testing.T) {
-	h := New(testPool(t))
+	h := New(testPool(t), aidraft.Disabled)
 	req := httptest.NewRequest("GET", "/api/reference/book1-blocks", nil)
 	rec := httptest.NewRecorder()
 

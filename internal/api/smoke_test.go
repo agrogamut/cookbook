@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/madamgy/recipie/internal/aidraft"
 	"net/http/httptest"
 	"os"
 	"testing"
@@ -22,7 +23,7 @@ func TestServerServesSearchAndReferenceEndToEnd(t *testing.T) {
 	}
 	t.Cleanup(pool.Close)
 
-	srv := httptest.NewServer(NewRouter(pool))
+	srv := httptest.NewServer(NewRouter(pool, aidraft.Disabled))
 	t.Cleanup(srv.Close)
 
 	body, _ := json.Marshal(map[string]any{"age_months": 24})

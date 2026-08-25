@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/madamgy/recipie/internal/aidraft"
 	"io"
 	"net/http/httptest"
 	"slices"
@@ -19,7 +20,7 @@ import (
 
 func booksRouter(t *testing.T) (*chi.Mux, *Handlers) {
 	t.Helper()
-	h := New(testPool(t))
+	h := New(testPool(t), aidraft.Disabled)
 	r := chi.NewRouter()
 	r.Get("/api/books/{childID}/preview", h.BookSetPreview)
 	r.Get("/api/books/{childID}/books.zip", h.BookSetDownload)

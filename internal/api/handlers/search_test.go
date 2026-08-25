@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/madamgy/recipie/internal/aidraft"
 	"net/http/httptest"
 	"os"
 	"testing"
@@ -27,7 +28,7 @@ func testPool(t *testing.T) *pgxpool.Pool {
 }
 
 func TestSearchReturnsRankedRecipesAndSteps(t *testing.T) {
-	h := New(testPool(t))
+	h := New(testPool(t), aidraft.Disabled)
 	body, _ := json.Marshal(models.ChildProfile{AgeMonths: 24})
 	req := httptest.NewRequest("POST", "/api/search", bytes.NewReader(body))
 	rec := httptest.NewRecorder()
@@ -50,7 +51,7 @@ func TestSearchReturnsRankedRecipesAndSteps(t *testing.T) {
 }
 
 func TestSearchRejectsMissingAge(t *testing.T) {
-	h := New(testPool(t))
+	h := New(testPool(t), aidraft.Disabled)
 	req := httptest.NewRequest("POST", "/api/search", bytes.NewReader([]byte(`{}`)))
 	rec := httptest.NewRecorder()
 
@@ -66,7 +67,7 @@ func TestSearchRejectsMissingAge(t *testing.T) {
 // server failure. Before ErrInvalidProfile existed, engine.Run's validation error was
 // mapped to a bare 500 indistinguishable from a real database or query failure.
 func TestSearchRejectsUnrecognizedAllergenWith400(t *testing.T) {
-	h := New(testPool(t))
+	h := New(testPool(t), aidraft.Disabled)
 	body, _ := json.Marshal(models.ChildProfile{AgeMonths: 24, Allergens: []string{"not-a-real-allergen"}})
 	req := httptest.NewRequest("POST", "/api/search", bytes.NewReader(body))
 	rec := httptest.NewRecorder()
@@ -83,7 +84,7 @@ func TestSearchRejectsUnrecognizedAllergenWith400(t *testing.T) {
 // result, never "recipes":null -- the frontend's EngineResult type promises a plain
 // array, and a null would crash the results table instead of rendering the empty state.
 func TestSearchBlockedResponseHasEmptyArrayNotNullRecipes(t *testing.T) {
-	h := New(testPool(t))
+	h := New(testPool(t), aidraft.Disabled)
 	body, _ := json.Marshal(models.ChildProfile{AgeMonths: 36, ClinicalFlags: map[string]string{"CKD": "Yes"}})
 	req := httptest.NewRequest("POST", "/api/search", bytes.NewReader(body))
 	rec := httptest.NewRecorder()

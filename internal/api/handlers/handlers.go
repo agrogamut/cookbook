@@ -9,14 +9,16 @@ import (
 	"net/http"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/madamgy/recipie/internal/aidraft"
 )
 
 type Handlers struct {
-	pool *pgxpool.Pool
+	pool    *pgxpool.Pool
+	drafter aidraft.Drafter
 }
 
-func New(pool *pgxpool.Pool) *Handlers {
-	return &Handlers{pool: pool}
+func New(pool *pgxpool.Pool, drafter aidraft.Drafter) *Handlers {
+	return &Handlers{pool: pool, drafter: drafter}
 }
 
 func (h *Handlers) Healthz(w http.ResponseWriter, r *http.Request) {

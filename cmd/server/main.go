@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/madamgy/recipie/internal/aidraft"
 	"github.com/madamgy/recipie/internal/api"
 	"github.com/madamgy/recipie/internal/book"
 	"github.com/madamgy/recipie/internal/config"
@@ -26,6 +27,15 @@ func main() {
 	}
 	defer pool.Close()
 
+	// Gemini has always been optional here: NewClient returns a no-op Drafter for an empty
+	// key and only errors when a *present* key fails the SDK's own constructor, so an unset
+	// GEMINI_API_KEY never reaches this branch -- generation just runs without drafted
+	// content, exactly as it always has.
+	drafter, err := aidraft.NewClient(ctx, cfg.GeminiAPIKey)
+	if err != nil {
+		log.Fatalf("server: %v", err)
+	}
+
 	// Launch the print browser before the first request needs it.
 	//
 	// Chromium's launch is about fourteen seconds on the deployed free instance -- measured,
@@ -43,7 +53,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:              ":" + strconv.Itoa(cfg.Port),
-		Handler:           api.NewRouter(pool),
+		Handler:           api.NewRouter(pool, drafter),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"github.com/madamgy/recipie/internal/aidraft"
 	"net/http/httptest"
 	"testing"
 
@@ -8,7 +9,7 @@ import (
 )
 
 func TestRecipeDetailReturnsMethodCardAndNutrition(t *testing.T) {
-	h := New(testPool(t))
+	h := New(testPool(t), aidraft.Disabled)
 	r := chi.NewRouter()
 	r.Get("/api/recipes/{recipeID}", h.RecipeDetail)
 
@@ -22,7 +23,7 @@ func TestRecipeDetailReturnsMethodCardAndNutrition(t *testing.T) {
 }
 
 func TestRecipeDetailReturns404ForUnknownID(t *testing.T) {
-	h := New(testPool(t))
+	h := New(testPool(t), aidraft.Disabled)
 	r := chi.NewRouter()
 	r.Get("/api/recipes/{recipeID}", h.RecipeDetail)
 

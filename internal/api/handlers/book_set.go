@@ -51,7 +51,7 @@ func (h *Handlers) renderSetWithPhoto(w http.ResponseWriter, r *http.Request, s 
 	ctx := r.Context()
 	asOf := time.Now().UTC()
 
-	set, err := book.AssembleSet(ctx, h.pool, s, asOf)
+	set, err := book.AssembleSet(ctx, h.pool, s, asOf, book.WithDrafter(h.drafter))
 	if err != nil {
 		if errors.Is(err, book.ErrBlocked) {
 			h.writeBlocked(w, r, s, asOf, err)

@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"encoding/json"
+	"github.com/madamgy/recipie/internal/aidraft"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -13,7 +14,7 @@ import (
 
 func generateRouter(t *testing.T) *chi.Mux {
 	t.Helper()
-	h := New(testPool(t))
+	h := New(testPool(t), aidraft.Disabled)
 	r := chi.NewRouter()
 	r.Post("/api/books/generate", h.BookGenerate)
 	r.Post("/api/books/generate.zip", h.BookGenerateZip)
@@ -147,7 +148,7 @@ func TestGeneratePutsThePhotoOnBook1Cover(t *testing.T) {
 // The stop gate holds on the inline route. A child whose condition stops generation must not
 // be able to get a book by skipping the saved profile.
 func TestGenerateIsBlockedByTheStopGate(t *testing.T) {
-	h := New(testPool(t))
+	h := New(testPool(t), aidraft.Disabled)
 	r := chi.NewRouter()
 	r.Post("/api/books/generate", h.BookGenerate)
 
@@ -195,7 +196,7 @@ func TestSlugOrDefault(t *testing.T) {
 	for _, c := range []struct{ in, want string }{
 		{"Inline Child", "inline-child"},
 		{"  Aarav  Sen ", "aarav-sen"},
-		{"রিয়া", "books"},   // Bengali only: the book still carries the name, the filename cannot
+		{"রিয়া", "books"}, // Bengali only: the book still carries the name, the filename cannot
 		{"", "books"},
 		{"///", "books"},
 	} {
