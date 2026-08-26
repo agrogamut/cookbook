@@ -20,17 +20,34 @@ import (
 // printTimeout bounds a PDF request. Generous because it covers the slowest real case --
 // two books printed in one request on a small instance -- and because the alternative to
 // waiting is an operator retrying a request that was going to succeed. Raised from 180s after
-// live testing against the real Gemini API (not aidraft.Disabled) on a deliberately worst-case
-// profile -- multiple allergen exclusions plus an active clinical condition, narrow enough to
-// trip the AI-invented-recipe fallback in more than one chapter -- measured real assembly (all
-// drafting included) at 3m17s, with PDF printing itself under a second once assembly finishes.
-// 480s leaves real margin above that measured worst case. See aidraft.perCallTimeout for the
-// per-call bound that keeps any single stalled upstream call from silently consuming this whole
-// budget the way one did before that fix existed.
+// two rounds of live testing against the real Gemini API (not aidraft.Disabled), each worse
+// than the last:
+//
+//  1. A synthetic worst-case profile -- two allergen exclusions plus an active clinical
+//     condition, narrow enough to trip the AI-invented-recipe fallback in more than one
+//     chapter -- measured real assembly at 3m17s.
+//  2. A real operator intake (West Bengal, the region this project's own coverage numbers
+//     already name as the corpus's weakest -- 12.8%, CLAUDE.md's "What the external join
+//     actually achieved") combined with a restricted diet and two active conditions. Four of
+//     seven Book 2 chapters had zero real corpus matches at all and needed full AI invention,
+//     and roughly a third of those invented-recipe calls hit a transient 503 from Gemini
+//     ("model is currently experiencing high demand") -- each one absorbed cleanly (the
+//     chapter just reports itself short rather than retrying or hanging; see topUpInvented's
+//     own doc comment), but real assembly still ran 11m7s end to end.
+//
+// 1200s leaves real margin above the worse of those two measured cases. A future fix worth
+// doing is bounding topUpInvented's per-slot calls with the same concurrency draftConcurrently
+// already gives doctor/modification/food-group drafting, which would cut a fully-invented
+// chapter's wall time by roughly maxDraftConcurrency; not done here because topUpInvented's
+// sequential "stop at the first failure, exclude what this call already served" design is
+// deliberate (see its own doc comment) and reworking it needs more thought than a timeout
+// bump does. See aidraft.perCallTimeout for the per-call bound that keeps any single stalled
+// upstream call from silently consuming this whole budget the way one did before that fix
+// existed.
 //
 // It stays below any sensible proxy timeout, so a caller sees this service's own error
 // rather than a gateway's.
-const printTimeout = 480 * time.Second
+const printTimeout = 1200 * time.Second
 
 func NewRouter(pool *pgxpool.Pool, drafter aidraft.Drafter) http.Handler {
 	r := chi.NewRouter()
