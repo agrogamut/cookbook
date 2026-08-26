@@ -12,6 +12,8 @@
      provider columns and they genuinely differ. Collapsing them to one number would be a
      value the workbook does not contain. */}}
 {{ define "B1-STAGE-01" }}
+{{ $weeklyPlan := .WeeklyMealPlan }}
+{{ $weeklyPlanWidths := .WeeklyMealPlanWidths }}
 {{ with .Stage }}
 {{ $facet := .Facet }}
 {{ with .Current }}
@@ -67,24 +69,49 @@
       </tbody>
     </table>
 
-    {{/* The block's own declared output is "only food/dish name + quantity/frequency; detailed
-         recipe stays in Book 2", so this is a blank plan the family fills in from Book 2 --
-         never a menu written here, which would be inventing meals nobody prescribed. */}}
     <h3 class="subhead">This week's plan</h3>
-    <table>
-      <thead>
-        <tr><th>Meal</th><th>Usual time</th><th>Dish (from Book 2)</th><th>Amount</th><th>Notes</th></tr>
-      </thead>
-      <tbody>
-        {{ range $i, $_ := rows 8 }}
-          <tr>
-            <td><span class="write-line"></span></td><td><span class="write-line"></span></td>
-            <td><span class="write-line"></span></td><td><span class="write-line"></span></td>
-            <td><span class="write-line"></span></td>
-          </tr>
-        {{ end }}
-      </tbody>
-    </table>
+    {{ if $weeklyPlan }}
+      {{/* Real recipes and real serving sizes from Book 2, grouped by meal category. "Usual
+           time" and "Notes" have no source in either book and stay writing lines -- see
+           WeeklyMealPlanFromSections's own comment for why this never re-runs the engine. */}}
+      <table>
+        {{ with $weeklyPlanWidths }}<colgroup>{{ range . }}<col style="width: {{ . }}%">{{ end }}</colgroup>{{ end }}
+        <thead>
+          <tr><th>Dish (from Book 2)</th><th>Usual time</th><th>Amount</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          {{ range $weeklyPlan }}
+            <tr class="contents-group"><td colspan="4">{{ .Title }}</td></tr>
+            {{ range .Rows }}
+              <tr>
+                <td>{{ .Dish }}</td>
+                <td><span class="write-line"></span></td>
+                <td>{{ .Serving }}</td>
+                <td><span class="write-line"></span></td>
+              </tr>
+            {{ end }}
+          {{ end }}
+        </tbody>
+      </table>
+    {{ else }}
+      {{/* No Book 2 to read from -- a Book1-only request. Blank exactly as this table always
+           was: a form the family fills in from a Book 2 they hold in hand, never a menu
+           invented here. */}}
+      <table>
+        <thead>
+          <tr><th>Meal</th><th>Usual time</th><th>Dish (from Book 2)</th><th>Amount</th><th>Notes</th></tr>
+        </thead>
+        <tbody>
+          {{ range $i, $_ := rows 8 }}
+            <tr>
+              <td><span class="write-line"></span></td><td><span class="write-line"></span></td>
+              <td><span class="write-line"></span></td><td><span class="write-line"></span></td>
+              <td><span class="write-line"></span></td>
+            </tr>
+          {{ end }}
+        </tbody>
+      </table>
+    {{ end }}
 
   {{ else if eq $facet "approach" }}
     <table>

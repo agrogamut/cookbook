@@ -121,6 +121,22 @@ type Section struct {
 	// different short chapter than the one actually printed alongside it.
 	RecipeLinkIndex []ChapterRange `json:"recipe_link_index,omitempty"`
 
+	// WeeklyMealPlan carries B1-006's "This week's plan" table filled with the real recipes and
+	// serving sizes Book 2 selected for this child, grouped by meal category (Breakfast, Lunch,
+	// Dinner -- mainMealCategories in book2.go). Only ever set by AssembleSet, once a real Book 2
+	// exists to read from: see WeeklyMealPlanFromSections's own comment for why this reads an
+	// already-assembled Book2's MealSections rather than querying the engine a second time. A
+	// Book1-only request has no Book2 to read and this stays nil, so the table renders exactly as
+	// blank as it always has.
+	WeeklyMealPlan []MealPlanCategory `json:"weekly_meal_plan,omitempty"`
+
+	// WeeklyMealPlanWidths is ColumnWidths' output for the populated "This week's plan" table.
+	// table-layout is fixed and the table's first row is a colspan group heading whenever this is
+	// set, so fixed layout can't take its column proportions from row one the way it normally
+	// would -- book2/contents.html's own colgroup is the direct precedent for this exact problem.
+	// Set alongside WeeklyMealPlan by AssembleSet.
+	WeeklyMealPlanWidths []int `json:"weekly_meal_plan_widths,omitempty"`
+
 	// DoctorApproachNote is a short, Gemini-drafted "what to discuss with your doctor" note for
 	// the blocks that carry no provider-sourced red-flag/doctor-review text of their own --
 	// see doctorApproachEligible in book1.go for exactly which, and why the rest don't need one.
@@ -591,6 +607,23 @@ type ChapterRange struct {
 	LastRecipeNumber  int      `json:"last_recipe_number"`
 	RecipeCount       int      `json:"recipe_count"`
 	RecipeIDs         []string `json:"recipe_ids"`
+}
+
+// MealPlanCategory is one meal category's real recipes for B1-006's "This week's plan" table
+// -- e.g. "Breakfast" with up to maxRecipesPerSection real dishes, each with the serving size
+// Book 2 printed for it. See WeeklyMealPlanFromSections.
+type MealPlanCategory struct {
+	Title string        `json:"title"`
+	Rows  []MealPlanRow `json:"rows"`
+}
+
+// MealPlanRow is one real dish: its Book2 title and serving size. "Usual time" and "Notes"
+// have no source in either book and print as blank write-lines in the template -- inventing a
+// clock time or a note would be exactly what the hard "never invent data" rule forbids, so
+// only Dish and Serving are ever filled from here.
+type MealPlanRow struct {
+	Dish    string `json:"dish"`
+	Serving string `json:"serving"`
 }
 
 type MealSection struct {

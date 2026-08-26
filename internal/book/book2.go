@@ -1009,3 +1009,39 @@ func ChapterRecipeIndex(sections []MealSection) []ChapterRange {
 	}
 	return out
 }
+
+// WeeklyMealPlanFromSections builds B1-006's "This week's plan" straight off an
+// already-assembled Book 2 -- the same source ChapterRecipeIndex reads, for the same reason:
+// a second, independent engine call could legitimately select a different recipe than the one
+// actually printed in the Book 2 sitting next to this table, and "Dish (from Book 2)" only
+// means something if it names something that specific generated copy actually contains.
+// Categories with zero recipes (a mapped chapter emptied by this child's own filters) are left
+// out rather than printed as an empty group.
+func WeeklyMealPlanFromSections(sections []MealSection) []MealPlanCategory {
+	var out []MealPlanCategory
+	for _, sec := range sections {
+		if len(sec.Recipes) == 0 {
+			continue
+		}
+		cat := MealPlanCategory{Title: sec.Title, Rows: make([]MealPlanRow, len(sec.Recipes))}
+		for i, r := range sec.Recipes {
+			cat.Rows[i] = MealPlanRow{Dish: r.Title, Serving: r.Serving}
+		}
+		out = append(out, cat)
+	}
+	return out
+}
+
+// weeklyMealPlanWidthCells flattens every category's rows into ColumnWidths' row-major shape.
+// "Usual time" and "Notes" are always blank -- real cells only from Dish and Serving -- so
+// their column widths fall to minColumnPct, colwidth.go's floor sized for what a parent can
+// write in by hand, which is exactly right for two columns nobody but the family fills.
+func weeklyMealPlanWidthCells(plan []MealPlanCategory) [][]string {
+	var cells [][]string
+	for _, cat := range plan {
+		for _, r := range cat.Rows {
+			cells = append(cells, []string{r.Dish, "", r.Serving, ""})
+		}
+	}
+	return cells
+}

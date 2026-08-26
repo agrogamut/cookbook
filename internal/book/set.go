@@ -69,6 +69,22 @@ func AssembleSet(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, asOf
 		markSheetStarts(b1.Sections)
 	}
 
+	// B1-006's "This week's plan" gets the same real-Book2-data treatment, and for the same
+	// reason: it can only be built here, never inside AssembleBook1 itself, because it needs a
+	// real Book 2 to read from. Unlike the Recipe Link Index this fills an existing section
+	// rather than inserting a new one, so no markSheetStarts re-run is needed.
+	if plan := WeeklyMealPlanFromSections(b2.MealSections); len(plan) > 0 {
+		for i := range b1.Sections {
+			if b1.Sections[i].BlockID == "B1-006" {
+				b1.Sections[i].WeeklyMealPlan = plan
+				b1.Sections[i].WeeklyMealPlanWidths = ColumnWidths(
+					[]string{"Dish (from Book 2)", "Usual time", "Amount", "Notes"},
+					weeklyMealPlanWidthCells(plan))
+				break
+			}
+		}
+	}
+
 	shared, only1, only2 := partitionOmissions(dropped1, dropped2)
 
 	return Set{

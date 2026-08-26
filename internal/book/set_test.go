@@ -3,6 +3,7 @@ package book
 import (
 	"bytes"
 	"context"
+	"html"
 	"slices"
 	"strings"
 	"testing"
@@ -331,6 +332,138 @@ func TestGrowthTablePrintsWhatWasMeasuredAndOnlyThat(t *testing.T) {
 	}
 	if strings.Contains(page, "0.0 kg") {
 		t.Fatal("an unrecorded measurement must never print as zero")
+	}
+}
+
+// TestWeeklyPlanFillsRealDishesFromBook2 pins B1-006's "This week's plan" against the same
+// invariant ChapterRecipeIndex/Recipe Link Index already hold: what prints on this page must
+// trace to a real recipe this specific generated Book 2 actually contains, never a second,
+// independent selection.
+func TestWeeklyPlanFillsRealDishesFromBook2(t *testing.T) {
+	pool := testPool(t)
+	asOf := time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC)
+
+	s := profile.Stored{
+		ChildID:       "BOOK-TEST-WEEKLY-PLAN",
+		DisplayName:   "Weekly Plan Child",
+		DateOfBirth:   time.Date(2022, 5, 1, 0, 0, 0, 0, time.UTC),
+		RegionCulture: "West Bengal / East India",
+		DietType:      "Vegetarian",
+	}
+
+	set, err := AssembleSet(context.Background(), pool, s, asOf)
+	if err != nil {
+		t.Fatalf("AssembleSet: %v", err)
+	}
+
+	var b1006 *Section
+	for i := range set.Book1.Sections {
+		if set.Book1.Sections[i].BlockID == "B1-006" {
+			b1006 = &set.Book1.Sections[i]
+		}
+	}
+	if b1006 == nil {
+		t.Fatal("this child must render B1-006 (Meal-wise feeding plan)")
+	}
+	if len(b1006.WeeklyMealPlan) == 0 {
+		t.Fatal("a set run with a populated Book 2 must fill WeeklyMealPlan, not leave it nil")
+	}
+
+	// Real recipe titles/servings, keyed by meal category, straight off Book 2 -- the same
+	// source WeeklyMealPlanFromSections reads, checked independently here rather than by
+	// calling that function again.
+	realByCategory := map[string]map[string]string{}
+	for _, sec := range set.Book2.MealSections {
+		dishes := make(map[string]string, len(sec.Recipes))
+		for _, r := range sec.Recipes {
+			dishes[r.Title] = r.Serving
+		}
+		realByCategory[sec.Title] = dishes
+	}
+
+	for _, cat := range b1006.WeeklyMealPlan {
+		real, ok := realByCategory[cat.Title]
+		if !ok {
+			t.Fatalf("WeeklyMealPlan category %q has no matching Book 2 meal section", cat.Title)
+		}
+		for _, row := range cat.Rows {
+			serving, ok := real[row.Dish]
+			if !ok {
+				t.Fatalf("WeeklyMealPlan row %q under %q does not match any real Book 2 recipe title",
+					row.Dish, cat.Title)
+			}
+			if row.Serving != serving {
+				t.Fatalf("WeeklyMealPlan row %q serving = %q, want the real Book 2 serving %q",
+					row.Dish, row.Serving, serving)
+			}
+		}
+	}
+
+	var out strings.Builder
+	if err := RenderHTML(&out, Kind1, set.Book1.Metadata, set.Book1); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	page := out.String()
+	for _, cat := range b1006.WeeklyMealPlan {
+		if !strings.Contains(page, html.EscapeString(cat.Title)) {
+			t.Fatalf("printed page must contain meal category %q", cat.Title)
+		}
+		for _, row := range cat.Rows {
+			// html/template escapes &, <, > etc in text content -- a real dish title like
+			// "Kidney beans & Spinach" prints as "Kidney beans &amp; Spinach", so the
+			// expected string must go through the same escaping the template applies.
+			if !strings.Contains(page, html.EscapeString(row.Dish)) {
+				t.Fatalf("printed page must contain real dish %q", row.Dish)
+			}
+			if !strings.Contains(page, html.EscapeString(row.Serving)) {
+				t.Fatalf("printed page must contain real serving %q for %q", row.Serving, row.Dish)
+			}
+		}
+	}
+}
+
+// TestWeeklyPlanStaysBlankOnBookOneAlone pins the other half of the contract: a standalone
+// Book1-only request has no Book2 to cross-reference, so WeeklyMealPlan must stay nil and the
+// table must render exactly as blank as it always did -- never a second, independent engine
+// run that could invent-fill a different selection than whatever Book 2 the family may or may
+// not ever receive.
+func TestWeeklyPlanStaysBlankOnBookOneAlone(t *testing.T) {
+	pool := testPool(t)
+	asOf := time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC)
+
+	s := profile.Stored{
+		ChildID:       "BOOK-TEST-WEEKLY-PLAN-B1-ONLY",
+		DisplayName:   "Book One Only Child",
+		DateOfBirth:   time.Date(2022, 5, 1, 0, 0, 0, 0, time.UTC),
+		RegionCulture: "West Bengal / East India",
+		DietType:      "Vegetarian",
+	}
+
+	b, _, err := AssembleBook1(context.Background(), pool, s, asOf)
+	if err != nil {
+		t.Fatalf("AssembleBook1: %v", err)
+	}
+
+	var b1006 *Section
+	for i := range b.Sections {
+		if b.Sections[i].BlockID == "B1-006" {
+			b1006 = &b.Sections[i]
+		}
+	}
+	if b1006 == nil {
+		t.Fatal("this child must render B1-006 (Meal-wise feeding plan)")
+	}
+	if b1006.WeeklyMealPlan != nil {
+		t.Fatalf("a Book1-only request must never populate WeeklyMealPlan, got %+v", b1006.WeeklyMealPlan)
+	}
+
+	var out strings.Builder
+	if err := RenderHTML(&out, Kind1, b.Metadata, b); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	page := out.String()
+	if !strings.Contains(page, "<th>Meal</th>") {
+		t.Fatal("a Book1-only request must render the original blank 5-column table, with its Meal column")
 	}
 }
 
