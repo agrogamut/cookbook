@@ -1,10 +1,20 @@
 {{ define "B2-SIGNOFF-01" }}
-{{/* The physical approval page: a director and a dietitian sign this printed copy before it
-     reaches a family. There is no stored approval record and no system gate on it -- see
-     CLAUDE.md's amendment on the sign-off workflow -- this page is the entire mechanism.
-     Second-to-last, immediately before B2-IMPRINT-01, on its own sheet so a signature never
-     shares a page with anything else. Child name and generation date are printed so a signed
-     sheet can't be separated from the book it belongs to. */}}
+{{/* The physical approval page: the same four cards Book 1's sign-off page carries (see
+     Book1.SignoffCredits and B1-SIGNOFF-01) -- Author and Editor & co-author pre-filled,
+     Pediatrician and Dietician blank -- because both books are one consultation's paperwork
+     for one child, and a family signing two different card sets for the same visit would
+     read as two separate approvals instead of one. There is no stored approval record and no
+     system gate on it -- see CLAUDE.md's amendment on the sign-off workflow -- this page is
+     the entire mechanism. Second-to-last, immediately before B2-IMPRINT-01, on its own sheet
+     so a signature never shares a page with anything else. Child name and generation date are
+     printed so a signed sheet can't be separated from the book it belongs to.
+
+     Printed name is pre-filled for Author and Editor & co-author and left blank for
+     Pediatrician and Dietician -- CreditRow.Name is empty for those two, so the "absence is a
+     writing line" rule already in play elsewhere in this book covers it here without a
+     separate branch. Signature and date are always blank lines, on every card: a name printed
+     here is an attribution, not an approval, and only a physical signature on the printed page
+     makes it one. */}}
 <section class="page-break">
   <div class="page-head">
     <p class="kicker">Approval</p>
@@ -13,18 +23,14 @@
   <p class="block-purpose">For {{ .Child.DisplayName }}{{ with .Metadata.ReleaseID }} &middot; release {{ . }}{{ end }} &middot; generated {{ .Metadata.GenerationDate.Format "2006-01-02" }}.</p>
 
   <div class="card-row signoff">
+    {{ range .SignoffCredits }}
     <div class="card">
-      <h3>Director</h3>
-      <p><span class="label">Printed name</span><br><span class="write-line"></span></p>
+      <h3>{{ .Role }}</h3>
+      <p><span class="label">Printed name</span><br>{{ if .Name }}{{ .Name }}{{ else }}<span class="write-line"></span>{{ end }}</p>
       <p><span class="label">Signature</span><br><span class="write-line"></span></p>
       <p><span class="label">Date</span><br><span class="write-line"></span></p>
     </div>
-    <div class="card">
-      <h3>Dietitian</h3>
-      <p><span class="label">Printed name</span><br><span class="write-line"></span></p>
-      <p><span class="label">Signature</span><br><span class="write-line"></span></p>
-      <p><span class="label">Date</span><br><span class="write-line"></span></p>
-    </div>
+    {{ end }}
   </div>
 </section>
 {{ end }}

@@ -527,7 +527,19 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			}
 
 		case "B1-TRACKER-01":
-			sec.Trackers = trackerGrids(blockID, writable, src, cp.AgeMonths)
+			if blockID == "B1-002" {
+				// B1-002 ("Goals agreed with family") has no input behind it anywhere in this
+				// schema -- see "What the books know about a child" in CLAUDE.md -- so the
+				// generic writable_fields fallback used to print a blank four-row form (Parent
+				// priority / target date / notes) that could never carry a family's own words,
+				// only reserve space for the doctor to write in during the visit. That is a
+				// full extra table's worth of page, purely as stationery, for a page whose
+				// Purpose/Covers text already says the same thing in one sentence. Replaced
+				// with a single brief line instead of a form: see goalsAgreedProse.
+				sec.Prose = []string{goalsAgreedProse}
+			} else {
+				sec.Trackers = trackerGrids(blockID, writable, src, cp.AgeMonths)
+			}
 		}
 
 		// The last guard before a section is appended, and the one conservation accounting
@@ -635,6 +647,14 @@ func signoffCredits() []CreditRow {
 		{Role: "Editor & co-author", Name: "Soumyabrata Ghosh"},
 	}
 }
+
+// goalsAgreedProse replaces B1-002's writing form. Nothing in this schema records a family's
+// priority goals -- see "What the books know about a child" in CLAUDE.md -- so a table here
+// was never anything but blank lines reserved for someone else to fill in during the visit.
+// One honest sentence in the space the provider's own Purpose/Covers text already occupies,
+// instead of a page-length form promising the family a place to write.
+const goalsAgreedProse = "Agreed and recorded with the family during the consultation itself, " +
+	"not written in ahead of time here."
 
 // gasBloatingSituation is the generic, non-specific carve-out entry for a condition
 // book1_illness_feeding_block does not document. Universal, non-clinical guidance only --

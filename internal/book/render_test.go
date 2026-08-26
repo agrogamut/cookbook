@@ -461,8 +461,10 @@ func TestSignoffPagePrecedesTheImprint(t *testing.T) {
 		// rather than through the assembler.
 		{Kind1, Book1{Child: ChildSummary{DisplayName: "Test Child"}, SignoffCredits: signoffCredits()},
 			[]string{"Author", "Pediatrician", "Dietician", "Editor"}},
-		// Book 2 keeps its original two-role set -- untouched by the Book 1 sign-off change.
-		{Kind2, Book2{Child: ChildSummary{DisplayName: "Test Child"}}, []string{"Director", "Dietitian"}},
+		// Book 2 now carries the same four-role set as Book 1 (see SignoffCredits's own doc
+		// comment in types.go): one consultation's paperwork for one child, one card set.
+		{Kind2, Book2{Child: ChildSummary{DisplayName: "Test Child"}, SignoffCredits: signoffCredits()},
+			[]string{"Author", "Pediatrician", "Dietician", "Editor"}},
 	} {
 		t.Run(string(tc.kind), func(t *testing.T) {
 			var buf bytes.Buffer

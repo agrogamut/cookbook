@@ -21,6 +21,11 @@
     &middot; <span class="mono">{{ .StageCode }}</span></p>
 
   {{ if eq $facet "target" }}
+    {{/* .stage-target > .callout gets break-before: avoid in tokens.css -- the same fix
+         .illness > .callout already uses for the identical shape: a callout immediately
+         after a table can land as the only thing on a fresh page when the table barely
+         overruns what is left of the page above it. */}}
+    <div class="stage-target">
     <table>
       <tbody>
         {{ with .Phase }}<tr><td class="domain-label">Feeding phase</td><td>{{ . }}</td></tr>{{ end }}
@@ -55,6 +60,7 @@
         <p>{{ . }}</p>
       </div>
     {{ end }}
+    </div>
 
   {{ else if eq $facet "schedule" }}
     <table>

@@ -361,6 +361,7 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		ChokingHazards: chokingHazards,
 		MealSections:   sections,
 		RotationPlan:   nil,
+		SignoffCredits: signoffCredits(),
 	}
 	return b, skipped, nil
 }

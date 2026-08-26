@@ -101,5 +101,8 @@
      the vaccine reaction log, age-specific monitoring, the food and bowel trackers, the weekly
      and daily-life dashboards, the follow-up page. */}}
 {{ define "B1-TRACKER-01" }}
+{{/* B1-002 sets Prose instead of Trackers -- see the B1-002 special case in book1.go's
+     block-loop and goalsAgreedProse's own comment for why. */}}
+{{ range .Prose }}<p>{{ . }}</p>{{ end }}
 {{ range .Trackers }}{{ template "B1-GRID" . }}{{ end }}
 {{ end }}

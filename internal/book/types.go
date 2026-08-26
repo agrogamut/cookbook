@@ -106,12 +106,14 @@ type Section struct {
 	Covers  []string `json:"covers,omitempty"`
 	Callout *Callout `json:"callout,omitempty"`
 
-	// Prose is plain paragraphs for the one section this book writes itself rather than reads
-	// from a provider table: B1-CONNECT-01, "Being Together". There is no book1_content_block
-	// row and no book1_daily_life_module domain for mother-child bonding or general parenting
-	// style -- verified against both tables -- so this is generic, non-specific, universal
-	// guidance rather than a per-child clinical claim, the same carve-out class as the
-	// gas/bloating illness entry. See connectSection in book1.go.
+	// Prose is plain paragraphs for a section this book writes itself rather than reads from a
+	// provider table. Two use it: B1-CONNECT-01 ("Being Together" -- no book1_content_block row
+	// and no book1_daily_life_module domain for mother-child bonding or general parenting style,
+	// verified against both tables, so this is generic, non-specific, universal guidance rather
+	// than a per-child clinical claim, the same carve-out class as the gas/bloating illness
+	// entry; see connectSection in book1.go) and B1-002 ("Goals agreed with family" -- no input
+	// anywhere in this schema records a family's priority goals, so a blank writing form was
+	// never anything but reserved space; see goalsAgreedProse in book1.go).
 	Prose []string `json:"prose,omitempty"`
 
 	// RecipeLinkIndex carries B1-RECIPEINDEX-01's real chapter-to-recipe cross-reference --
@@ -653,6 +655,10 @@ type Book2 struct {
 	// on a single threshold -- an honest gap rather than a guessed one.
 	HoneyRule      string   `json:"honey_rule,omitempty"`
 	ChokingHazards []string `json:"choking_hazards,omitempty"`
+	// SignoffCredits is Book 2's sign-off card list -- deliberately the same four cards Book 1
+	// prints (signoffCredits in book1.go), not a separate two-role Director/Dietitian set. Both
+	// books are one consultation's paperwork for one child, so one card set covers both.
+	SignoffCredits []CreditRow `json:"signoff_credits"`
 }
 
 // SafetyGuideline is one row of the provider's food_safety_sop table, joined to

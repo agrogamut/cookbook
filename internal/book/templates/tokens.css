@@ -919,6 +919,12 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 }
 .domain-referral { font-size: var(--caption-size); margin: 3mm 0 0; max-width: var(--measure); }
 .domain > table:first-of-type, .illness > table { break-inside: avoid; }
+/* dataQualityChecklist (book1.go) always returns exactly five rows -- fixed, never growing --
+   so this table can never legitimately need to split, and by default it still could: a real
+   printed page landed one row on a nearly-blank sheet and the other four on the next, because
+   the table happened to start a few millimetres above the boundary. break-inside: avoid keeps
+   the whole five-row summary on one page instead. */
+.data-quality { break-inside: avoid; }
 /* A domain's red flag and referral line stay on the page with the reference table above them.
 
    A break falling between the two opened four of Book 1's sheets with "Warning: when to seek
@@ -941,6 +947,12 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    under a different parent class, and the fix already proven for the domain pages applies
    without any new mechanism. */
 .illness > .callout { break-before: avoid; }
+/* .stage-target > .callout, same fix again: B1-STAGE-01's "target" facet (stage.html) is a
+   table followed by up to three warning/note callouts, and the Data Quality/B1-002 page
+   changes above shifted this page's own break point into the same gap -- 2026-08-26,
+   measured against a real book, page 7 opened on "Warning: choking safety at this age"
+   with nothing else on it. */
+.stage-target > .callout { break-before: avoid; }
 
 /* A tracker's head moves whole; its grid does not.
 
