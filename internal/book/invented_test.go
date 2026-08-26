@@ -3,16 +3,13 @@ package book
 import (
 	"context"
 	"html/template"
-	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/madamgy/recipie/internal/aidraft"
 	"github.com/madamgy/recipie/internal/engine"
 	"github.com/madamgy/recipie/internal/models"
-	"github.com/madamgy/recipie/internal/profile"
 )
 
 // fakeDrafter is a test double for aidraft.Drafter. Both methods report
@@ -49,46 +46,26 @@ func (f fakeDrafter) DraftFoodGroupPriorities(ctx context.Context, req aidraft.F
 	return f.foodGroupFn(ctx, req)
 }
 
-// unmappedCategory returns one meal_category_target row (GAP-023: a category with zero rows
-// in the meal_category_recipe view) whose own target parses to a positive number -- the exact
-// shape the invented-recipe fallback exists for: real recipes have nothing to offer at all.
-func unmappedCategory(t *testing.T, pool *pgxpool.Pool) (id, name string, target int) {
-	t.Helper()
-	ctx := context.Background()
-
-	rows, err := pool.Query(ctx, `
-		SELECT t.meal_category_id, t.meal_category, coalesce(t.default_target_recipes, '')
-		FROM meal_category_target t
-		WHERE NOT EXISTS (
-		    SELECT 1 FROM meal_category_recipe m WHERE m.meal_category_id = t.meal_category_id)`)
-	if err != nil {
-		t.Fatalf("query unmapped categories: %v", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var i, n, targetText string
-		if err := rows.Scan(&i, &n, &targetText); err != nil {
-			t.Fatalf("scan unmapped category: %v", err)
-		}
-		if tgt, err := strconv.Atoi(strings.TrimSpace(targetText)); err == nil && tgt > 0 {
-			return i, n, tgt
-		}
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("unmapped category rows: %v", err)
-	}
-	t.Skip("no unmapped meal category with a positive target on the current dataset")
-	return "", "", 0
-}
-
-// TestInventedRecipeToppUpFillsAnUnmappedCategory pins the case the fallback exists for: a
-// meal category real recipes have nothing at all for (GAP-023) still renders, filled entirely
-// by AI-invented recipes drawn from the child's own safe-ingredient allow-list.
-func TestInventedRecipeTopUpFillsAnUnmappedCategory(t *testing.T) {
+// TestInventedRecipeTopUpFillsACategoryWithNoRealCandidates pins the case the fallback exists
+// for: a meal category real recipes have nothing at all for is still filled, entirely by
+// AI-invented recipes drawn from the child's own safe-ingredient allow-list.
+//
+// Exercised directly against topUpInvented with a synthetic testMealCategory, not through
+// AssembleBook2: AssembleBook2 now only ever iterates the three chapters with real
+// recipe_master.meal_type coverage (mainMealCategories -- Breakfast, Lunch, Dinner), so it
+// never reaches a category with zero real candidates at all any more. That is the whole point
+// of the mainMealCategories policy -- see its doc comment -- but the fallback mechanism this
+// test actually cares about (an empty start, filled entirely by invention, validated and
+// labelled the same as any other card) still exists and still needs to be pinned; it is simply
+// exercised at the layer where "zero real candidates" is still a real, reachable case, rather
+// than through a whole real category the DB happens to leave unmapped (GAP-023), which was
+// always a slightly fragile thing to hang a test on: had the provider ever ruled on those three
+// meal types, unmappedCategory's own t.Skip would have silently stopped testing this at all.
+func TestInventedRecipeTopUpFillsACategoryWithNoRealCandidates(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	catID, catName, target := unmappedCategory(t, pool)
+	cat := testMealCategory(t, 4)
+	cleanupAIRecipes(t, pool, cat.ID)
 
 	fake := fakeDrafter{
 		inventFn: func(ctx context.Context, req aidraft.InventedRecipeRequest) (aidraft.InventedRecipe, error) {
@@ -106,35 +83,20 @@ func TestInventedRecipeTopUpFillsAnUnmappedCategory(t *testing.T) {
 		},
 	}
 
-	s := profile.Stored{
-		ChildID:     "BOOK-TEST-AIDRAFT-001",
-		DateOfBirth: time.Now().AddDate(-3, 0, 0), // 36 months, above inventedRecipeMinAgeMonths
-		DietType:    "Non-vegetarian",
-	}
-	b, skipped, err := AssembleBook2(ctx, pool, s, time.Now(), WithDrafter(fake))
-	if err != nil {
-		t.Fatalf("AssembleBook2: %v", err)
-	}
+	cp := models.ChildProfile{AgeMonths: 36, DietType: "Non-vegetarian"} // above inventedRecipeMinAgeMonths
+	res := models.EngineResult{ActiveTarget: "NT00", TargetReason: "default"}
 
-	var got *MealSection
-	for i := range b.MealSections {
-		if b.MealSections[i].MealCategoryID == catID {
-			got = &b.MealSections[i]
-		}
+	cards, note := topUpInvented(ctx, pool, fake, cp, cat, "v1", res, nil)
+	if len(cards) == 0 {
+		t.Fatalf("category %s did not fill from an empty start even with a working Drafter; note=%q", cat.ID, note)
 	}
-	if got == nil {
-		t.Fatalf("category %s (%s) did not render even with a working Drafter; skipped=%v", catID, catName, skipped)
-	}
-	if len(got.Recipes) == 0 {
-		t.Fatalf("category %s rendered with zero recipes", catID)
-	}
-	for _, r := range got.Recipes {
+	for _, r := range cards {
 		// Source stays set on the struct -- the operator console's fact-check surface needs
 		// it -- but the printed page must never carry a tell. ReviewStatus and
 		// SelectionReasons read exactly like a real card's; recipe.html has no branch on
 		// Source at all any more.
 		if r.Source != "ai-invented" {
-			t.Fatalf("recipe %s in an unmapped category has Source %q, want \"ai-invented\"", r.RecipeID, r.Source)
+			t.Fatalf("recipe %s in an empty-start category has Source %q, want \"ai-invented\"", r.RecipeID, r.Source)
 		}
 		if r.ReviewStatus != inventedReviewStatus {
 			t.Fatalf("recipe %s has ReviewStatus %q, want the same value a real card carries (%q)",
@@ -147,13 +109,13 @@ func TestInventedRecipeTopUpFillsAnUnmappedCategory(t *testing.T) {
 			}
 		}
 	}
-	if len(got.Recipes) > target {
-		t.Fatalf("category %s got %d recipes, more than its own target %d", catID, len(got.Recipes), target)
+	if len(cards) > cat.Target {
+		t.Fatalf("category %s got %d recipes, more than its own target %d", cat.ID, len(cards), cat.Target)
 	}
 
-	html := renderRecipeCardHTML(t, got.Recipes[0])
+	html := renderRecipeCardHTML(t, cards[0])
 	if strings.Contains(html, "ai-badge") || strings.Contains(strings.ToLower(html), "ai-invented recipe") {
-		t.Fatalf("rendered recipe page for %s still carries an AI-invented disclosure badge", got.Recipes[0].RecipeID)
+		t.Fatalf("rendered recipe page for %s still carries an AI-invented disclosure badge", cards[0].RecipeID)
 	}
 }
 
@@ -180,11 +142,13 @@ func renderRecipeCardHTML(t *testing.T, card RecipeCard) string {
 // invented recipe against, so the fallback must never even ask the model below that age. The
 // fake's inventFn fails the test outright if called, rather than returning an error the caller
 // might swallow -- proving the gate stops the call before it happens, not merely that a
-// downstream check would have caught the response.
+// downstream check would have caught the response. Exercised directly against topUpInvented;
+// see TestInventedRecipeTopUpFillsACategoryWithNoRealCandidates for why.
 func TestInventedRecipeFallbackNeverRunsBelowMinAge(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	catID, catName, _ := unmappedCategory(t, pool)
+	cat := testMealCategory(t, 4)
+	cleanupAIRecipes(t, pool, cat.ID)
 
 	fake := fakeDrafter{
 		inventFn: func(ctx context.Context, req aidraft.InventedRecipeRequest) (aidraft.InventedRecipe, error) {
@@ -194,33 +158,16 @@ func TestInventedRecipeFallbackNeverRunsBelowMinAge(t *testing.T) {
 		},
 	}
 
-	s := profile.Stored{
-		ChildID:     "BOOK-TEST-AIDRAFT-003",
-		DateOfBirth: time.Now().AddDate(0, -12, 0), // 12 months, below inventedRecipeMinAgeMonths (24)
-		DietType:    "Non-vegetarian",
-	}
-	b, skipped, err := AssembleBook2(ctx, pool, s, time.Now(), WithDrafter(fake))
-	if err != nil {
-		t.Fatalf("AssembleBook2: %v", err)
-	}
+	cp := models.ChildProfile{AgeMonths: 12, DietType: "Non-vegetarian"} // below inventedRecipeMinAgeMonths (24)
+	res := models.EngineResult{ActiveTarget: "NT00", TargetReason: "default"}
 
-	for _, sec := range b.MealSections {
-		if sec.MealCategoryID == catID {
-			t.Fatalf("category %s (%s) rendered for a 12-month-old from an unmapped category; "+
-				"the only possible source is the invented-recipe fallback, which must not run "+
-				"below the age gate", catID, catName)
-		}
+	cards, note := topUpInvented(ctx, pool, fake, cp, cat, "v1", res, nil)
+	if len(cards) != 0 {
+		t.Fatalf("category %s rendered %d cards for a 12-month-old; the only possible source is "+
+			"the invented-recipe fallback, which must not run below the age gate", cat.ID, len(cards))
 	}
-
-	found := false
-	for _, sk := range skipped {
-		if strings.HasPrefix(sk, omissionMealCategory) && strings.Contains(sk, catID) {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("category %s must still be reported as an omission for a child below the "+
-			"invented-recipe age gate, got skipped=%v", catID, skipped)
+	if note == "" {
+		t.Fatalf("category %s must report a shortfall for a child below the invented-recipe age gate, got an empty note", cat.ID)
 	}
 }
 
@@ -228,21 +175,13 @@ func TestInventedRecipeFallbackNeverRunsBelowMinAge(t *testing.T) {
 // model response naming an ingredient outside the child-safe allow-list must never reach a
 // printed card, even though the response schema was already supposed to prevent it -- this is
 // the defense-in-depth check, exercised by a fake that deliberately violates the schema's own
-// contract the way a real model still might.
-//
-// The category's own ai_recipe rows are cleared first. Reuse-before-regenerate means a
-// category with a *good* stored recipe from an earlier test can still render even when this
-// test's own fake keeps producing bad output -- correct behaviour for the feature, but it
-// would make this specific test about the fake's rejected response rather than about
-// anything the store already held, so the store is emptied before this test asks its own
-// question.
+// contract the way a real model still might. Exercised directly against topUpInvented; see
+// TestInventedRecipeTopUpFillsACategoryWithNoRealCandidates for why.
 func TestInventedRecipeOutsideAllowedSetIsRejected(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	catID, catName, _ := unmappedCategory(t, pool)
-	if _, err := pool.Exec(ctx, `DELETE FROM ai_recipe WHERE meal_category_id = $1`, catID); err != nil {
-		t.Fatalf("clear ai_recipe for %s: %v", catID, err)
-	}
+	cat := testMealCategory(t, 4)
+	cleanupAIRecipes(t, pool, cat.ID)
 
 	fake := fakeDrafter{
 		inventFn: func(ctx context.Context, req aidraft.InventedRecipeRequest) (aidraft.InventedRecipe, error) {
@@ -257,32 +196,16 @@ func TestInventedRecipeOutsideAllowedSetIsRejected(t *testing.T) {
 		},
 	}
 
-	s := profile.Stored{
-		ChildID:     "BOOK-TEST-AIDRAFT-002",
-		DateOfBirth: time.Now().AddDate(-3, 0, 0),
-		DietType:    "Non-vegetarian",
-	}
-	b, skipped, err := AssembleBook2(ctx, pool, s, time.Now(), WithDrafter(fake))
-	if err != nil {
-		t.Fatalf("AssembleBook2: %v", err)
-	}
+	cp := models.ChildProfile{AgeMonths: 36, DietType: "Non-vegetarian"}
+	res := models.EngineResult{ActiveTarget: "NT00", TargetReason: "default"}
 
-	for _, sec := range b.MealSections {
-		if sec.MealCategoryID == catID {
-			t.Fatalf("category %s (%s) rendered despite every invented recipe failing "+
-				"validation; a rejected response must never reach a printed card", catID, catName)
-		}
+	cards, note := topUpInvented(ctx, pool, fake, cp, cat, "v1", res, nil)
+	if len(cards) != 0 {
+		t.Fatalf("category %s rendered %d cards despite every invented recipe failing "+
+			"validation; a rejected response must never reach a printed card", cat.ID, len(cards))
 	}
-
-	found := false
-	for _, sk := range skipped {
-		if strings.HasPrefix(sk, omissionMealCategory) && strings.Contains(sk, catID) {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("category %s must still be reported as an omission when every invented "+
-			"recipe fails validation, got skipped=%v", catID, skipped)
+	if note == "" {
+		t.Fatalf("category %s must report a shortfall when every invented recipe fails validation, got an empty note", cat.ID)
 	}
 }
 
@@ -474,16 +397,25 @@ func TestFindStoredInventedCardSkipsRowUnsafeForThisChild(t *testing.T) {
 	}
 }
 
-// TestInventedRecipeAssembleBook2ReusesAcrossChildren exercises reuse through the public
-// AssembleBook2 entry point rather than the package-private helpers directly: two children in
-// a row, the second given a drafter that fails the test outright if Gemini drafting is ever
-// invoked. Whatever filled the store first -- this test's own first child, or another test's
-// leftover row for the same GAP-023 category, since this package's tests share one live
-// database -- the second child succeeding proves the chapter was filled from ai_recipe alone.
+// TestInventedRecipeAssembleBook2ReusesAcrossChildren exercises reuse across two children in a
+// row, the second given a drafter that fails the test outright if Gemini drafting is ever
+// invoked -- the second child succeeding proves the chapter was filled from ai_recipe alone.
+//
+// Exercised directly against topUpInvented, not through AssembleBook2's public entry point (the
+// shape this test used before mainMealCategories was added): AssembleBook2 now only ever
+// iterates the three chapters with real recipe_master.meal_type coverage, so it never reaches a
+// category with zero real candidates any more, and this test's whole premise needs one. The
+// reuse mechanism itself -- findStoredInventedCard, ai_recipe, ai_recipe_ingredient -- is
+// exactly the same code either way, still exercised with real DB round trips; only the entry
+// point moved to the layer where "zero real candidates" is still a reachable case. See
+// TestInventedRecipeTopUpFillsACategoryWithNoRealCandidates for the fuller version of this
+// reasoning.
 func TestInventedRecipeAssembleBook2ReusesAcrossChildren(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	catID, catName, _ := unmappedCategory(t, pool)
+	cat := testMealCategory(t, 4)
+	cleanupAIRecipes(t, pool, cat.ID)
+	res := models.EngineResult{ActiveTarget: "NT00", TargetReason: "default"}
 
 	working := fakeDrafter{
 		inventFn: func(ctx context.Context, req aidraft.InventedRecipeRequest) (aidraft.InventedRecipe, error) {
@@ -498,13 +430,9 @@ func TestInventedRecipeAssembleBook2ReusesAcrossChildren(t *testing.T) {
 			}, nil
 		},
 	}
-	profileA := profile.Stored{
-		ChildID:     "BOOK-TEST-AIDRAFT-REUSE-A",
-		DateOfBirth: time.Now().AddDate(-3, 0, 0),
-		DietType:    "Non-vegetarian",
-	}
-	if _, _, err := AssembleBook2(ctx, pool, profileA, time.Now(), WithDrafter(working)); err != nil {
-		t.Fatalf("AssembleBook2 (child A, seeding the store): %v", err)
+	childA := models.ChildProfile{AgeMonths: 36, DietType: "Non-vegetarian"}
+	if cards, _ := topUpInvented(ctx, pool, working, childA, cat, "v1", res, nil); len(cards) == 0 {
+		t.Fatalf("topUpInvented (child A, seeding the store) filled zero cards")
 	}
 
 	mustNotDraft := fakeDrafter{
@@ -514,27 +442,9 @@ func TestInventedRecipeAssembleBook2ReusesAcrossChildren(t *testing.T) {
 			return aidraft.InventedRecipe{}, nil
 		},
 	}
-	profileB := profile.Stored{
-		ChildID:     "BOOK-TEST-AIDRAFT-REUSE-B",
-		DateOfBirth: time.Now().AddDate(-3, 0, 0),
-		DietType:    "Non-vegetarian",
-	}
-	b, skipped, err := AssembleBook2(ctx, pool, profileB, time.Now(), WithDrafter(mustNotDraft))
-	if err != nil {
-		t.Fatalf("AssembleBook2 (child B): %v", err)
-	}
-
-	var got *MealSection
-	for i := range b.MealSections {
-		if b.MealSections[i].MealCategoryID == catID {
-			got = &b.MealSections[i]
-		}
-	}
-	if got == nil {
-		t.Fatalf("category %s (%s) did not render for child B from stored recipes alone; skipped=%v",
-			catID, catName, skipped)
-	}
-	if len(got.Recipes) == 0 {
-		t.Fatalf("category %s rendered with zero recipes for child B", catID)
+	childB := models.ChildProfile{AgeMonths: 36, DietType: "Non-vegetarian"}
+	cards, note := topUpInvented(ctx, pool, mustNotDraft, childB, cat, "v1", res, nil)
+	if len(cards) == 0 {
+		t.Fatalf("category %s did not fill for child B from stored recipes alone; note=%q", cat.ID, note)
 	}
 }

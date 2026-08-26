@@ -44,6 +44,37 @@ var methodStepPattern = regexp.MustCompile(`\d+\)\s*`)
 // number regardless of how many real survivors the engine returned.
 const maxRecipesPerSection = 10
 
+// mainMealCategories restricts Book 2 to the three chapters with real recipe_master.meal_type
+// coverage -- Breakfast, Lunch, Dinner (MC-01, MC-03, MC-06) -- rather than attempting all
+// seven meal_category_target rows. This is a project policy decision, not provider data.
+//
+// meal_category_recipe_map (migration 0016) deliberately leaves the other four meal_type
+// values unmapped pending a provider ruling (GAP-023): Snack, School Tiffin and Recovery Meal
+// have no counterpart in meal_category_target at all, so Mid-morning, Tiffin/school snack,
+// Evening snack and Supper/bedtime (MC-02, MC-04, MC-05, MC-07) always start with zero real
+// candidates, for every child, in every region -- not a symptom of any one region's corpus
+// being thin. Left unrestricted, every one of those four chapters needs 100% AI-invented
+// content: real, live testing against a Google Form intake (2026-08-26, see CLAUDE.md) measured
+// this costing 11m7s end to end on real recipes for a single request, most of it serial
+// Gemini calls one invented recipe at a time, some of which hit a transient upstream 503 and
+// left a chapter short by design rather than by bug. Restricting to the three mapped chapters
+// means every printed recipe traces to a real corpus row and removes that latency and
+// reliability cost entirely, at the cost of a shorter book: up to 30 recipes (3 chapters x
+// maxRecipesPerSection) rather than up to 70.
+//
+// This does not touch topUpInvented itself, which still exists and is still exercised (see
+// internal/book/invented_test.go) for the narrower, still-real case of a mapped chapter -- one
+// of these three -- where a specific child's own age/allergy/diet/clinical filters happen to
+// exclude every real candidate. That is a per-child edge case within a real chapter, not a
+// whole chapter with structurally zero coverage; the two are different problems and only the
+// second one is what mainMealCategories closes off.
+//
+// Revisit this once the provider rules on the three unmapped meal_type values (GAP-023) and/or
+// topUpInvented gets bounded concurrency (see printTimeout's own comment in
+// internal/api/router.go) -- either change makes the excluded four chapters cheap and reliable
+// enough to reconsider.
+var mainMealCategories = map[string]bool{"MC-01": true, "MC-03": true, "MC-06": true}
+
 // mealCategory is one row of meal_category_target, with default_target_recipes parsed to an
 // int and capped at maxRecipesPerSection. The column is text in the workbook; a value this
 // code cannot parse is treated the same as an over-target value -- capped to
@@ -157,17 +188,31 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 	sections := []MealSection{}
 
 	for _, cat := range categories {
+		if !mainMealCategories[cat.ID] {
+			// mainMealCategories's own doc comment has the full reasoning; the short version
+			// for an operator reading this list is that it is a scope decision, not a data
+			// gap -- unlike every other skip entry, retrying or fixing an input on this child
+			// cannot change the outcome, so the wording deliberately does not say GAP-023 or
+			// invite a retry.
+			skipped = append(skipped, omissionMealCategory+fmt.Sprintf(
+				"%s (%s) is out of scope for this book by project policy -- Book 2 covers "+
+					"Breakfast, Lunch and Dinner only", cat.ID, cat.Name))
+			continue
+		}
 		candidateIDs := mapped[cat.ID]
 		if len(candidateIDs) == 0 {
-			// GAP-023: this is exactly the case the invented-recipe fallback matters most
-			// for -- a category with zero real recipes mapped to it at all, the same shape
-			// as the 6-11 month iron-support gap CLAUDE.md names as the blocker this whole
-			// feature exists to answer. topUpInvented starts from an empty slice and tries
-			// to reach the whole target from nothing but the allow-listed ingredients.
+			// mainMealCategories already keeps this loop off the four categories GAP-023
+			// names as structurally unmapped (Mid-morning, Tiffin/school snack, Evening
+			// snack, Supper/bedtime), so reaching this branch for one of the three in-scope
+			// categories would mean the corpus itself changed underneath this code -- Lunch
+			// losing every one of its 199 real recipes, say. Kept as a defensive path rather
+			// than an assumed-unreachable one: topUpInvented starts from an empty slice and
+			// tries to reach the whole target from nothing but the allow-listed ingredients,
+			// exactly like it would for a genuinely unmapped category.
 			cards, note := topUpInvented(ctx, pool, cfg.drafter, cp, cat, version, res, nil)
 			if len(cards) == 0 {
 				skipped = append(skipped, omissionMealCategory+fmt.Sprintf(
-					"%s (%s) has no recipes mapped to it at all (GAP-023)",
+					"%s (%s) has no recipes mapped to it at all",
 					cat.ID, cat.Name))
 				continue
 			}
@@ -541,6 +586,11 @@ func loadFeedingSafetyGuidance(ctx context.Context, pool *pgxpool.Pool) (honeyRu
 	return honeyRule, chokingHazards, nil
 }
 
+// loadMealCategories reads every row of meal_category_target, real provider data, all seven of
+// them -- it does not know about mainMealCategories at all. AssembleBook2's own loop applies
+// that policy explicitly, one category at a time, alongside its report-or-render decision for
+// every other case a category can end up in -- see the loop for why an excluded category still
+// gets an honest skip entry rather than silently vanishing.
 func loadMealCategories(ctx context.Context, pool *pgxpool.Pool) ([]mealCategory, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT meal_category_id, meal_category, coalesce(default_target_recipes, '')
