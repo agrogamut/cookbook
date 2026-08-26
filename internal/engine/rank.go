@@ -333,6 +333,59 @@ func applyTimeFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProf
 // any recipe, so it is not covered by the hard "never invent data" rule.
 var DuplicateJaccardThreshold = 0.6
 
+// riceIngredientIDs are the corpus's real rice-grain ingredient_ids in ingredient_master --
+// hand-verified against a live query, 2026-08-26. ING0274 "Rice bean" is deliberately
+// excluded: it is a pulse, an ILIKE '%rice%' false positive on the name, not an actual grain.
+//
+// A small, stable, already-verified list rather than a live query inside this hot path --
+// the same style culture_region_map and stageFacet already use for fixed vocabularies this
+// project checked once against the database rather than re-querying every engine run.
+var riceIngredientIDs = map[string]bool{
+	"ING0001": true, "ING0009": true, "ING0010": true,
+	"ING0101": true, "ING0102": true, "ING0103": true, "ING0104": true, "ING0105": true,
+	"ING0113": true, "ING0205": true,
+	"ING0209": true, "ING0210": true, "ING0211": true,
+	"ING0231": true, "ING0232": true, "ING0233": true, "ING0234": true, "ING0235": true, "ING0236": true,
+	"ING0311": true, "ING0312": true, "ING0313": true, "ING0314": true,
+	"ING0329": true, "ING0341": true, "ING0348": true, "ING0349": true, "ING0362": true, "ING0391": true,
+}
+
+// isRiceBased reports whether a recipe's ingredient set contains a real rice grain, per
+// riceIngredientIDs.
+func isRiceBased(set map[string]bool) bool {
+	for id := range set {
+		if riceIngredientIDs[id] {
+			return true
+		}
+	}
+	return false
+}
+
+// DuplicateJaccardThresholdRiceVsRice is the Jaccard bar a pair of RICE-BASED recipes must
+// clear before one demotes the other -- raised from DuplicateJaccardThreshold's general 0.6,
+// which stays exactly 0.6 for every other pair (non-rice/non-rice, rice/non-rice). 248 of 940
+// corpus recipes contain a real rice ingredient (verified live), and so much of that cooking
+// shares a rice+dal+vegetable core that two genuinely different rice dishes can already clear
+// 0.6 on shared staples alone, before either dish's own distinguishing protein or vegetable is
+// counted -- disproportionately demoting rice recipes for being rice recipes, not for being
+// duplicates. 0.8 still demotes a rice dish that is a near-clone of another (same core plus
+// the same one or two add-ins), and stops demoting two rice dishes that only share what every
+// rice dish in the corpus shares. Same engineering-tuning-parameter framing as
+// DuplicateJaccardThreshold's own doc comment: this tunes the algorithm for one recipe-pair
+// shape, it asserts nothing about any specific recipe, so it is not covered by the hard
+// "never invent data" rule either.
+var DuplicateJaccardThresholdRiceVsRice = 0.8
+
+// dedupeThreshold picks the Jaccard bar a pair must clear before one demotes the other.
+// Pulled out as its own function purely so the rice-leniency decision is unit-testable
+// without a database round trip.
+func dedupeThreshold(aRice, bRice bool) float64 {
+	if aRice && bRice {
+		return DuplicateJaccardThresholdRiceVsRice
+	}
+	return DuplicateJaccardThreshold
+}
+
 func dedupeNearDuplicates(ctx context.Context, pool *pgxpool.Pool, recipes []models.RankedRecipe) ([]models.RankedRecipe, models.StepResult, error) {
 	stepIn := len(recipes)
 	if stepIn < 2 {
@@ -367,12 +420,14 @@ func dedupeNearDuplicates(ctx context.Context, pool *pgxpool.Pool, recipes []mod
 	out := make([]models.RankedRecipe, len(recipes))
 	copy(out, recipes)
 	kept := make([]map[string]bool, 0, len(out))
+	keptRice := make([]bool, 0, len(out))
 	demoted := 0
 	for i := range out {
 		set := sets[out[i].RecipeID]
+		rice := isRiceBased(set)
 		isDup := false
-		for _, k := range kept {
-			if jaccard(set, k) >= DuplicateJaccardThreshold {
+		for j, k := range kept {
+			if jaccard(set, k) >= dedupeThreshold(rice, keptRice[j]) {
 				isDup = true
 				break
 			}
@@ -389,6 +444,7 @@ func dedupeNearDuplicates(ctx context.Context, pool *pgxpool.Pool, recipes []mod
 			demoted++
 		} else {
 			kept = append(kept, set)
+			keptRice = append(keptRice, rice)
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].RankedScore > out[j].RankedScore })
@@ -396,7 +452,10 @@ func dedupeNearDuplicates(ctx context.Context, pool *pgxpool.Pool, recipes []mod
 	return out, models.StepResult{
 		Step: 12, Name: "Diversity / duplication", Kind: "ranker",
 		CandidatesIn: stepIn, CandidatesOut: stepIn,
-		Note: fmt.Sprintf("%d recipe(s) demoted for >=%.0f%% ingredient overlap with a higher-ranked recipe", demoted, DuplicateJaccardThreshold*100),
+		Note: fmt.Sprintf(
+			"%d recipe(s) demoted for >=%.0f%% ingredient overlap with a higher-ranked recipe "+
+				"(>=%.0f%% when both recipes are rice-based)",
+			demoted, DuplicateJaccardThreshold*100, DuplicateJaccardThresholdRiceVsRice*100),
 	}, nil
 }
 

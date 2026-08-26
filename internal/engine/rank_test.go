@@ -105,6 +105,90 @@ func TestDedupeNearDuplicatesDemotesSharedCoreIngredients(t *testing.T) {
 	}
 }
 
+// TestIsRiceBased pins the real, hand-verified rice-grain vocabulary riceIngredientIDs uses,
+// including the one deliberate exclusion: ING0274 "Rice bean" is a pulse, an
+// ILIKE '%rice%' false positive on the name, not an actual rice grain.
+func TestIsRiceBased(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		set  map[string]bool
+		want bool
+	}{
+		{"real rice grain", map[string]bool{"ING0009": true}, true},
+		{"rice bean explicitly excluded", map[string]bool{"ING0274": true}, false},
+		{"no rice", map[string]bool{"ING0500": true}, false},
+		{"empty set", map[string]bool{}, false},
+		{"rice grain among several ingredients", map[string]bool{"ING0500": true, "ING0362": true}, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := isRiceBased(c.set); got != c.want {
+				t.Fatalf("isRiceBased(%v) = %v, want %v", c.set, got, c.want)
+			}
+		})
+	}
+}
+
+// TestDedupeThresholdOnlyLoosensForRiceVsRice pins the one condition under which the lenient
+// 0.8 bar applies: both recipes in the compared pair must be rice-based. Every other
+// combination -- including a rice recipe compared against a non-rice one -- stays at the
+// general 0.6 threshold, unaffected.
+func TestDedupeThresholdOnlyLoosensForRiceVsRice(t *testing.T) {
+	for _, c := range []struct {
+		aRice, bRice bool
+		want         float64
+	}{
+		{true, true, DuplicateJaccardThresholdRiceVsRice},
+		{true, false, DuplicateJaccardThreshold},
+		{false, true, DuplicateJaccardThreshold},
+		{false, false, DuplicateJaccardThreshold},
+	} {
+		if got := dedupeThreshold(c.aRice, c.bRice); got != c.want {
+			t.Fatalf("dedupeThreshold(%v, %v) = %v, want %v", c.aRice, c.bRice, got, c.want)
+		}
+	}
+}
+
+// TestDedupeNearDuplicatesLeniencyIsRiceOnly pins the live-data behavior against two real
+// corpus pairs, found by querying recipe_ingredient_mapping directly rather than fabricated:
+// MG-R-00068/MG-R-00864 are both rice-based with a real measured Jaccard of 0.75 -- under the
+// old flat 0.6 threshold this pair would have been demoted; under the new rice-vs-rice bar of
+// 0.8 it must not be. MG-R-00053/MG-R-00544 are both non-rice with a real measured Jaccard of
+// 1.0 (identical ingredient sets) -- this pair must still be demoted exactly as before, proving
+// the leniency never reaches a non-rice pair.
+func TestDedupeNearDuplicatesLeniencyIsRiceOnly(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	recipes := []models.RankedRecipe{
+		{RecipeID: "MG-R-00068", RankedScore: 0.90},
+		{RecipeID: "MG-R-00864", RankedScore: 0.80}, // rice-vs-rice, jaccard 0.75: must NOT be demoted
+		{RecipeID: "MG-R-00053", RankedScore: 0.70},
+		{RecipeID: "MG-R-00544", RankedScore: 0.60}, // non-rice, jaccard 1.0: must still be demoted
+	}
+
+	out, _, err := dedupeNearDuplicates(ctx, pool, recipes)
+	if err != nil {
+		t.Fatalf("dedupeNearDuplicates: %v", err)
+	}
+
+	scoreByID := make(map[string]float64, len(out))
+	for _, r := range out {
+		scoreByID[r.RecipeID] = r.RankedScore
+	}
+
+	if scoreByID["MG-R-00864"] != 0.80 {
+		t.Fatalf("MG-R-00864 (rice-vs-rice, jaccard 0.75) score = %v, want unchanged 0.80 -- "+
+			"the rice-vs-rice leniency must stop this pair from being demoted",
+			scoreByID["MG-R-00864"])
+	}
+	wantDemoted := 0.60 - 0.02
+	if scoreByID["MG-R-00544"] != wantDemoted {
+		t.Fatalf("MG-R-00544 (non-rice, jaccard 1.0) score = %v, want %v -- "+
+			"a non-rice near-duplicate pair must still be demoted exactly as before",
+			scoreByID["MG-R-00544"], wantDemoted)
+	}
+}
+
 func TestApplySuspectedAllergenRankDemotesButNeverRemoves(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
