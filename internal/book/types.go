@@ -54,6 +54,14 @@ type ChildSummary struct {
 	// personalization_inputs, so they are printed as stored. Sex never changes recipe
 	// ranking -- the provider's sex_applicability is "All" on every row -- and it is on the
 	// page as identity, not as an input to any selection.
+	//
+	// Language is never blank on the printed page: AssembleBook1 defaults an unset
+	// language_id to "English" (see the ChildSummary construction in book1.go). This is a
+	// product default, not a claim about the family's own spoken language -- every book this
+	// project prints is already fixed to English (Metadata.Language, hardcoded "en"), so
+	// stating the same default on the child's own profile line is not a new invented fact,
+	// it is the one this project already makes for every book. A real language_id captured
+	// on intake still overrides it and prints verbatim.
 	Sex      string `json:"sex,omitempty"`
 	Language string `json:"language,omitempty"`
 	// Photo is the cover portrait, when one was supplied. A pointer because most books have

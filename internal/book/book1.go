@@ -226,10 +226,12 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			DateOfBirth: s.DateOfBirth.UTC().Format("2006-01-02"),
 			AgeMonths:   cp.AgeMonths,
 			AgeLabel:    ageLabel(cp.AgeMonths),
-			// As stored. There is no language master to resolve an id against, and
-			// inventing a display name for one would be a value with no source.
+			// Sex as stored -- there is no sex master to resolve an id against, and
+			// inventing a display name for one would be a value with no source. Language
+			// defaults to "English" when intake never captured one: see Language's own
+			// doc comment on ChildSummary for why that default is not an invented fact.
 			Sex:      s.Sex,
-			Language: s.LanguageID,
+			Language: defaultLanguage(s.LanguageID),
 			// Both lists, never only the confirmed one -- see allergyStatus.
 			AllergyStatus: allergyStatus(cp.Allergens, cp.SuspectedAllergens),
 		},
@@ -646,6 +648,16 @@ func signoffCredits() []CreditRow {
 		{Role: "Dietician"},
 		{Role: "Editor & co-author", Name: "Soumyabrata Ghosh"},
 	}
+}
+
+// defaultLanguage falls back to "English" for an intake that never captured a language_id.
+// See ChildSummary.Language's own doc comment for why this is a product default (every book
+// here already prints in English regardless) rather than an invented fact about the family.
+func defaultLanguage(languageID string) string {
+	if languageID == "" {
+		return "English"
+	}
+	return languageID
 }
 
 // goalsAgreedProse replaces B1-002's writing form. Nothing in this schema records a family's
