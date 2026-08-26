@@ -19,11 +19,18 @@ import (
 // "Architecture", for why.
 // printTimeout bounds a PDF request. Generous because it covers the slowest real case --
 // two books printed in one request on a small instance -- and because the alternative to
-// waiting is an operator retrying a request that was going to succeed.
+// waiting is an operator retrying a request that was going to succeed. Raised from 180s after
+// live testing against the real Gemini API (not aidraft.Disabled) on a deliberately worst-case
+// profile -- multiple allergen exclusions plus an active clinical condition, narrow enough to
+// trip the AI-invented-recipe fallback in more than one chapter -- measured real assembly (all
+// drafting included) at 3m17s, with PDF printing itself under a second once assembly finishes.
+// 480s leaves real margin above that measured worst case. See aidraft.perCallTimeout for the
+// per-call bound that keeps any single stalled upstream call from silently consuming this whole
+// budget the way one did before that fix existed.
 //
 // It stays below any sensible proxy timeout, so a caller sees this service's own error
 // rather than a gateway's.
-const printTimeout = 180 * time.Second
+const printTimeout = 480 * time.Second
 
 func NewRouter(pool *pgxpool.Pool, drafter aidraft.Drafter) http.Handler {
 	r := chi.NewRouter()

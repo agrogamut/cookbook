@@ -13,6 +13,8 @@ import (
 // parent-readable note. See buildModificationPrompt for the grounding contract: the model may
 // only restate BookAction and RequiredModification, never add to them.
 func (g *geminiClient) DraftModificationNote(ctx context.Context, req ModificationRequest) (DraftedText, error) {
+	ctx, cancel := context.WithTimeout(ctx, perCallTimeout)
+	defer cancel()
 	resp, err := g.client.Models.GenerateContent(ctx, modelName, genai.Text(buildModificationPrompt(req)),
 		&genai.GenerateContentConfig{
 			ResponseMIMEType: "application/json",
@@ -40,6 +42,8 @@ func (g *geminiClient) DraftModificationNote(ctx context.Context, req Modificati
 // cited evidence row into a short doctor-approach note. See buildDoctorApproachPrompt for the
 // grounding contract.
 func (g *geminiClient) DraftDoctorApproachNote(ctx context.Context, req DoctorApproachRequest) (DraftedText, error) {
+	ctx, cancel := context.WithTimeout(ctx, perCallTimeout)
+	defer cancel()
 	resp, err := g.client.Models.GenerateContent(ctx, modelName, genai.Text(buildDoctorApproachPrompt(req)),
 		&genai.GenerateContentConfig{
 			ResponseMIMEType: "application/json",
@@ -68,6 +72,8 @@ func (g *geminiClient) DraftDoctorApproachNote(ctx context.Context, req DoctorAp
 // grounding contract: the model may only choose from req.MacroGroups, and only for a
 // nutrient whose guidance text is already fed in.
 func (g *geminiClient) DraftFoodGroupPriorities(ctx context.Context, req FoodGroupPriorityRequest) (FoodGroupPriorities, error) {
+	ctx, cancel := context.WithTimeout(ctx, perCallTimeout)
+	defer cancel()
 	resp, err := g.client.Models.GenerateContent(ctx, modelName, genai.Text(buildFoodGroupPriorityPrompt(req)),
 		&genai.GenerateContentConfig{
 			ResponseMIMEType: "application/json",
@@ -102,6 +108,8 @@ func (g *geminiClient) DraftFoodGroupPriorities(ctx context.Context, req FoodGro
 // req.AllowedIngredients, the allergen set, and the required texture before treating this as
 // printable; see the package doc comment for why that split exists.
 func (g *geminiClient) DraftInventedRecipe(ctx context.Context, req InventedRecipeRequest) (InventedRecipe, error) {
+	ctx, cancel := context.WithTimeout(ctx, perCallTimeout)
+	defer cancel()
 	resp, err := g.client.Models.GenerateContent(ctx, modelName, genai.Text(buildInventedRecipePrompt(req)),
 		&genai.GenerateContentConfig{
 			ResponseMIMEType: "application/json",

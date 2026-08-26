@@ -3,6 +3,7 @@ package aidraft
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"google.golang.org/genai"
 )
@@ -11,7 +12,25 @@ import (
 // is" silently changing what reaches a printed book is exactly the kind of drift this project
 // avoids everywhere else (recipe_master_version, import content hashes); bumping this is a
 // deliberate, reviewable edit instead.
-const modelName = "gemini-3.6-flash"
+//
+// Pro rather than Flash: both spend real thinking tokens on every call regardless of prompt
+// simplicity (measured 500-900 thinking tokens, 12-60s per call, on a two-sentence paraphrase
+// task), so Flash's usual speed advantage does not hold for this workload -- and gemini-2.5-pro
+// itself now 404s with "no longer available to new users... use models/gemini-3.1-pro-preview",
+// which is the API's own recommended replacement.
+const modelName = "gemini-3.1-pro-preview"
+
+// perCallTimeout bounds a single Gemini request independently of whatever deadline the caller's
+// ctx already carries. Measured directly against the real API: every drafting call this package
+// makes -- including DraftInventedRecipe's large-schema request, the slowest -- completes well
+// under a minute in the normal case (10-60s observed). But live testing with a real key also hit
+// a single call that sat in IO wait for 5+ minutes with no response and no error, silently
+// consuming the entire print-route budget (internal/api/router.go's printTimeout) before that
+// route's own timeout ever fired -- turning one stalled upstream call into a hard failure for a
+// whole two-book request that had otherwise fully succeeded. context.WithTimeout(ctx,
+// perCallTimeout) takes the *earlier* of this bound and the caller's own deadline, so it only
+// ever tightens the ceiling, never loosens it beyond what the caller already allowed.
+const perCallTimeout = 75 * time.Second
 
 // NewClient returns a Drafter backed by the real Gemini API when apiKey is non-empty, or a
 // disabledClient that always reports ErrDraftingUnavailable when it is empty. Callers never

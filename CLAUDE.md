@@ -329,6 +329,48 @@ Also: `aidraft.modelName` was pinned to `gemini-2.5-flash`, which the API now re
 call instead of trusting `aidraft.Disabled` to prove the wiring. Bumped to
 `gemini-3.6-flash`, the model the API's own error message named as the replacement.
 
+### Amendment - a third defect found only by a real paid key: one stalled call, no bound (2026-08-26)
+
+The two production defects above were found and fixed with a free-tier key that hit its
+20-request daily quota partway through verification, which left one thing unverified: what a
+real, unlimited key actually does end to end. It surfaced a third defect neither of the first
+two testing passes could have - `aidraft.perCallTimeout` did not exist yet, so nothing bounded
+an individual Gemini request against anything but the whole request's print-route deadline.
+
+A live run against a deliberately worst-case profile - two allergen exclusions plus an active
+clinical condition, narrow enough to exhaust real corpus recipes and trip the AI-invented-recipe
+fallback (`internal/book/invented.go`, the 24 August amendment's `DraftInventedRecipe` path) in
+more than one chapter - hit a single call that sat in IO wait for over five minutes with no
+response and no error, confirmed by a `SIGQUIT` goroutine dump pointing straight at
+`DraftInventedRecipe` <- `generateInventedCard` <- `inventCard` <- `topUpInvented` <-
+`AssembleBook2`, called synchronously with nothing bounding it but the caller's own context.
+Every one of that afternoon's earlier failures - three separate runs, each dying at exactly the
+router's timeout boundary with `context deadline exceeded` - was this same defect, not the
+drafting-volume latency it was first assumed to be: `draftConcurrently`'s own batches (doctor
+notes, modification notes, food-group priorities) measured 50-100s combined in the same runs,
+comfortably inside budget on their own.
+
+Fixed with `aidraft.perCallTimeout = 75 * time.Second`, wrapping all four `geminiClient` methods
+individually via `context.WithTimeout(ctx, perCallTimeout)` in `draft.go` - which only ever
+tightens whatever deadline the caller's own context already carries, never loosens it. 75s was
+set from real measurement, not guessed: every one of this package's calls, including
+`DraftInventedRecipe`'s large-schema request (its `ingredient_id` enum runs to several hundred
+real `ingredient_master` rows), completed within a minute against the live API when tested
+directly outside the request path.
+
+Two smaller findings from the same live-key session, both real and both now fixed:
+
+- `gemini-2.5-pro` also 404s ("no longer available to new users... use
+  models/gemini-3.1-pro-preview"), and `gemini-3.6-flash` itself turned out to spend real
+  thinking tokens on every call regardless of prompt simplicity (500-900 thinking tokens, 12-60s
+  measured, on a two-sentence paraphrase task) - Flash's usual speed edge does not hold for this
+  workload, so `modelName` moved to `gemini-3.1-pro-preview`, the API's own named replacement,
+  rather than staying on a nominally-faster tier that was not actually faster in practice.
+- `router.printTimeout` moved from 180s to 480s. Real assembly on the worst-case profile above -
+  every drafting call now individually bounded, none hanging - measured at 3m17s total, with PDF
+  printing itself under a second once assembly finishes; 480s leaves real margin above that
+  measured number rather than an arbitrary round one.
+
 ## Communication and attribution rules
 
 - Never mention claude, anthropic, or ai anywhere: not in chat, code, comments, commit
