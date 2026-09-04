@@ -708,3 +708,17 @@ func TestBook1BackCoverWithNoParentsPhotoPrintsThePlainImprintPage(t *testing.T)
 		t.Fatal("with no parents' photo, the back cover must not print an empty background layer")
 	}
 }
+
+func TestChapterOpenerPrintsADecorativeIllustration(t *testing.T) {
+	var buf bytes.Buffer
+	b2 := Book2{
+		Child:        ChildSummary{DisplayName: "Test Child"},
+		MealSections: []MealSection{{Number: 1, Title: "Breakfast", Recipes: nil}},
+	}
+	if err := RenderHTML(&buf, Kind2, Metadata{Language: "en"}, b2); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(buf.String(), `class="chapter-art"`) {
+		t.Fatal("a chapter opener must print a decorative corner illustration")
+	}
+}

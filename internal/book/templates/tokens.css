@@ -693,6 +693,12 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    and a chapter opener that sits at a different height in each chapter is the same defect
    the cover had. */
 .chapter { display: block; margin-top: 62mm; text-align: center; }
+.chapter-art {
+  width: 70mm;
+  margin: 0 auto 6mm;
+  display: block;
+  filter: drop-shadow(0 3mm 5mm rgba(40, 25, 15, 0.18));
+}
 .chapter .chapter-num {
   font-family: var(--font-sans);
   font-size: 64pt;

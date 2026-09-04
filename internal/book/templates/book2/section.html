@@ -9,9 +9,22 @@
      fragment to fill the sheet -- a solid-colour "Breakfast" page with nothing on it. The
      opener is a whole page on purpose, so there is nothing left for that conflict to be about.
 
-     Every recipe page carries its own break-before, so the opener needs no wrapper. */}}
+     Every recipe page carries its own break-before, so the opener needs no wrapper.
+
+     The illustration is keyed on MealCategoryID, not hardcoded to one image for every
+     chapter -- book2.go's mainMealCategories restricts this book to exactly three
+     categories (MC-01 Breakfast, MC-03 Lunch, MC-06 Dinner), a stable identifier already
+     on MealSection, so the three real chapters each carry a distinct illustration rather
+     than repeating the same one. Any id outside that closed set (there is none today, but
+     nothing here assumes there never will be) falls back to "egg-noodle-bowl" so a chapter
+     this book has not printed before still gets an illustration rather than a blank corner.
+     The branching stays in the template rather than a new Go helper, matching this task's
+     file scope. Lookup goes through the coverArt template function, not
+     `index $.CoverArt "key"` -- see cover.html's comment and render.go's coverArt function
+     comment for why. */}}
 <section class="page-break">
   <div class="chapter">
+    <img class="chapter-art" src="{{ if eq .MealCategoryID "MC-01" }}{{ coverArt "egg-noodle-bowl" }}{{ else if eq .MealCategoryID "MC-03" }}{{ coverArt "banana-leaf-rice" }}{{ else if eq .MealCategoryID "MC-06" }}{{ coverArt "hotpot" }}{{ else }}{{ coverArt "egg-noodle-bowl" }}{{ end }}" alt="">
     <p class="chapter-num">{{ printf "%02d" .Number }}</p>
     <h2>{{ .Title }}</h2>
     {{/* Not "from a provider target of N" any more: meal_category_target.default_target_
