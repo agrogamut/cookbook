@@ -569,6 +569,55 @@ func TestBook1NeverPrintsTheKitchenSafetyChapter(t *testing.T) {
 	}
 }
 
+// TestBook1CoverPrintsTheChildPhotoAsAFullBleedBackground and
+// TestBook1CoverWithNoPhotoPrintsNoBackgroundLayer check for a `background-image` set inline
+// on the cover box, not a `class="cover-bg"` layer.
+//
+// A separate `.cover-bg` div (`position: absolute; inset: 0`) with `.cover-card` given
+// `position: relative; z-index: 1` to stack above it was the first construction and it printed
+// wrong: against the real cover's full content, Chromium's print path rendered the card and
+// the photo as though they belonged to two unrelated boxes, with nothing behind the card at
+// all. Confirmed with plain `google-chrome --print-to-pdf` against the real generated HTML
+// (not this project's own PDF pipeline), and confirmed fixed by painting the photo as the
+// cover box's own CSS background instead -- a background needs no stacking context to sit
+// behind its box's content, so there is nothing for the print fragmenter to get wrong. See the
+// comment above `.cover.with-photo` in tokens.css and above `B1-COVER-01` in cover.html.
+func TestBook1CoverPrintsTheChildPhotoAsAFullBleedBackground(t *testing.T) {
+	photo := &ChildPhoto{DataURI: template.URL("data:image/png;base64,iVBORw0KGgo=")}
+	b := Book1{
+		Metadata: Metadata{Language: "en"},
+		Child:    ChildSummary{DisplayName: "Test Child", Photo: photo},
+	}
+	var buf bytes.Buffer
+	if err := RenderHTML(&buf, Kind1, b.Metadata, b); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `class="cover with-photo"`) {
+		t.Fatal("with a photo present, the cover must carry the with-photo variant class")
+	}
+	if !strings.Contains(out, "background-image:") {
+		t.Fatal("with a photo present, the cover must carry an inline full-bleed background-image")
+	}
+	if !strings.Contains(out, string(photo.DataURI)) {
+		t.Fatal("the child's own photo data URI must appear in the rendered cover")
+	}
+}
+
+func TestBook1CoverWithNoPhotoPrintsNoBackgroundLayer(t *testing.T) {
+	b := Book1{
+		Metadata: Metadata{Language: "en"},
+		Child:    ChildSummary{DisplayName: "Test Child"},
+	}
+	var buf bytes.Buffer
+	if err := RenderHTML(&buf, Kind1, b.Metadata, b); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if strings.Contains(buf.String(), "background-image:") {
+		t.Fatal("with no photo, the cover must not print an empty background-image")
+	}
+}
+
 // stylesheetSource reads the embedded stylesheet the renderer inlines.
 func stylesheetSource(t *testing.T) string {
 	t.Helper()

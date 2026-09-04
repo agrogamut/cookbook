@@ -1,44 +1,44 @@
 {{ define "B1-COVER-01" }}
-{{/* Set as a book cover is set: everything hung from one left edge, the child's name as the
-     largest thing on the sheet, the run's facts in a ruled block at the foot.
+{{/* Full-bleed child photo behind a centred identity card -- see the design spec section
+     2.4/2.5. The photo is the box's own CSS background-image, set inline because the URL is
+     per-child data, not a separate absolutely-positioned <img> layer.
 
-     No spacer div after it. There used to be an empty <div class="page-break">, harmless
-     while .page-break meant break-after and a blank page 2 the moment it meant break-before:
-     the empty div took a break before itself and the contents page that follows took another.
-     Whatever follows the cover carries its own break. */}}
-{{/* The variant class tells the stylesheet whether a portrait sits above the title. The drop
-     that carries the title down the sheet is a declared distance -- see .cover in tokens.css for
-     why it is not a flex distribution -- and a portrait adds about 75mm above it, so one
-     constant cannot be right for both covers. It was one constant, and the cover with a
-     photograph spilled its facts row onto a second sheet. */}}
-<div class="cover {{ if .Child.Photo }}with-photo{{ else }}no-photo{{ end }}">
-  <img class="cover-logo" src="{{ .Metadata.Logo }}" alt="MadamGY">
-  <div class="cover-kicker">MadamGY &middot; Growth, Nutrition &amp; Development</div>
+     A separate `.cover-bg` div with `position: absolute; inset: 0` plus `.cover-card` needing
+     `position: relative; z-index: 1` to sit above it was tried first and printed wrong: with
+     the real stylesheet's full cover content (not a bare "Test" heading), Chromium's print
+     path painted the card and the photo as if they belonged to two disconnected boxes -- the
+     card at the top of the sheet, the photo starting only where the card's own box happened to
+     end, leaving the space behind the card blank instead of showing through beneath an opaque
+     panel. Confirmed with plain `google-chrome --print-to-pdf` on the real generated HTML, so
+     it is not a defect in this project's own PDF pipeline. A background-image on the box
+     itself needs no stacking trick to sit behind the card -- a box's own background always
+     paints behind its content by definition -- and it printed correctly on every check.
 
-  <div class="cover-main">
-    {{/* The portrait sits above the name so the cover reads as one identification: the face,
-         then the name it belongs to. Without a photograph the block is simply absent -- no
-         placeholder silhouette, which would look like a picture that failed to load. */}}
-    {{ with .Child.Photo }}
-    <figure class="cover-photo">
-      <img src="{{ .DataURI }}" alt="Photograph of the child">
-      {{ with .Caption }}<figcaption>{{ . }}</figcaption>{{ end }}
-    </figure>
-    {{ end }}
-
+     The with-photo/no-photo two-constant pattern for the card's drop (formerly .cover-main's,
+     now .cover-card's) is unchanged from before this redesign -- only what sits behind the
+     card is new. */}}
+{{/* The caption used to print inside the old <figure>'s <figcaption>, under the small in-card
+     portrait. There is no figure any more -- the photo is the page's own background -- so the
+     caption prints as its own line directly under the card instead, over the photo, in normal
+     flow: not absolutely positioned, and not a sibling of anything carrying position/z-index,
+     which is exactly the combination the comment above documents as unsafe to print. */}}
+<div class="cover {{ if .Child.Photo }}with-photo{{ else }}no-photo{{ end }}"{{ with .Child.Photo }} style="background-image: url('{{ .DataURI }}')"{{ end }}>
+  <div class="cover-card">
+    <div class="cover-kicker">MadamGY &middot; Growth, Nutrition &amp; Development</div>
     <h1>{{ .Child.DisplayName }}</h1>
     <p class="cover-sub">A working guide to feeding, growth, vaccination, development and
       everyday care, personalised to this child's age and recorded profile. Prepared after
       consultation.</p>
-  </div>
 
-  <div class="cover-facts">
-    {{ with .Child.DateOfBirth }}<div><span class="label">Date of birth</span>
-         <span class="value mono">{{ . }}</span></div>{{ end }}
-    <div><span class="label">Age at generation</span>
-         <span class="value">{{ .Child.AgeLabel }}</span></div>
-    <div><span class="label">Pages in this book</span>
-         <span class="value mono">{{ .SectionCount }} sections</span></div>
+    <div class="cover-facts">
+      {{ with .Child.DateOfBirth }}<div><span class="label">Date of birth</span>
+           <span class="value mono">{{ . }}</span></div>{{ end }}
+      <div><span class="label">Age at generation</span>
+           <span class="value">{{ .Child.AgeLabel }}</span></div>
+      <div><span class="label">Pages in this book</span>
+           <span class="value mono">{{ .SectionCount }} sections</span></div>
+    </div>
   </div>
+  {{ with .Child.Photo }}{{ with .Caption }}<p class="cover-photo-caption">{{ . }}</p>{{ end }}{{ end }}
 </div>
 {{ end }}

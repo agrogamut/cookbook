@@ -434,13 +434,65 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    fragmentainer height is at the boundary Chromium treats as overflowing, which is what
    fragmented the earlier flex covers. 248mm is inside it with room to spare and still puts the
    foot block on the bottom margin. */
-.cover { display: block; text-align: center; position: relative; height: 248mm; }
-/* Small and at the very top: the cover box's vertical rhythm (the 96mm/26mm cover-main
+.cover { display: flow-root; text-align: center; position: relative; height: 248mm; }
+/* flow-root, not the plain block this was before Book 1's cover redesign: Book 1's new
+   `.cover-card` is the cover box's first and only in-flow child, and a first child's own
+   top margin collapses straight through a plain block parent with no border or padding of
+   its own -- the child's 96mm/26mm margin-top escaped `.cover` entirely and pushed the whole
+   248mm box down by that amount instead of pushing the card down inside it, adding a stray
+   near-blank page after the cover on every book. flow-root gives `.cover` its own block
+   formatting context, which stops that collapse without being flex or grid -- the two
+   constants below still do the positioning, this only keeps their margin where it belongs.
+   Confirmed harmless for Book 2's still-unconverted cover below: its first child,
+   `.cover-logo`, declares `margin-top: 0`, so it never had anything to collapse. */
+/* Book 2's cover has not been converted to the card-and-photo layout yet (a separate task) and
+   still builds its cover the way this file used to: a logo image, a `.cover-main` wrapper
+   carrying the with-photo/no-photo drop, and a `.cover-facts` row pinned to the box's own foot
+   with `position: absolute`. Keep all three alive for it -- Book 1 no longer emits any of
+   these class names, so nothing below matches Book 1's markup, but deleting them out from
+   under Book 2 before its own conversion reproduced the exact defect this whole section
+   exists to prevent: `.cover-logo` printing at its raw image size with no width cap, which
+   overflowed the text block and made Chromium scale Book 2's entire document down to fit,
+   landing dozens of unrelated pages at half their normal fill. Measured, not assumed -- the
+   page-fit suite is what caught it. */
+/* Small and at the very top: the cover box's vertical rhythm (the 96mm/26mm .cover-main
    margin-top either side of a portrait) was tuned against the box's 248mm budget with "room
    to spare" but not much of it, per the note above .cover. 32mm wide at this image's 5:1
    aspect ratio is about 6.4mm tall -- a fraction of that spare room, not a rebalancing of the
    drop distances that push the title down. */
 .cover-logo { width: 32mm; margin: 0 auto 4mm; display: block; }
+.cover.no-photo .cover-main { margin-top: 96mm; }
+.cover.with-photo .cover-main { margin-top: 26mm; }
+/* Full-bleed photo behind the identity card, painted as the cover box's own CSS background
+   (set inline in cover.html, since the URL is per-child data) rather than a separate
+   absolutely-positioned layer.
+
+   That was tried first: a `.cover-bg` div with `position: absolute; inset: 0`, and
+   `.cover-card` given `position: relative; z-index: 1` so it would stack above it. It printed
+   wrong. With the real cover's full content (kicker, title, standfirst, facts row -- not a
+   bare test heading), Chromium's print path rendered the card and the photo as though they
+   belonged to two unrelated boxes: the card at the very top of the sheet, the photo starting
+   only where the card's own box happened to end, and nothing behind the card at all -- as if
+   `.cover-bg`'s containing block had silently become `.cover-card` instead of `.cover`.
+   Confirmed on plain `google-chrome --print-to-pdf` against the real generated HTML, so it is
+   not a defect in this project's own PDF pipeline, and confirmed absent again the moment
+   `position`/`z-index` came off both elements. A background-image needs no stacking context to
+   sit behind its own box's content -- that is what a background is -- so this version has
+   nothing for the print fragmenter to get wrong, and it printed correctly on every check. */
+.cover.with-photo {
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.cover-card {
+  background: var(--surface);
+  border-radius: 8mm;
+  padding: 14mm 12mm 10mm;
+  box-shadow: 0 3mm 8mm rgba(40, 25, 15, 0.18);
+  text-align: center;
+}
+.cover.no-photo .cover-card { margin-top: 96mm; }
+.cover.with-photo .cover-card { margin-top: 26mm; }
 .cover .cover-kicker {
   font-family: var(--font-sans);
   font-size: var(--caption-size);
@@ -464,28 +516,6 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    invisible in review and obvious on paper -- this is what "everything is left aligned" turned
    out to be, and TestTheCoverTitleIsCentredOnThePage is what keeps it fixed. */
 
-/* The drop that carries the title into the lower half of the sheet, and it is now the only
-   number on this cover that anyone may choose freely -- because the foot block below is pinned
-   rather than pushed.
-
-   The foot used to be pushed, by a 24mm top margin at the end of a block-flow stack, and that
-   made the whole cover a sum that had to come out right. It did not: the band above the title
-   is about 75mm taller when a portrait is present, so the one constant that fitted the cover
-   without a photograph overflowed the one with it by 7mm. The facts row printed alone on page 2
-   above 250mm of white and the contents page moved to page 3.
-
-   Pinning removes the arithmetic. `.cover` is a relative box a little shorter than the text
-   block and `.cover-facts` is absolutely positioned at its foot, so the foot lands on the
-   bottom margin whatever happens above it -- one line of title or three, portrait or none.
-
-   Absolute positioning rather than the flex column the comment above rejects: there is no
-   distribution to resolve, so there is nothing for the fragmenter to re-resolve differently on
-   one book than on the other. That was the whole failure mode of both flex attempts.
-
-   The two drops below are therefore aesthetic. They put the title in the lower half of the
-   sheet on each variant and can be moved without anything else needing to be recomputed. */
-.cover.no-photo .cover-main { margin-top: 96mm; }
-.cover.with-photo .cover-main { margin-top: 26mm; }
 .cover h1 {
   font-size: var(--display);
   line-height: 1.15;
@@ -507,8 +537,11 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   margin: 10mm 0 0;
 }
 .cover .cover-name-label { margin-bottom: 1.5mm; }
-/* Pinned to the foot of the cover box, not pushed there by a margin. See the note above the
-   two drops for why. */
+/* Pinned to the foot of the cover box, not pushed there by a margin -- see the note above
+   .cover for why. Still Book 2's own mechanism: its `.cover-facts` is a direct child of
+   `.cover`, exactly where this rule expects it. Book 1's own facts row now lives inside
+   `.cover-card` instead and is overridden back to normal flow below, right after this rule so
+   the override wins on equal specificity. */
 .cover .cover-facts {
   position: absolute;
   left: 0;
@@ -520,28 +553,27 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   border-top: 0.5mm solid var(--rule-strong);
   padding-top: 4mm;
 }
+/* Book 1's facts row: normal flow inside `.cover-card`, not pinned to the page foot -- the
+   card itself carries the tuned drop now, so the row just sits at the card's own bottom. */
+.cover-card .cover-facts {
+  position: static;
+  margin-top: 5mm;
+}
 .cover .cover-facts .label { display: block; margin-bottom: 1mm; }
 .cover .cover-facts > div { text-align: center; }
 .cover .cover-facts .value { font-family: var(--font-sans); }
-
-/* Cover portrait. A fixed frame filled with object-fit: cover, so a portrait and a landscape
-   snapshot print as the same shape and the page does not reflow with whatever the operator
-   uploaded. Cropping to the centre is the right trade: a letterboxed photo on a cover reads
-   as a mistake, and reflowing per image means the cover is a different design for every
-   child. Without a photograph the block is simply absent -- no placeholder silhouette, which
-   would look like a picture that failed to load. */
-.cover-photo { margin: 0 auto 8mm; width: 62mm; }
-.cover-photo img {
-  width: 62mm;
-  height: 62mm;
-  object-fit: cover;
-  display: block;
-}
-.cover-photo figcaption {
+/* The photo's own caption, printed directly under the card rather than under a small in-card
+   portrait -- see the note above `.cover-photo-caption` in cover.html for why it is plain
+   normal flow rather than pinned to the photo itself. Set light against the photo it sits on,
+   with a text-shadow rather than a background strip so it reads on a light or a dark photo
+   alike without needing to know which it is. */
+.cover-photo-caption {
+  margin: 6mm auto 0;
+  max-width: 116mm;
   font-family: var(--font-sans);
-  color: var(--ink-soft);
   font-size: var(--caption-size);
-  margin-top: 2mm;
+  color: #fff;
+  text-shadow: 0 0.3mm 1mm rgba(0, 0, 0, 0.55);
 }
 
 /* --------------------------------------------------------------------------------------
@@ -1136,7 +1168,7 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 
 /* The closing-page mark, under the imprint block on both books' last page. Both closing
    pages have real room below their content (neither runs anywhere near a full sheet), so
-   this carries no positioning constraint the way .cover-logo does. */
+   this carries no positioning constraint the way the cover's title drop does. */
 .closing-logo { width: 38mm; margin: 12mm auto 0; display: block; }
 
 /* --------------------------------------------------------------------------------------
@@ -1192,14 +1224,18 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   }
 
   /* The cover's declared height is a print constraint -- a box a little under the
-     fragmentainer, with its foot block pinned to the bottom. On screen there is no
-     fragmentainer to stay inside and the fixed height only draws a tall empty box, so the cover
-     takes its content's height and the foot block sits where it falls. */
+     fragmentainer. On screen there is no fragmentainer to stay inside and the fixed height
+     only draws a tall empty box, so the cover takes its content's height instead. */
   .cover {
     height: auto;
     padding-bottom: var(--page-margin-bottom);
   }
-  .cover .cover-facts { position: static; margin-top: 24mm; }
+  /* Book 2's own `.cover-facts` is still pinned to the print box's foot with `position:
+     absolute` (see the print rule above) -- on screen, with `.cover` at auto height, that
+     pins it to nothing. `.cover >` on purpose: Book 2's facts row is `.cover`'s own direct
+     child; Book 1's now lives inside `.cover-card` and already flows unconditionally via
+     `.cover-card .cover-facts`, so this must not also match it. */
+  .cover > .cover-facts { position: static; margin-top: 24mm; }
 
   /* Sections that share a printed sheet are separated by a margin, which on screen would show
      as a gap inside one white sheet. They are part of the sheet before them, so they get no
