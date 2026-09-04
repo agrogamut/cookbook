@@ -1,22 +1,35 @@
 {{ define "B1-END-01" }}
-{{/* Book 1's own back page: not a provider block, printed unconditionally after every
-     section the same way B2-IMPRINT-01 always closes Book 2 -- see body.html's own comment.
-     Dispatched with $b.Metadata rather than a Section: the release fields it prints
-     (book_version, release_id, generation_date) live on Book1.Metadata and have nowhere
-     else to live -- which is also where Logo lives, so it is just .Logo here, no reaching
-     required. See Metadata.Logo's doc comment in types.go. */}}
-<section class="page-break">
-  <div class="page-head">
-    <p class="kicker">About this copy</p>
-    <h2>Version and generation</h2>
+{{/* Book 1's own back page. See the design spec section 2.4: the background is the
+     operator's uploaded photo of the parents when one is supplied, full-bleed, the same
+     with-photo/no-photo two-state pattern the front cover uses -- and exactly the same
+     real facts as before print on top of it. No new content: book_version, release_id and
+     generation_date are the same three fields this page has always carried.
+
+     class="page-break backcover-page": backcover-page cancels the ordinary
+     `section + section` inter-section margin that would otherwise land here too, since this
+     section always follows B1-PRESCRIPTION-01's own <section class="page-break">. See the
+     .backcover-page rule in tokens.css for why that margin, left in place, overflowed this
+     page by exactly its own 10mm and split the back cover across two printed pages. */}}
+<section class="page-break backcover-page">
+  <div class="backcover {{ if .ParentsPhoto }}with-photo{{ else }}no-photo{{ end }}">
+    {{ with .ParentsPhoto }}
+    <div class="backcover-bg"><img class="backcover-bg-img" src="{{ .DataURI }}" alt=""></div>
+    {{ end }}
+
+    <div class="backcover-card">
+      <div class="page-head">
+        <p class="kicker">About this copy</p>
+        <h2>Version and generation</h2>
+      </div>
+      <div class="imprint">
+        <dl>
+          <dt>Book version</dt><dd class="mono">{{ .BookVersion }}</dd>
+          <dt>Release ID</dt><dd class="mono">{{ if .ReleaseID }}{{ .ReleaseID }}{{ else }}<span class="write-line"></span>{{ end }}</dd>
+          <dt>Generation date</dt><dd class="mono">{{ .GenerationDate.Format "2006-01-02" }}</dd>
+        </dl>
+      </div>
+      <img class="closing-logo" src="{{ .Logo }}" alt="MadamGY">
+    </div>
   </div>
-  <div class="imprint">
-    <dl>
-      <dt>Book version</dt><dd class="mono">{{ .BookVersion }}</dd>
-      <dt>Release ID</dt><dd class="mono">{{ if .ReleaseID }}{{ .ReleaseID }}{{ else }}<span class="write-line"></span>{{ end }}</dd>
-      <dt>Generation date</dt><dd class="mono">{{ .GenerationDate.Format "2006-01-02" }}</dd>
-    </dl>
-  </div>
-  <img class="closing-logo" src="{{ .Logo }}" alt="MadamGY">
 </section>
 {{ end }}

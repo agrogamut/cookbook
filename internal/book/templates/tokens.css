@@ -1203,6 +1203,56 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    this carries no positioning constraint the way the cover's title drop does. */
 .closing-logo { width: 38mm; margin: 12mm auto 0; display: block; }
 
+/* Book 1's back cover. Same photo-behind-card mechanism as the front cover (.cover-bg),
+   under its own class so the two are never confused: this page has no drop-height
+   variants tuned for it the way .cover does, because its card content is small and fixed
+   (three dl rows, one logo) and comfortably fits either state without measurement.
+
+   flow-root, for the identical reason documented above .cover: .backcover-bg is
+   position: absolute (out of flow, does not participate in margin collapse) but
+   .backcover-card stays in normal flow, so it is .backcover's first in-flow child --
+   and .with-photo below gives that child a 60mm top margin. Without flow-root here,
+   that margin collapses straight through .backcover's plain block box and pushes the
+   whole section down instead of the card, the same stray-blank-page defect .cover's own
+   comment describes. Confirmed against a real printed page, not assumed from the .cover
+   precedent alone.
+
+   .backcover-page, on the <section> itself rather than .backcover: a second, unrelated
+   defect found by the same printed page, this one present in BOTH the with-photo and
+   no-photo states. B1-END-01's section always follows another <section class="page-break">
+   (B1-PRESCRIPTION-01's), so `section + section { margin-top: 10mm; }` -- the ordinary
+   inter-section breathing room meant for sections that flow onto the same sheet -- applies
+   here too, even though this section always force-breaks to a fresh page and has no
+   preceding content on that page to breathe below. Added to .backcover's own min-height of
+   255mm (the full usable page height), the combined 265mm overflowed the page by exactly
+   that 10mm, and Chromium fragmented `.backcover` across two page boxes to hold it. The
+   percentage-sized, absolutely-positioned .backcover-bg-img does not fragment sanely across
+   that split -- confirmed by isolating the same three rules in a bare test document -- it
+   renders wholesale on the second (overflow) fragment, sized to fill that page as if it were
+   the whole box, while the card stays behind on the first: a full-page photo one page after
+   an apparently photo-less back cover. In the no-photo state the same overflow still occurs
+   with no image to reveal it, leaving a stray page carrying only the closing logo's
+   lower edge -- the classic stray-near-blank-page symptom, from inter-section margin rather
+   than child-margin collapse this time. `margin-top: 0` on the class beats the two-element
+   `section + section` selector on specificity alone (0,1,0 over 0,0,2), regardless of
+   source order, and is scoped to this one page rather than touching the shared rule every
+   other page-break section also relies on. */
+.backcover-page { margin-top: 0; }
+.backcover { position: relative; min-height: 255mm; display: flow-root; }
+.backcover-bg { position: absolute; inset: 0; z-index: 0; }
+.backcover-bg-img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.backcover-card {
+  position: relative;
+  z-index: 1;
+}
+.backcover.with-photo .backcover-card {
+  background: var(--surface);
+  border-radius: 8mm;
+  padding: 12mm;
+  margin: 60mm 20mm;
+  box-shadow: 0 3mm 8mm rgba(40, 25, 15, 0.18);
+}
+
 /* --------------------------------------------------------------------------------------
    Screen.
 

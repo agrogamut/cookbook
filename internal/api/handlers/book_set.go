@@ -39,15 +39,15 @@ type bookSetResponse struct {
 // both books, and an assembly failure in either one fails the run rather than serving half a
 // deliverable an operator might mistake for the whole thing.
 func (h *Handlers) renderSet(w http.ResponseWriter, r *http.Request, s profile.Stored) (bookSetResponse, book.Set, bool) {
-	return h.renderSetWithPhoto(w, r, s, nil)
+	return h.renderSetWithPhotos(w, r, s, nil, nil)
 }
 
-// renderSetWithPhoto is renderSet with an optional cover portrait.
-//
-// The photo is attached after assembly rather than carried through it. It is not an input to
-// any decision -- it changes no recipe, no filter and no omission -- so threading it through
-// the assemblers would put a decoration in the path of the clinical logic.
-func (h *Handlers) renderSetWithPhoto(w http.ResponseWriter, r *http.Request, s profile.Stored, photo *book.ChildPhoto) (bookSetResponse, book.Set, bool) {
+// renderSetWithPhotos is renderSet with two optional cover portraits: the front cover's
+// child photo and the back cover's parents' photo. Both are attached after assembly rather
+// than carried through it -- neither changes a recipe, a filter or an omission, so
+// threading either through the assemblers would put a decoration in the path of the
+// clinical logic.
+func (h *Handlers) renderSetWithPhotos(w http.ResponseWriter, r *http.Request, s profile.Stored, photo, parentsPhoto *book.ChildPhoto) (bookSetResponse, book.Set, bool) {
 	ctx := r.Context()
 	asOf := time.Now().UTC()
 
@@ -61,10 +61,13 @@ func (h *Handlers) renderSetWithPhoto(w http.ResponseWriter, r *http.Request, s 
 		return bookSetResponse{}, book.Set{}, false
 	}
 
-	// Book 1 only. Book 2 is a recipe book; its cover carries the child's name and food
-	// practice, and a portrait there would be decoration on a working document.
+	// Book 1 only, both photos -- Book 2 is a working recipe document, its cover carries
+	// no photo upload of any kind.
 	if photo != nil {
 		set.Book1.Child.Photo = photo
+	}
+	if parentsPhoto != nil {
+		set.Book1.Metadata.ParentsPhoto = parentsPhoto
 	}
 
 	var buf1, buf2 bytes.Buffer

@@ -656,3 +656,36 @@ func stylesheetSource(t *testing.T) string {
 	}
 	return string(b)
 }
+
+func TestBook1BackCoverPrintsTheParentsPhotoAsAFullBleedBackground(t *testing.T) {
+	photo := &ChildPhoto{DataURI: template.URL("data:image/png;base64,iVBORw0KGgo=")}
+	meta := Metadata{Language: "en", ParentsPhoto: photo}
+	b := Book1{Metadata: meta, Child: ChildSummary{DisplayName: "Test Child"}}
+	var buf bytes.Buffer
+	if err := RenderHTML(&buf, Kind1, meta, b); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `class="backcover-bg"`) {
+		t.Fatal("with a parents' photo present, the back cover must carry a full-bleed background layer")
+	}
+	if !strings.Contains(out, string(photo.DataURI)) {
+		t.Fatal("the parents' photo data URI must appear on the back cover")
+	}
+	// The real imprint facts still print -- this page invents nothing new.
+	if !strings.Contains(out, "Book version") || !strings.Contains(out, "Generation date") {
+		t.Fatal("the back cover must still print the real version/release/date facts end.html always has")
+	}
+}
+
+func TestBook1BackCoverWithNoParentsPhotoPrintsThePlainImprintPage(t *testing.T) {
+	meta := Metadata{Language: "en"}
+	b := Book1{Metadata: meta, Child: ChildSummary{DisplayName: "Test Child"}}
+	var buf bytes.Buffer
+	if err := RenderHTML(&buf, Kind1, meta, b); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if strings.Contains(buf.String(), `class="backcover-bg"`) {
+		t.Fatal("with no parents' photo, the back cover must not print an empty background layer")
+	}
+}

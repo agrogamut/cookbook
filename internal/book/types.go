@@ -36,6 +36,13 @@ type Metadata struct {
 	// argument, so reaching upward with "$.Logo" does not work here -- confirmed the hard way,
 	// not assumed.
 	Logo template.URL `json:"-"`
+	// ParentsPhoto is the back cover's optional full-bleed background, uploaded
+	// independently of Child.Photo (the front cover's photo). Book 1 only -- see
+	// book1/end.html, which is the only template that reads it. Reuses ChildPhoto/
+	// ParsePhoto rather than a near-duplicate type: the validation rules (allowlist,
+	// size cap, base64, no SVG) are identical for any uploaded cover image regardless
+	// of who is in it.
+	ParentsPhoto *ChildPhoto `json:"-"`
 }
 
 // ChildSummary is the personalization the provider's prototype actually relies on: the
