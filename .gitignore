@@ -13,3 +13,6 @@ data/external/photos/
 
 # Sample books generated locally for a look-at-the-pages check, not source material.
 /sample-books/
+
+# Ad-hoc fact-check notes against a specific generated book run, not project documentation.
+/docs/audits/
