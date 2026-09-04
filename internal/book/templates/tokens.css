@@ -55,8 +55,8 @@
      method steps and every run of prose; the sans carries labels, table content, metadata and
      anything a reader scans rather than reads. Noto has both families in Latin, Bengali and
      Devanagari, so a page can change voice without changing script coverage. */
-  --font-serif: "Noto Serif", "Liberation Serif", Georgia, serif;
-  --font-sans: "Noto Sans", "Liberation Sans", "Segoe UI", system-ui, sans-serif;
+  --font-serif: "Poppins", "Noto Serif", "Liberation Serif", Georgia, serif;
+  --font-sans: "Poppins", "Noto Sans", "Liberation Sans", "Segoe UI", system-ui, sans-serif;
   /* Bengali and Devanagari need the conjunct-forming faces. Two tokens, because an ingredient
      name set beside serif prose and one set inside a sans label are different type. Verify the
      faces exist in the render environment before trusting output: a missing face renders tofu,
@@ -77,22 +77,16 @@
   --rule-strong: #1a1a1a;
 }
 
-/* book1_palette: deep navy, teal, warm cream, muted gold */
-.book1 {
-  --brand: #0f6466;
-  --brand-deep: #123a5f;
-  --surface: #f6f1e4;
-  --accent: #a8791d;
-  --tint: #eef4f4;
-}
-
-/* book2_palette: deep plum, warm rose, cream, muted gold */
-.book2 {
-  --brand: #8d4a70;
-  --brand-deep: #5c2650;
-  --surface: #f8f1ea;
-  --accent: #a8791d;
-  --tint: #f8eef3;
+/* cookbook_palette: one scheme across both books, supplied directly rather than derived --
+   see the design spec section 2.1. --brand-deep is a darkened coral for AA-contrast heading
+   text on the cream ground; check it against a printed proof (Task 4 step 6) before treating
+   it as final. */
+.book1, .book2 {
+  --brand: #ff5858;
+  --brand-deep: #c23c34;
+  --surface: #fffcf6;
+  --accent: #f2a53d;
+  --tint: #fdeee9;
 }
 
 @page {
