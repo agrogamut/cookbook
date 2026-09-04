@@ -421,7 +421,7 @@ func TestARecipeWithNoMarkPrintsNoFrame(t *testing.T) {
 	}
 	// The class name appears in the inlined stylesheet on every page; what must be absent is
 	// the element.
-	if strings.Contains(buf.String(), `<figure class="dish-mark"`) {
+	if strings.Contains(buf.String(), `<figure class="recipe-mark"`) {
 		t.Error("a recipe with no mark must print no mark frame")
 	}
 }
