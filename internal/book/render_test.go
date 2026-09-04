@@ -366,27 +366,46 @@ func renderOneSection(t *testing.T, sec Section) string {
 // Pictures were removed from the recipe page by decision -- neither the drawn dish-format
 // mark nor a stored photograph prints, regardless of whether RecipeCard.Mark/.Photo are set.
 // The struct fields stay (the API still resolves them), only the template stopped printing.
-func TestARecipePagePrintsNoPictureEvenWhenMarkAndPhotoAreSet(t *testing.T) {
+// Replaces TestARecipePagePrintsNoPictureEvenWhenMarkAndPhotoAreSet. That test's premise --
+// neither image ever prints -- was the interim state of the prior "pictures were not
+// needed" decision, not a permanent rule; RecipeCard.Photo's own doc comment already
+// specified this Photo-else-Mark behaviour, it was just never wired into the template.
+func TestARecipePagePrefersThePhotoOverTheMarkWhenBothAreSet(t *testing.T) {
 	card := RecipeCard{
-		RecipeID: "MG-R-00001", Title: "West Bengal Rice & Rohu fish Soft rice bowl",
-		Number: 1, ReviewStatus: "Draft",
-		Mark:  Mark("bowl-grain", "Soft rice bowl"),
-		Photo: &RecipePhoto{DataURI: template.URL("data:image/jpeg;base64,ZmFrZQ==")},
+		Number: 1,
+		Title:  "Test Recipe",
+		Mark:   &DishMark{FormatLabel: "Test format", SVG: template.HTML("<svg></svg>")},
+		Photo:  &RecipePhoto{DataURI: template.URL("data:image/jpeg;base64,/9k="), SourceLabel: "test archetype"},
 	}
-	b := Book2{MealSections: []MealSection{{
-		MealCategoryID: "MC-01", Title: "Breakfast", Number: 1, Recipes: []RecipeCard{card},
-	}}}
-
 	var buf bytes.Buffer
-	if err := RenderHTML(&buf, Kind2, Metadata{Language: "en"}, b); err != nil {
+	if err := RenderHTML(&buf, Kind2, Metadata{Language: "en"}, Book2{
+		MealSections: []MealSection{{Number: 1, Title: "Breakfast", Recipes: []RecipeCard{card}}},
+	}); err != nil {
 		t.Fatalf("render: %v", err)
 	}
-	got := buf.String()
-	if strings.Contains(got, `class="dish-mark"`) {
-		t.Error("the recipe page must not print the dish mark frame")
+	out := buf.String()
+	if !strings.Contains(out, string(card.Photo.DataURI)) {
+		t.Fatal("with both Mark and Photo set, the photo must print")
 	}
-	if strings.Contains(got, `<img class="dish-photo"`) {
-		t.Error("the recipe page must not print a dish photo")
+	if strings.Contains(out, "<svg></svg>") {
+		t.Fatal("with a photo present, the mark's SVG must not also print")
+	}
+}
+
+func TestARecipePagePrintsTheMarkWhenThereIsNoPhoto(t *testing.T) {
+	card := RecipeCard{
+		Number: 1,
+		Title:  "Test Recipe",
+		Mark:   &DishMark{FormatLabel: "Test format", SVG: template.HTML("<svg></svg>")},
+	}
+	var buf bytes.Buffer
+	if err := RenderHTML(&buf, Kind2, Metadata{Language: "en"}, Book2{
+		MealSections: []MealSection{{Number: 1, Title: "Breakfast", Recipes: []RecipeCard{card}}},
+	}); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(buf.String(), "<svg></svg>") {
+		t.Fatal("with no photo, the drawn mark must print")
 	}
 }
 

@@ -770,6 +770,27 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    currentColor, so the mark inherits the book's brand ink and cannot introduce a colour of its
    own -- avoid_color_only_meaning applies to a drawing as much as to a badge, and this one
    carries no meaning colour could encode. */
+/* 18mm, not the larger size an earlier draft of this rule carried: at 34mm the mark plus its
+   caption ran taller than the recipe-head/production-strip block it floats beside on a
+   two-line title, and on six recipes in the test book that extra height was enough to push
+   the "When you cooked this" tracker onto a mostly-blank second sheet -- the exact failure
+   the surrounding comments describe. Measured against the printed PDF (BOOK_PAGE_DUMP) with
+   the tallest real recipes (two-line titles, partly-verified nutrition panels): at 18mm every
+   recipe in the test book keeps its tracker on the same page as its mark. */
+.recipe-mark {
+  float: left;
+  width: 18mm;
+  margin: 0 4mm 2mm 0;
+}
+.recipe-mark svg { width: 100%; display: block; }
+.recipe-mark img { width: 100%; display: block; border-radius: 2mm; }
+.recipe-mark figcaption {
+  font-family: var(--font-sans);
+  font-size: var(--caption-size);
+  color: var(--ink-soft);
+  text-align: center;
+  margin-top: 1mm;
+}
 /* The production strip sits beside the mark rather than clearing it.
    
    It cleared, and every recipe page paid the mark's full height whatever the title did. On the

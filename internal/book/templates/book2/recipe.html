@@ -11,8 +11,30 @@
      No picture prints on this page -- neither a per-recipe photograph (still nonexistent,
      GAP-025) nor the drawn dish-format mark. Removed by decision: the pictures were not
      needed. RecipeCard.Mark/.Photo stay on the struct (loadRecipeCards/RepresentativePhoto
-     still resolve them for the API), only the template stopped printing them. */}}
+     still resolve them for the API), only the template stopped printing them.
+
+     The dish-format mark prints again as of 2026-09-04 -- reversing the decision recorded
+     above, which is kept for the history rather than deleted. "No picture prints on this
+     page... Removed by decision: the pictures were not needed" was true until this book's
+     visual redesign made "every page carries a small illustration, none look blank" a
+     stated requirement (see docs/superpowers/specs/2026-09-04-cookbook-visual-redesign-design.md
+     section 2.3). Still no per-recipe photograph (GAP-025 is unchanged) -- only the mark,
+     which is format-accurate and already measured against this exact page's fragmentation
+     behaviour (see marks.go and the float/clear notes in tokens.css's Recipe page section). */}}
 <div class="recipe">
+  {{/* Photo if the archetype pipeline resolved one, else the drawn mark, else nothing --
+       exactly what RecipeCard.Photo's own doc comment in types.go already specifies. */}}
+  {{ if .Photo }}
+  <figure class="recipe-mark">
+    <img src="{{ .Photo.DataURI }}" alt="">
+    {{ with .Photo.SourceLabel }}<figcaption>{{ . }}</figcaption>{{ end }}
+  </figure>
+  {{ else if .Mark }}
+  <figure class="recipe-mark">
+    {{ .Mark.SVG }}
+    <figcaption>{{ .Mark.FormatLabel }}</figcaption>
+  </figure>
+  {{ end }}
   <div class="recipe-head">
     <span class="recipe-num">{{ printf "%02d" .Number }}</span>
     <span class="recipe-kicker">{{ with .RegionCulture }}{{ . }}{{ end }}</span>
