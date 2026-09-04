@@ -40,6 +40,16 @@ func TestNoBookCarriesTheProvisionalBanner(t *testing.T) {
 	}
 }
 
+func TestRenderedDocumentEmbedsThePoppinsFontFaces(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RenderHTML(&buf, Kind1, Metadata{Language: "en"}, nil); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(buf.String(), "@font-face") {
+		t.Fatal("rendered document must embed @font-face rules for Poppins")
+	}
+}
+
 // The palette is chosen by book, and the two must not be confusable: Book 1 is teal/navy and
 // Book 2 is plum/rose per the contract's visual_language.
 func TestEachBookCarriesItsOwnPaletteClass(t *testing.T) {

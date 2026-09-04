@@ -47,6 +47,7 @@ type renderContext struct {
 	Metadata  Metadata
 	BookClass string
 	CSS       template.CSS
+	FontFaces template.CSS
 	Watermark template.URL
 	Data      any
 }
@@ -78,6 +79,7 @@ func RenderHTML(w io.Writer, kind Kind, meta Metadata, data any) error {
 		Metadata:  meta,
 		BookClass: string(kind),
 		CSS:       template.CSS(css),
+		FontFaces: fontFacesCSS,
 		Watermark: watermarkDataURI,
 		Data:      data,
 	}
