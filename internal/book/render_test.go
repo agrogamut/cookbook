@@ -2,6 +2,7 @@ package book
 
 import (
 	"bytes"
+	"html"
 	"html/template"
 	"strings"
 	"testing"
@@ -615,6 +616,34 @@ func TestBook1CoverWithNoPhotoPrintsNoBackgroundLayer(t *testing.T) {
 	}
 	if strings.Contains(buf.String(), "background-image:") {
 		t.Fatal("with no photo, the cover must not print an empty background-image")
+	}
+}
+
+// Book 2's cover carries no child photo -- it is a working recipe document, not the child's
+// identification page (see book1/cover.html and book2/cover.html's own comments). Its
+// full-bleed background is decorative illustration instead, corner-scattered, with the
+// supplied kids-cooking illustration as a hero image inside the identity card.
+func TestBook2CoverPrintsTheDecorativeIllustrationsAndTheKidsCookingHero(t *testing.T) {
+	var buf bytes.Buffer
+	if err := RenderHTML(&buf, Kind2, Metadata{Language: "en"}, Book2{
+		Child: ChildSummary{DisplayName: "Test Child"},
+	}); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	// html/template always HTML-entity-escapes an attribute value, even one typed
+	// template.URL -- the trusted-type marker only bypasses the URL-safety scheme filter, not
+	// the ordinary attribute escaper, so a base64 data URI's "+" bytes print as the literal
+	// text "&#43;" in the src="" attribute. A real HTML parser (Chromium, at print time; any
+	// browser, on screen) decodes that back to "+" per spec, so the printed page is correct --
+	// unescaping here checks the same thing a parser would see, rather than routing around a
+	// defect. Confirmed against html/template's actual output before writing this, not
+	// assumed: an isolated `<img src="{{.}}">` render of a template.URL containing "+"
+	// reproduces the identical "&#43;" substitution.
+	out := html.UnescapeString(buf.String())
+	for _, key := range []string{"bibimbap", "hotpot", "mooncake", "kids-cooking"} {
+		if !strings.Contains(out, string(coverArt[key])) {
+			t.Errorf("expected the %q illustration's data URI on Book 2's cover", key)
+		}
 	}
 }
 

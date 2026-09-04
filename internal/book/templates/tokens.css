@@ -443,26 +443,11 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    near-blank page after the cover on every book. flow-root gives `.cover` its own block
    formatting context, which stops that collapse without being flex or grid -- the two
    constants below still do the positioning, this only keeps their margin where it belongs.
-   Confirmed harmless for Book 2's still-unconverted cover below: its first child,
-   `.cover-logo`, declares `margin-top: 0`, so it never had anything to collapse. */
-/* Book 2's cover has not been converted to the card-and-photo layout yet (a separate task) and
-   still builds its cover the way this file used to: a logo image, a `.cover-main` wrapper
-   carrying the with-photo/no-photo drop, and a `.cover-facts` row pinned to the box's own foot
-   with `position: absolute`. Keep all three alive for it -- Book 1 no longer emits any of
-   these class names, so nothing below matches Book 1's markup, but deleting them out from
-   under Book 2 before its own conversion reproduced the exact defect this whole section
-   exists to prevent: `.cover-logo` printing at its raw image size with no width cap, which
-   overflowed the text block and made Chromium scale Book 2's entire document down to fit,
-   landing dozens of unrelated pages at half their normal fill. Measured, not assumed -- the
-   page-fit suite is what caught it. */
-/* Small and at the very top: the cover box's vertical rhythm (the 96mm/26mm .cover-main
-   margin-top either side of a portrait) was tuned against the box's 248mm budget with "room
-   to spare" but not much of it, per the note above .cover. 32mm wide at this image's 5:1
-   aspect ratio is about 6.4mm tall -- a fraction of that spare room, not a rebalancing of the
-   drop distances that push the title down. */
-.cover-logo { width: 32mm; margin: 0 auto 4mm; display: block; }
-.cover.no-photo .cover-main { margin-top: 96mm; }
-.cover.with-photo .cover-main { margin-top: 26mm; }
+   Both books now build their cover on `.cover-card` as the first in-flow child (Book 2's own
+   conversion, decorative-illustration background rather than Book 1's photo, is the same
+   card-and-drop mechanism), so there is no longer a still-unconverted case to keep harmless
+   for. `.cover-logo`/`.cover-main`, the logo-and-wrapper markup Book 2 used before its own
+   conversion, are gone from this file along with the last markup that emitted them. */
 /* Full-bleed photo behind the identity card, painted as the cover box's own CSS background
    (set inline in cover.html, since the URL is per-child data) rather than a separate
    absolutely-positioned layer.
@@ -488,7 +473,19 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   background-position: center;
   background-repeat: no-repeat;
 }
+/* position: relative, added for Book 2's illustrated cover, not Book 1's: Book 2's corner
+   illustrations are a `.cover-bg-illustrated` layer (`position: absolute; z-index: 0`) that is
+   an earlier DOM sibling of `.cover-card`. Painting order in CSS2.1 is per stacking context --
+   an explicit z-index (even 0) lifts an element into the "positioned" paint bucket, which
+   paints above every later plain in-flow sibling regardless of DOM order. Without a position
+   of its own, `.cover-card` stayed in-flow and painted first, so the illustration layer
+   painted over it and hid the card's text. `position: relative` (no z-index needed -- normal
+   in-flow stacking already puts a later positioned sibling above an earlier one) lifts the
+   card into the same bucket, painted in DOM order, so it paints after the illustrations and
+   stays legible. Confirmed harmless for Book 1: its cover has no earlier z-index'd sibling to
+   interact with -- the photo is `.cover`'s own `background-image`, not a layered `<img>`. */
 .cover-card {
+  position: relative;
   background: var(--surface);
   border-radius: 8mm;
   padding: 14mm 12mm 10mm;
@@ -497,6 +494,12 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 }
 .cover.no-photo .cover-card { margin-top: 96mm; }
 .cover.with-photo .cover-card { margin-top: 26mm; }
+/* Book 2's card carries an extra hero image (see .cover-hero below) that Book 1's identity
+   card does not, so the shared 96mm no-photo drop -- tuned against Book 1's kicker/h1/sub/
+   facts stack alone -- overflows Book 2's card past the .cover box's 248mm budget and spills
+   the standfirst and facts row onto a second physical page. Scoped to .book2 because Book 1's
+   card is unaffected and still wants the original 96mm. */
+.book2 .cover.no-photo .cover-card { margin-top: 20mm; }
 .cover .cover-kicker {
   font-family: var(--font-sans);
   font-size: var(--caption-size);
@@ -557,8 +560,10 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   border-top: 0.5mm solid var(--rule-strong);
   padding-top: 4mm;
 }
-/* Book 1's facts row: normal flow inside `.cover-card`, not pinned to the page foot -- the
-   card itself carries the tuned drop now, so the row just sits at the card's own bottom. */
+/* A card-nested facts row: normal flow inside `.cover-card`, not pinned to the page foot --
+   the card itself carries the tuned drop, so the row just sits at the card's own bottom. Both
+   books use this shape now -- originally written for Book 1's card conversion, it applies
+   unchanged to Book 2's own facts row once Book 2's markup nests it inside `.cover-card` too. */
 .cover-card .cover-facts {
   position: static;
   margin-top: 5mm;
@@ -566,6 +571,27 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 .cover .cover-facts .label { display: block; margin-bottom: 1mm; }
 .cover .cover-facts > div { text-align: center; }
 .cover .cover-facts .value { font-family: var(--font-sans); }
+/* Book 2's cover: decorative illustration, not a photo. See design spec section 2.3 for why
+   these carry no dish-format claim and never appear on a recipe page. Corner placement bleeds
+   past the page edge deliberately -- this is paint only, `.cover` is a single non-fragmenting
+   page, so there is no break-rule interaction to consider. See the `.cover-card` comment above
+   for why the card needs `position: relative` to paint above this layer rather than under it. */
+.cover-bg-illustrated { position: absolute; inset: 0; z-index: 0; overflow: hidden; }
+.corner-art {
+  position: absolute;
+  width: 62mm;
+  filter: drop-shadow(0 2mm 3mm rgba(0, 0, 0, 0.1));
+}
+.corner-art.corner-tl { top: -12mm; left: -12mm; transform: rotate(-8deg); }
+.corner-art.corner-tr { top: -14mm; right: -14mm; transform: rotate(10deg); }
+.corner-art.corner-bl { bottom: -14mm; left: -12mm; transform: rotate(14deg); }
+.corner-art.corner-br { bottom: -12mm; right: -12mm; transform: rotate(-11deg); }
+.cover-hero {
+  width: 90mm;
+  margin: 0 auto 4mm;
+  display: block;
+  filter: drop-shadow(0 3mm 6mm rgba(40, 25, 15, 0.2));
+}
 /* The photo's own caption, printed directly under the card rather than under a small in-card
    portrait -- see the note above `.cover-photo-caption` in cover.html for why it is plain
    normal flow rather than pinned to the photo itself. Set light against the photo it sits on,

@@ -1,32 +1,39 @@
 {{ define "B2-COVER-01" }}
-{{/* Set as a book cover is set: everything hung from one left edge, the child's name as the
-     largest thing on the sheet, and the run's facts in a ruled block at the foot. The first
-     version centred five stacked elements in the middle of an otherwise empty page.
-
-     No spacer div after it. There used to be an empty <div class="page-break">, harmless
-     while .page-break meant break-after and a blank page 2 the moment it meant break-before.
-     Whatever follows the cover carries its own break. */}}
-{{/* no-photo, always. The portrait belongs on Book 1's cover, which is the child's
-     identification document; Book 2 is the one a cook keeps open on a counter. Declared
-     literally rather than branched on a field this book does not carry. */}}
+{{/* Book 2's cover carries no photo upload of any kind -- see the standing comment this
+     replaces: a working recipe document, not the child's identification page. Its
+     full-bleed background is decorative illustration (coverArt, background-removed PNGs,
+     see coverart.go), corner-scattered, with the supplied kids-cooking illustration as a
+     hero image inside the identity card. */}}
+{{/* Lookups go through the coverArt template function, not `index $.CoverArt "key"` --
+     this template is invoked with the Book2 value as its dot (see body.html), and
+     html/template resets $ to that same value on every {{template}} call, so $.CoverArt
+     would resolve against Book2, not the render context. See render.go's coverArt
+     function comment for the full explanation. */}}
 <div class="cover no-photo">
-  <img class="cover-logo" src="{{ .Metadata.Logo }}" alt="MadamGY">
-  <div class="cover-kicker">MadamGY &middot; Personalised Recipe Book</div>
+  <div class="cover-bg cover-bg-illustrated">
+    <img class="corner-art corner-tl" src="{{ coverArt "bibimbap" }}" alt="">
+    <img class="corner-art corner-tr" src="{{ coverArt "hotpot" }}" alt="">
+    <img class="corner-art corner-bl" src="{{ coverArt "mooncake" }}" alt="">
+    <img class="corner-art corner-br" src="{{ coverArt "egg-noodle-bowl" }}" alt="">
+  </div>
 
-  <div class="cover-main">
+  <div class="cover-card">
+    <img class="cover-hero" src="{{ coverArt "kids-cooking" }}" alt="">
+    <div class="cover-kicker">MadamGY &middot; Personalised Recipe Book</div>
+
     <h1>Recipes for<br>{{ .Child.DisplayName }}</h1>
     <p class="cover-sub">Selected against this child's feeding stage, declared food practice
       and allergy exclusions. Matched from the provider's recipe master, not written for
       this book.</p>
-  </div>
 
-  <div class="cover-facts">
-    <div><span class="label">Age at generation</span>
-         <span class="value">{{ .Child.AgeLabel }}</span></div>
-    <div><span class="label">Food practice</span>
-         <span class="value">{{ if .Child.FoodPractice }}{{ .Child.FoodPractice }}{{ else }}not recorded{{ end }}</span></div>
-    <div><span class="label">Recipes in this book</span>
-         <span class="value mono">{{ .RecipeCount }}</span></div>
+    <div class="cover-facts">
+      <div><span class="label">Age at generation</span>
+           <span class="value">{{ .Child.AgeLabel }}</span></div>
+      <div><span class="label">Food practice</span>
+           <span class="value">{{ if .Child.FoodPractice }}{{ .Child.FoodPractice }}{{ else }}not recorded{{ end }}</span></div>
+      <div><span class="label">Recipes in this book</span>
+           <span class="value mono">{{ .RecipeCount }}</span></div>
+    </div>
   </div>
 </div>
 {{ end }}

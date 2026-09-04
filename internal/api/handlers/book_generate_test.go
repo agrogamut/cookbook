@@ -139,8 +139,12 @@ func TestGeneratePutsThePhotoOnBook1Cover(t *testing.T) {
 	if !strings.Contains(got.Book1, "With her mother") {
 		t.Fatal("the caption must print with the photograph")
 	}
-	// Book 2 is a recipe book; a portrait there is decoration on a working document.
-	if strings.Contains(got.Book2, "data:image/png") {
+	// Book 2 is a recipe book; a portrait there is decoration on a working document. Book 2's
+	// own cover legitimately embeds PNG data URIs now -- the decorative corner illustrations
+	// and the kids-cooking hero image, all package-embedded and unrelated to any child (see
+	// internal/book/coverart.go) -- so the check has to be specific to the uploaded child
+	// photograph's own bytes, not "any PNG at all".
+	if strings.Contains(got.Book2, "data:image/png;base64,"+png) {
 		t.Fatal("the photograph must not appear in book 2")
 	}
 }
