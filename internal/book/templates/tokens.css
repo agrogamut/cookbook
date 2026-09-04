@@ -467,18 +467,22 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    (set inline in cover.html, since the URL is per-child data) rather than a separate
    absolutely-positioned layer.
 
-   That was tried first: a `.cover-bg` div with `position: absolute; inset: 0`, and
-   `.cover-card` given `position: relative; z-index: 1` so it would stack above it. It printed
-   wrong. With the real cover's full content (kicker, title, standfirst, facts row -- not a
-   bare test heading), Chromium's print path rendered the card and the photo as though they
-   belonged to two unrelated boxes: the card at the very top of the sheet, the photo starting
-   only where the card's own box happened to end, and nothing behind the card at all -- as if
-   `.cover-bg`'s containing block had silently become `.cover-card` instead of `.cover`.
-   Confirmed on plain `google-chrome --print-to-pdf` against the real generated HTML, so it is
-   not a defect in this project's own PDF pipeline, and confirmed absent again the moment
-   `position`/`z-index` came off both elements. A background-image needs no stacking context to
-   sit behind its own box's content -- that is what a background is -- so this version has
-   nothing for the print fragmenter to get wrong, and it printed correctly on every check. */
+   A separate `.cover-bg` div (`position: absolute; inset: 0; z-index: 0`) with `.cover-card`
+   given `position: relative; z-index: 1` to stack above it was tried first. The symptom seen
+   with it -- the card at the top of the sheet, the photo starting only where the card's own
+   box happened to end, nothing behind the card at all -- was the margin-collapse bug the
+   `display: flow-root` above this rule now fixes, caught before that fix existed. With
+   flow-root applied, the position/z-index construction prints correctly: this is not a general
+   Chromium print defect on position values, and an earlier version of this comment wrongly
+   claimed one.
+
+   The real, narrower reason to keep the background-image version anyway: giving `.cover-bg` an
+   explicit `z-index` promotes it into CSS's own "positioned descendants" paint layer, which
+   paints above every later plain in-flow sibling in the same stacking context regardless of
+   DOM order -- including the caption `<p>` after the card, which is never positioned. The
+   z-index'd photo layer painted over it. A background-image sidesteps the question rather than
+   working around it: a box's own background always paints behind its own content, by
+   definition, so there is no stacking order to get wrong. */
 .cover.with-photo {
   background-size: cover;
   background-position: center;

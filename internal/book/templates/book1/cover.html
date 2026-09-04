@@ -3,16 +3,21 @@
      2.4/2.5. The photo is the box's own CSS background-image, set inline because the URL is
      per-child data, not a separate absolutely-positioned <img> layer.
 
-     A separate `.cover-bg` div with `position: absolute; inset: 0` plus `.cover-card` needing
-     `position: relative; z-index: 1` to sit above it was tried first and printed wrong: with
-     the real stylesheet's full cover content (not a bare "Test" heading), Chromium's print
-     path painted the card and the photo as if they belonged to two disconnected boxes -- the
-     card at the top of the sheet, the photo starting only where the card's own box happened to
-     end, leaving the space behind the card blank instead of showing through beneath an opaque
-     panel. Confirmed with plain `google-chrome --print-to-pdf` on the real generated HTML, so
-     it is not a defect in this project's own PDF pipeline. A background-image on the box
-     itself needs no stacking trick to sit behind the card -- a box's own background always
-     paints behind its content by definition -- and it printed correctly on every check.
+     A separate `.cover-bg` div (`position: absolute; inset: 0; z-index: 0`) with `.cover-card`
+     given `position: relative; z-index: 1` to stack above it was tried first. The symptom seen
+     with it -- the card at the top of the sheet, the photo starting only where the card's own
+     box happened to end, nothing behind the card at all -- was the margin-collapse bug
+     `.cover`'s `display: flow-root` fixes in tokens.css, caught before that fix existed. With
+     flow-root applied, the position/z-index construction prints correctly: it is not a general
+     Chromium print defect on position values.
+
+     The real, narrower reason to keep the background-image version anyway: an explicit
+     `z-index` on `.cover-bg` promotes it into CSS's own "positioned descendants" paint layer,
+     which paints above every later plain in-flow sibling regardless of DOM order -- including
+     the caption below, which is never positioned. A background-image sidesteps the question
+     rather than working around it: a box's own background always paints behind its own
+     content, by definition, so there is no stacking order to get wrong. See tokens.css's
+     `.cover.with-photo` comment for the full writeup.
 
      The with-photo/no-photo two-constant pattern for the card's drop (formerly .cover-main's,
      now .cover-card's) is unchanged from before this redesign -- only what sits behind the
@@ -20,8 +25,7 @@
 {{/* The caption used to print inside the old <figure>'s <figcaption>, under the small in-card
      portrait. There is no figure any more -- the photo is the page's own background -- so the
      caption prints as its own line directly under the card instead, over the photo, in normal
-     flow: not absolutely positioned, and not a sibling of anything carrying position/z-index,
-     which is exactly the combination the comment above documents as unsafe to print. */}}
+     flow. See the note above for why a positioned photo layer would have painted over it. */}}
 <div class="cover {{ if .Child.Photo }}with-photo{{ else }}no-photo{{ end }}"{{ with .Child.Photo }} style="background-image: url('{{ .DataURI }}')"{{ end }}>
   <div class="cover-card">
     <div class="cover-kicker">MadamGY &middot; Growth, Nutrition &amp; Development</div>
