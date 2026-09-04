@@ -544,11 +544,13 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   margin: 10mm 0 0;
 }
 .cover .cover-name-label { margin-bottom: 1.5mm; }
-/* Pinned to the foot of the cover box, not pushed there by a margin -- see the note above
-   .cover for why. Still Book 2's own mechanism: its `.cover-facts` is a direct child of
-   `.cover`, exactly where this rule expects it. Book 1's own facts row now lives inside
-   `.cover-card` instead and is overridden back to normal flow below, right after this rule so
-   the override wins on equal specificity. */
+/* The base declaration: pinned to the foot of the cover box, not pushed there by a margin --
+   see the note above .cover for why. Both books now nest `.cover-facts` inside `.cover-card`
+   (Book 1's own conversion, then Book 2's), so this absolute/pinned behaviour is never what
+   actually prints -- it is overridden back to normal flow by `.cover-card .cover-facts`
+   below, right after this rule so the override wins on equal specificity. Left in rather than
+   deleted: it is still the selector `.cover .cover-facts .label` etc. below build on, and a
+   `.cover-facts` outside `.cover-card` remains valid markup this rule would still apply to. */
 .cover .cover-facts {
   position: absolute;
   left: 0;
@@ -1260,13 +1262,6 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
     height: auto;
     padding-bottom: var(--page-margin-bottom);
   }
-  /* Book 2's own `.cover-facts` is still pinned to the print box's foot with `position:
-     absolute` (see the print rule above) -- on screen, with `.cover` at auto height, that
-     pins it to nothing. `.cover >` on purpose: Book 2's facts row is `.cover`'s own direct
-     child; Book 1's now lives inside `.cover-card` and already flows unconditionally via
-     `.cover-card .cover-facts`, so this must not also match it. */
-  .cover > .cover-facts { position: static; margin-top: 24mm; }
-
   /* Sections that share a printed sheet are separated by a margin, which on screen would show
      as a gap inside one white sheet. They are part of the sheet before them, so they get no
      background of their own and no boundary. */
