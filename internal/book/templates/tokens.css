@@ -755,18 +755,31 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 }
 .recipe-id .rid { font-family: var(--font-mono); }
 
-/* Production strip: prep, cook, serving, texture, cost. Ruled top and bottom, cells sharing
-   one baseline, the way a recipe page has always carried this. */
+/* Production strip: prep, cook, serving, texture, cost. Bordered ticket-stub style with
+   dashed dividers between cells, the way a recipe page has always carried this. */
 .metastrip {
   display: flex;
   flex-wrap: wrap;
-  gap: 6mm;
-  border-top: 0.5mm solid var(--rule-strong);
-  border-bottom: 0.2mm solid var(--rule);
+  border: 0.4mm solid var(--rule-strong);
+  border-radius: 3mm;
   padding: 2.5mm 0;
   margin: 3mm 0 4mm;
 }
-.metacell { min-width: 22mm; }
+.metacell {
+  min-width: 22mm;
+  flex: 1;
+  padding: 0 4mm;
+  position: relative;
+  text-align: center;
+}
+.metacell:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 15%;
+  bottom: 15%;
+  border-right: 0.3mm dashed var(--ink-faint);
+}
 .metacell .label { display: block; margin-bottom: 1mm; }
 .metacell .value { font-family: var(--font-sans); font-size: var(--lead); }
 
