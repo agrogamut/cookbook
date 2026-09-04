@@ -2,6 +2,8 @@ package book
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"html"
 	"html/template"
 	"strings"
@@ -720,5 +722,103 @@ func TestChapterOpenerPrintsADecorativeIllustration(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), `class="chapter-art"`) {
 		t.Fatal("a chapter opener must print a decorative corner illustration")
+	}
+}
+
+// TestChapterOpenerStaysOnOnePageAtMaxRecipes pins the single-page guarantee
+// B2-SECTION-01's own comment claims ("The opener is a whole page on purpose") against the
+// real worst case, not the easy one.
+//
+// A first pass of this task's manual verification checked only 1-3 recipe chapters and
+// concluded no CSS change was needed -- the wrong end of the range to stress. book2.go's
+// maxRecipesPerSection is 10, and real corpus titles are long combinatorial names (see
+// pdf_test.go's widestBook2 fixture, "Himalayan India Ragi & Sattu (roasted gram flour)
+// Stuffed flatbread", for a real example of the length this draws on). Printed against the
+// original 62mm .chapter margin-top plus a 70mm-wide .chapter-art, a ten-recipe chapter with
+// titles this long genuinely overflowed: the tenth list item spilled onto what should have
+// been the first recipe page, confirmed by rendering and reading the actual PDF before this
+// test existed. Fixed by shrinking both (.chapter's margin-top to 30mm, .chapter-art's width
+// to 50mm -- see tokens.css). This test pins that fix so a future change to either value, or
+// a longer real recipe title, cannot silently reintroduce the split.
+func TestChapterOpenerStaysOnOnePageAtMaxRecipes(t *testing.T) {
+	if !browserOnPath() {
+		t.Skip("no chromium on PATH")
+	}
+	// Real combinatorial-length titles, not short placeholders -- the defect this test guards
+	// against does not reproduce on short titles.
+	titles := []string{
+		"Himalayan India Ragi & Sattu (roasted gram flour) Stuffed Flatbread",
+		"West Bengal Hilsa & Mustard (kasundi) Steamed Curry",
+		"South India Toor Dal & Drumstick (moringa) Sambar Curry",
+		"North India Paneer & Spinach (palak) Simmered Curry",
+		"Bangladesh Ilish & Green Chili (kacha morich) Steamed Bhapa",
+		"Northeast India Bamboo Shoot & Pork (soji ekthum) Fermented Curry",
+		"Central Tribal India Mahua & Millet (ragi) Roasted Porridge",
+		"West India Bajra & Methi (fenugreek leaves) Flatbread Thepla",
+		"Nepal Gundruk & Soybean (bhatmas) Fermented Curry",
+		"Himalayan India Buckwheat & Potato (aloo) Stuffed Flatbread",
+	}
+	recipes := make([]RecipeCard, len(titles))
+	for i, title := range titles {
+		recipes[i] = RecipeCard{RecipeID: "MG-R-TEST", Title: title, Number: i + 1}
+	}
+	b2 := Book2{
+		Child: ChildSummary{DisplayName: "Test Child"},
+		MealSections: []MealSection{
+			{MealCategoryID: "MC-01", Title: "Breakfast", Number: 1, TargetRecipeCount: 10, Recipes: recipes},
+		},
+	}
+	meta := Metadata{Title: "t", Language: "en", GenerationDate: time.Now()}
+	var doc bytes.Buffer
+	if err := RenderHTML(&doc, Kind2, meta, b2); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	pdf, err := PrintPDF(context.Background(), doc.Bytes(), meta)
+	if err != nil {
+		if errors.Is(err, ErrChromiumUnavailable) {
+			t.Skipf("chromium present but not runnable here: %v", err)
+		}
+		t.Fatalf("PrintPDF: %v", err)
+	}
+
+	pages := pageBoxes(t, pdf)
+	// The opener page carries both the chapter subtitle ("...recipes selected...") and the
+	// tenth (last) recipe's distinctive title word. If the list overflowed, "Buckwheat" would
+	// appear on a later page instead of alongside "selected".
+	openerIdx := -1
+	for i, p := range pages {
+		hasSelected, hasBuckwheat := false, false
+		for _, w := range p.Words {
+			switch strings.TrimSpace(w.Text) {
+			case "selected":
+				hasSelected = true
+			case "Buckwheat":
+				hasBuckwheat = true
+			}
+		}
+		if hasSelected && hasBuckwheat {
+			openerIdx = i
+			break
+		}
+	}
+	if openerIdx == -1 {
+		t.Fatal("no single page carries both the chapter subtitle and the tenth recipe's " +
+			"title -- the ten-item list did not fit on the chapter opener's own page")
+	}
+	if openerIdx+1 >= len(pages) {
+		t.Fatal("no page follows the chapter opener")
+	}
+	// The page immediately after the opener must be a genuine recipe page (it carries the
+	// INGREDIENTS heading every recipe page prints), not a continuation of the chapter list.
+	hasIngredients := false
+	for _, w := range pages[openerIdx+1].Words {
+		if strings.TrimSpace(w.Text) == "INGREDIENTS" {
+			hasIngredients = true
+			break
+		}
+	}
+	if !hasIngredients {
+		t.Fatal("the page after the chapter opener is not a recipe page -- the ten-item " +
+			"list spilled onto it instead of fitting on the opener's own page")
 	}
 }

@@ -692,10 +692,21 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    column in the paged flow redistributes differently depending on which sheet it lands on,
    and a chapter opener that sits at a different height in each chapter is the same defect
    the cover had. */
-.chapter { display: block; margin-top: 62mm; text-align: center; }
+/* margin-top dropped from 62mm to 30mm, and .chapter-art shrunk from 70mm to 50mm, in the
+   same change: a fully-populated chapter (maxRecipesPerSection = 10 in book2.go, with real
+   combinatorial titles long enough to wrap to two lines) pushed the list past
+   textBlockBottomPt with the original 62mm drop plus a 70mm-wide image on top of it -- an
+   invisible-until-printed overflow that fragmented the opener onto a second sheet, exactly
+   the single-page guarantee this page exists for. Measured against a real print (see
+   TestChapterOpenerStaysOnOnePageAtMaxRecipes in render_test.go and the task's report): the
+   30mm/50mm pair leaves roughly 20-27mm of spare inside the text block even at 10 long-title
+   recipes (worst case: egg-noodle-bowl's aspect ratio makes it the tallest of the three at
+   this width), while a short chapter still reads as a deliberately composed title page rather
+   than a cramped one. */
+.chapter { display: block; margin-top: 30mm; text-align: center; }
 .chapter-art {
-  width: 70mm;
-  margin: 0 auto 6mm;
+  width: 50mm;
+  margin: 0 auto 4mm;
   display: block;
   filter: drop-shadow(0 3mm 5mm rgba(40, 25, 15, 0.18));
 }
