@@ -8,7 +8,16 @@
 </head>
 <body class="{{ .BookClass }}">
 
+{{ if eq .BookClass "book2" }}
+{{/* Book 2 only: scattered food illustrations, not the brand mark -- see tokens.css's
+     .food-scatter note. Book 1 keeps the single centered brand watermark below. */}}
+<img class="food-scatter fs-a" src="{{ coverArt "dimsum" }}" alt="">
+<img class="food-scatter fs-b" src="{{ coverArt "noodle-roll" }}" alt="">
+<img class="food-scatter fs-c" src="{{ coverArt "banana-leaf-rice" }}" alt="">
+<img class="food-scatter fs-d" src="{{ coverArt "coconut" }}" alt="">
+{{ else }}
 <img class="watermark" src="{{ .Watermark }}" alt="">
+{{ end }}
 
 {{ template "body" . }}
 

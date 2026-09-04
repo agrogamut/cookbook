@@ -394,15 +394,23 @@ tbody tr:last-child td { border-bottom: 0.2mm solid var(--rule); }
 td .write-line, th .write-line { min-width: 0; width: 100%; }
 
 /* --------------------------------------------------------------------------------------
-   Watermark. See watermark.go for why this is a fixed <img>, not a CSS background-image or
-   an @page margin box, and why that mechanism is safe here where the equivalent in-document
-   position: fixed approach was rejected for the old banner (that was a block-level element
-   competing with document flow; this is a non-flow box with a negative z-index, verified by
-   a real print spike to repeat identically on every physical page).
+   Watermark -- Book 1 only. See watermark.go for why this is a fixed <img>, not a CSS
+   background-image or an @page margin box, and why that mechanism is safe here where the
+   equivalent in-document position: fixed approach was rejected for the old banner (that was
+   a block-level element competing with document flow; this is a non-flow box with a
+   negative z-index, verified by a real print spike to repeat identically on every physical
+   page).
 
-   120mm and 0.10 opacity were chosen by printing the real asset, not by a rule -- water1.jpeg
-   carries its own near-white background, which blends into the page at this opacity and
-   leaves only the pink linework faintly visible, on every sheet.
+   A four-copy scattered version of this (see git history, 2026-09-04) was tried and
+   reverted the same day: scattering the brand mark itself read as a repeated stamp rather
+   than texture, and even at reduced size one copy still landed over the growth table's
+   header row on a real printed page. Scattering is right for Book 2's food illustrations
+   below; Book 1 keeps this single centered mark exactly as it was before that attempt.
+
+   120mm was chosen by printing the real asset, not by a rule -- water1.jpeg carries its own
+   near-white background, which blends into the page at low opacity and leaves only the pink
+   linework faintly visible, on every sheet. Opacity raised from 0.10 to 0.12 (+20%) on
+   request, to make the mark a little more visible without losing that blend.
    -------------------------------------------------------------------------------------- */
 .watermark {
   position: fixed;
@@ -410,10 +418,31 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   left: 50%;
   transform: translate(-50%, -50%);
   width: 120mm;
-  opacity: 0.10;
+  opacity: 0.12;
   z-index: -1;
   pointer-events: none;
 }
+
+/* Food-scatter -- Book 2 only. Four of the twelve decorative illustrations (coverart.go),
+   not the brand mark, printed small and faint in each page quadrant so a recipe book reads
+   as if food doodles are scattered behind the content -- the effect the brand-mark scatter
+   above was reaching for, but with art that actually depicts food. Same mechanism as
+   .watermark: non-flow, fixed, negative z-index, confirmed to repeat identically on every
+   physical page. Sized and placed the same as the reverted brand scatter (34mm, corners
+   only, nothing centered) since that placement was already measured clear of the growth
+   table's header row and of recipe-card text on a real printed book. Opacity raised from
+   0.14 to 0.17 (+20%) on request. */
+.food-scatter {
+  position: fixed;
+  width: 34mm;
+  opacity: 0.17;
+  z-index: -1;
+  pointer-events: none;
+}
+.food-scatter.fs-a { top: 8mm; left: -8mm; transform: rotate(-12deg); }
+.food-scatter.fs-b { top: 55mm; right: -10mm; transform: rotate(11deg); }
+.food-scatter.fs-c { bottom: 45mm; left: -8mm; transform: rotate(7deg); }
+.food-scatter.fs-d { bottom: 10mm; right: -8mm; transform: rotate(-9deg); }
 
 /* --------------------------------------------------------------------------------------
    Cover.
@@ -1056,6 +1085,13 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 }
 .domain-referral { font-size: var(--caption-size); margin: 3mm 0 0; max-width: var(--measure); }
 .domain > table:first-of-type, .illness > table { break-inside: avoid; }
+/* B1-003's growth table (growth.html): one row per real visit plus three blank stationery
+   rows, never more than a handful of rows total. Same failure as the data-quality checklist
+   above -- a table this short still fragments when it starts a few millimetres above the
+   page boundary, landing the header and one row on the tail of one sheet and the rest on the
+   next. break-inside: avoid keeps the whole table on one page rather than letting a table
+   this small ever split. */
+.growth-table { break-inside: avoid; }
 /* dataQualityChecklist (book1.go) always returns exactly five rows -- fixed, never growing --
    so this table can never legitimately need to split, and by default it still could: a real
    printed page landed one row on a nearly-blank sheet and the other four on the next, because

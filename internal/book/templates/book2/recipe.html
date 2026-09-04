@@ -13,28 +13,14 @@
      needed. RecipeCard.Mark/.Photo stay on the struct (loadRecipeCards/RepresentativePhoto
      still resolve them for the API), only the template stopped printing them.
 
-     The dish-format mark prints again as of 2026-09-04 -- reversing the decision recorded
-     above, which is kept for the history rather than deleted. "No picture prints on this
-     page... Removed by decision: the pictures were not needed" was true until this book's
-     visual redesign made "every page carries a small illustration, none look blank" a
-     stated requirement (see docs/superpowers/specs/2026-09-04-cookbook-visual-redesign-design.md
-     section 2.3). Still no per-recipe photograph (GAP-025 is unchanged) -- only the mark,
-     which is format-accurate and already measured against this exact page's fragmentation
-     behaviour (see marks.go and the float/clear notes in tokens.css's Recipe page section). */}}
+     The dish-format mark printed again from 2026-09-04 to 2026-09-04, reversing the removal
+     decision above -- and is removed a second time the same day, by the same kind of call:
+     the per-card icon read as a repeated template tell rather than a useful picture, on a
+     book that now carries scattered decorative watermark art on every page instead (see
+     tokens.css's .watermark note). RecipeCard.Mark/.Photo stay on the struct
+     (loadRecipeCards/RepresentativePhoto still resolve them for the API), only the template
+     stopped printing them, exactly as the original 2026-08-xx removal did. */}}
 <div class="recipe">
-  {{/* Photo if the archetype pipeline resolved one, else the drawn mark, else nothing --
-       exactly what RecipeCard.Photo's own doc comment in types.go already specifies. */}}
-  {{ if .Photo }}
-  <figure class="recipe-mark">
-    <img src="{{ .Photo.DataURI }}" alt="">
-    {{ with .Photo.SourceLabel }}<figcaption>{{ . }}</figcaption>{{ end }}
-  </figure>
-  {{ else if .Mark }}
-  <figure class="recipe-mark">
-    {{ .Mark.SVG }}
-    <figcaption>{{ .Mark.FormatLabel }}</figcaption>
-  </figure>
-  {{ end }}
   <div class="recipe-head">
     <span class="recipe-num">{{ printf "%02d" .Number }}</span>
     <span class="recipe-kicker">{{ with .RegionCulture }}{{ . }}{{ end }}</span>

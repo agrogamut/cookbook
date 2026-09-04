@@ -379,14 +379,14 @@ func renderOneSection(t *testing.T, sec Section) string {
 	return buf.String()
 }
 
-// Pictures were removed from the recipe page by decision -- neither the drawn dish-format
-// mark nor a stored photograph prints, regardless of whether RecipeCard.Mark/.Photo are set.
-// The struct fields stay (the API still resolves them), only the template stopped printing.
-// Replaces TestARecipePagePrintsNoPictureEvenWhenMarkAndPhotoAreSet. That test's premise --
-// neither image ever prints -- was the interim state of the prior "pictures were not
-// needed" decision, not a permanent rule; RecipeCard.Photo's own doc comment already
-// specified this Photo-else-Mark behaviour, it was just never wired into the template.
-func TestARecipePagePrefersThePhotoOverTheMarkWhenBothAreSet(t *testing.T) {
+// Pictures were removed from the recipe page a second time on 2026-09-04 -- neither the
+// drawn dish-format mark nor a stored photograph prints, regardless of whether
+// RecipeCard.Mark/.Photo are set. The struct fields stay (the API still resolves them),
+// only the template stopped printing. Replaces
+// TestARecipePagePrefersThePhotoOverTheMarkWhenBothAreSet and
+// TestARecipePagePrintsTheMarkWhenThereIsNoPhoto, which pinned the brief Photo-else-Mark
+// interval between the two removals.
+func TestARecipePagePrintsNoPictureEvenWhenMarkAndPhotoAreSet(t *testing.T) {
 	card := RecipeCard{
 		Number: 1,
 		Title:  "Test Recipe",
@@ -400,28 +400,11 @@ func TestARecipePagePrefersThePhotoOverTheMarkWhenBothAreSet(t *testing.T) {
 		t.Fatalf("render: %v", err)
 	}
 	out := buf.String()
-	if !strings.Contains(out, string(card.Photo.DataURI)) {
-		t.Fatal("with both Mark and Photo set, the photo must print")
+	if strings.Contains(out, string(card.Photo.DataURI)) {
+		t.Fatal("the photo must not print")
 	}
 	if strings.Contains(out, "<svg></svg>") {
-		t.Fatal("with a photo present, the mark's SVG must not also print")
-	}
-}
-
-func TestARecipePagePrintsTheMarkWhenThereIsNoPhoto(t *testing.T) {
-	card := RecipeCard{
-		Number: 1,
-		Title:  "Test Recipe",
-		Mark:   &DishMark{FormatLabel: "Test format", SVG: template.HTML("<svg></svg>")},
-	}
-	var buf bytes.Buffer
-	if err := RenderHTML(&buf, Kind2, Metadata{Language: "en"}, Book2{
-		MealSections: []MealSection{{Number: 1, Title: "Breakfast", Recipes: []RecipeCard{card}}},
-	}); err != nil {
-		t.Fatalf("render: %v", err)
-	}
-	if !strings.Contains(buf.String(), "<svg></svg>") {
-		t.Fatal("with no photo, the drawn mark must print")
+		t.Fatal("the mark's SVG must not print")
 	}
 }
 
@@ -539,28 +522,48 @@ func TestSignoffPagePrecedesTheImprint(t *testing.T) {
 	}
 }
 
-// The watermark: water1.jpeg (the icon mark, not the full text lockup), fixed and centered
-// behind the content on every page. Verified by a real headless-Chrome print spike
-// (2026-08-24, not committed here) that a position: fixed img with a negative z-index repeats
-// identically on every physical page with no tiling bug -- unlike the in-document banner that
-// was tried and rejected, this is a non-flow pseudo-element-like box, not a block competing
-// with document layout, which is what made the difference.
+// Book 1 carries the single centered brand watermark (water1.jpeg); Book 2 carries four
+// scattered food illustrations instead, never the brand mark -- see tokens.css's .watermark
+// and .food-scatter notes for why the two books diverge here. Verified by a real
+// headless-Chrome print spike (2026-08-24, not committed here) that a position: fixed img
+// with a negative z-index repeats identically on every physical page with no tiling bug --
+// unlike the in-document banner that was tried and rejected, this is a non-flow
+// pseudo-element-like box, not a block competing with document layout, which is what made
+// the difference. That property holds for the four Book 2 elements as much as for Book 1's
+// one.
 func TestWatermarkAppearsOnEveryBook(t *testing.T) {
-	for _, kind := range []Kind{Kind1, Kind2} {
-		t.Run(string(kind), func(t *testing.T) {
-			var buf bytes.Buffer
-			if err := RenderHTML(&buf, kind, Metadata{Language: "en"}, nil); err != nil {
-				t.Fatalf("render: %v", err)
-			}
-			out := buf.String()
-			if !strings.Contains(out, `class="watermark"`) {
-				t.Fatal("no watermark element rendered")
-			}
-			if !strings.Contains(out, `src="data:image/jpeg;base64,`) {
-				t.Fatal("watermark must be embedded as a data URI, not fetched at print time")
-			}
-		})
-	}
+	t.Run("book1", func(t *testing.T) {
+		var buf bytes.Buffer
+		if err := RenderHTML(&buf, Kind1, Metadata{Language: "en"}, nil); err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		out := buf.String()
+		if !strings.Contains(out, `class="watermark"`) {
+			t.Fatal("book1 must render the single brand watermark")
+		}
+		if strings.Contains(out, `class="food-scatter`) {
+			t.Fatal("book1 must not render Book 2's food-scatter illustrations")
+		}
+		if !strings.Contains(out, `src="data:image/jpeg;base64,`) {
+			t.Fatal("watermark must be embedded as a data URI, not fetched at print time")
+		}
+	})
+	t.Run("book2", func(t *testing.T) {
+		var buf bytes.Buffer
+		if err := RenderHTML(&buf, Kind2, Metadata{Language: "en"}, nil); err != nil {
+			t.Fatalf("render: %v", err)
+		}
+		out := buf.String()
+		if strings.Contains(out, `class="watermark"`) {
+			t.Fatal("book2 must not render Book 1's brand watermark")
+		}
+		if got := strings.Count(out, `class="food-scatter `); got != 4 {
+			t.Fatalf("want 4 scattered food-illustration elements, got %d", got)
+		}
+		if !strings.Contains(out, `src="data:image/png;base64,`) {
+			t.Fatal("food-scatter images must be embedded as data URIs, not fetched at print time")
+		}
+	})
 }
 
 // The kitchen-safety chapter renders every SOP row's rule text, grouped under its two
