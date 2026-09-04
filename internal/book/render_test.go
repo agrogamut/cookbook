@@ -751,6 +751,53 @@ func TestBook1BackCoverWithNoParentsPhotoPrintsThePlainImprintPage(t *testing.T)
 	}
 }
 
+func TestPrescriptionPagePrintsTheUploadedPhotoInPlaceOfTheBlankForm(t *testing.T) {
+	photo := &ChildPhoto{DataURI: template.URL("data:image/png;base64,iVBORw0KGgo="), Caption: "Dr Sen, 4 Sept"}
+	meta := Metadata{Language: "en", PrescriptionPhoto: photo}
+	b := Book1{Metadata: meta, Child: ChildSummary{DisplayName: "Test Child"}}
+	var buf bytes.Buffer
+	if err := RenderHTML(&buf, Kind1, meta, b); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `class="prescription-photo"`) {
+		t.Fatal("with a prescription photo present, the page must print the photo frame")
+	}
+	if !strings.Contains(out, string(photo.DataURI)) {
+		t.Fatal("the prescription photo data URI must appear on the page")
+	}
+	if !strings.Contains(out, "Dr Sen, 4 Sept") {
+		t.Fatal("the prescription photo's caption must print")
+	}
+	// The blank form this page prints by default must not also print -- a real, already
+	// signed document does not need a second, empty copy of the same fields underneath it.
+	if strings.Contains(out, "To be completed by the examining doctor") {
+		t.Fatal("with a prescription photo present, the blank form must not also print")
+	}
+	if strings.Contains(out, "Priority recommendations") {
+		t.Fatal("with a prescription photo present, the blank priority-recommendations table must not print")
+	}
+}
+
+func TestPrescriptionPageWithNoPhotoPrintsTheBlankForm(t *testing.T) {
+	meta := Metadata{Language: "en"}
+	b := Book1{Metadata: meta, Child: ChildSummary{DisplayName: "Test Child"}}
+	var buf bytes.Buffer
+	if err := RenderHTML(&buf, Kind1, meta, b); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, `class="prescription-photo"`) {
+		t.Fatal("with no prescription photo, the page must not print an empty photo frame")
+	}
+	if !strings.Contains(out, "To be completed by the examining doctor") {
+		t.Fatal("with no prescription photo, the blank form must print, unchanged")
+	}
+	if !strings.Contains(out, "Priority recommendations") {
+		t.Fatal("with no prescription photo, the blank priority-recommendations table must print")
+	}
+}
+
 func TestChapterOpenerPrintsADecorativeIllustration(t *testing.T) {
 	var buf bytes.Buffer
 	b2 := Book2{

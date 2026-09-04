@@ -374,6 +374,34 @@ tbody tr:last-child td { border-bottom: 0.2mm solid var(--rule); }
   background: var(--paper-shade, rgba(0, 0, 0, 0.015));
 }
 
+/* B1-PRESCRIPTION-01's photograph branch: a real, already-written prescription an operator
+   attached, printed in place of the blank form. Contained rather than full-bleed like a
+   cover photo -- this is a content page with a heading above it, not a cover -- and capped
+   at the text block's own height so a portrait-oriented phone photo of a full page cannot
+   overrun onto a second sheet, which would silently detach the page-head from an image a
+   reader has to flip to see. object-fit: contain rather than cover, because cropping any
+   part of a document someone is meant to be able to actually read is the one thing a "just
+   fit the box" rule must never do to this particular image. */
+.prescription-photo {
+  margin: 6mm 0 0;
+  text-align: center;
+}
+.prescription-photo img {
+  max-width: 100%;
+  max-height: 220mm;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border: 0.2mm solid var(--rule);
+  border-radius: 1mm;
+}
+.prescription-photo figcaption {
+  margin-top: 2mm;
+  font-family: var(--font-sans);
+  font-size: var(--caption-size);
+  color: var(--ink-soft);
+}
+
 /* Inside a table cell the line takes the column's width and asserts none of its own.
    ==========================================================================================
    This is not a tidying rule. The 28mm minimum was applying in table cells too, and Book 1's

@@ -47,6 +47,13 @@ type generateRequest struct {
 	// child. Validated by book.ParsePhoto, same as PhotoDataURI.
 	ParentsPhotoDataURI string `json:"parents_photo_data_uri,omitempty"`
 	ParentsPhotoCaption string `json:"parents_photo_caption,omitempty"`
+
+	// PrescriptionPhotoDataURI is a photograph or scan of a prescription a doctor has
+	// already written and signed on paper. Validated by book.ParsePhoto, same as
+	// PhotoDataURI -- this is a real document being attached, not a diagnosis or a dose
+	// this service computes. See Metadata.PrescriptionPhoto's doc comment.
+	PrescriptionPhotoDataURI string `json:"prescription_photo_data_uri,omitempty"`
+	PrescriptionPhotoCaption string `json:"prescription_photo_caption,omitempty"`
 }
 
 type generateGrowthDTO struct {
@@ -139,39 +146,44 @@ func sortGrowthNewestFirst(ms []profile.GrowthMeasurement) {
 // saved record must be rejected as a generated book too: the failure it prevents -- a region
 // the corpus does not carry, silently producing a book ranked against nothing -- is about the
 // book, not about the row.
-func (h *Handlers) decodeGenerate(w http.ResponseWriter, r *http.Request) (profile.Stored, *book.ChildPhoto, *book.ChildPhoto, bool) {
+func (h *Handlers) decodeGenerate(w http.ResponseWriter, r *http.Request) (profile.Stored, *book.ChildPhoto, *book.ChildPhoto, *book.ChildPhoto, bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxGenerateBody)
 
 	var req generateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "malformed request body: "+err.Error())
-		return profile.Stored{}, nil, nil, false
+		return profile.Stored{}, nil, nil, nil, false
 	}
 
 	s, err := req.toStored()
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
-		return profile.Stored{}, nil, nil, false
+		return profile.Stored{}, nil, nil, nil, false
 	}
 	if msg, err := h.validateProfileVocabularies(r.Context(), s); err != nil {
 		writeError(w, http.StatusInternalServerError, "vocabulary check failed: "+err.Error())
-		return profile.Stored{}, nil, nil, false
+		return profile.Stored{}, nil, nil, nil, false
 	} else if msg != "" {
 		writeError(w, http.StatusBadRequest, msg)
-		return profile.Stored{}, nil, nil, false
+		return profile.Stored{}, nil, nil, nil, false
 	}
 
 	photo, err := book.ParsePhoto(req.PhotoDataURI, req.PhotoCaption)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
-		return profile.Stored{}, nil, nil, false
+		return profile.Stored{}, nil, nil, nil, false
 	}
 	parentsPhoto, err := book.ParsePhoto(req.ParentsPhotoDataURI, req.ParentsPhotoCaption)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
-		return profile.Stored{}, nil, nil, false
+		return profile.Stored{}, nil, nil, nil, false
 	}
-	return s, photo, parentsPhoto, true
+	prescriptionPhoto, err := book.ParsePhoto(req.PrescriptionPhotoDataURI, req.PrescriptionPhotoCaption)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return profile.Stored{}, nil, nil, nil, false
+	}
+	return s, photo, parentsPhoto, prescriptionPhoto, true
 }
 
 // slugOrDefault turns a child's name into something safe to put in a filename.
@@ -209,11 +221,11 @@ func slugOrDefault(name, fallback string) string {
 //
 // The console's primary action. No child id, no saved profile, no second step.
 func (h *Handlers) BookGenerate(w http.ResponseWriter, r *http.Request) {
-	s, photo, parentsPhoto, ok := h.decodeGenerate(w, r)
+	s, photo, parentsPhoto, prescriptionPhoto, ok := h.decodeGenerate(w, r)
 	if !ok {
 		return
 	}
-	resp, _, ok := h.renderSetWithPhotos(w, r, s, photo, parentsPhoto)
+	resp, _, ok := h.renderSetWithPhotos(w, r, s, photo, parentsPhoto, prescriptionPhoto)
 	if !ok {
 		return
 	}
@@ -231,11 +243,11 @@ func (h *Handlers) BookGenerateOne(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("unknown book %q: must be book1 or book2", which))
 		return
 	}
-	s, photo, parentsPhoto, ok := h.decodeGenerate(w, r)
+	s, photo, parentsPhoto, prescriptionPhoto, ok := h.decodeGenerate(w, r)
 	if !ok {
 		return
 	}
-	resp, set, ok := h.renderSetWithPhotos(w, r, s, photo, parentsPhoto)
+	resp, set, ok := h.renderSetWithPhotos(w, r, s, photo, parentsPhoto, prescriptionPhoto)
 	if !ok {
 		return
 	}
@@ -277,11 +289,11 @@ func omissionsFor(which string, resp bookSetResponse) []string {
 
 // BookGenerateZip runs one generation from inline inputs and returns both printed PDFs.
 func (h *Handlers) BookGenerateZip(w http.ResponseWriter, r *http.Request) {
-	s, photo, parentsPhoto, ok := h.decodeGenerate(w, r)
+	s, photo, parentsPhoto, prescriptionPhoto, ok := h.decodeGenerate(w, r)
 	if !ok {
 		return
 	}
-	resp, set, ok := h.renderSetWithPhotos(w, r, s, photo, parentsPhoto)
+	resp, set, ok := h.renderSetWithPhotos(w, r, s, photo, parentsPhoto, prescriptionPhoto)
 	if !ok {
 		return
 	}

@@ -97,6 +97,8 @@ func TestGenerateRejectsWhatTheWritePathRejects(t *testing.T) {
 		// nothing before this fix-wave pass exercised that path with a malformed upload.
 		{"a parents' photo image type that cannot be printed", "printable image",
 			`{"date_of_birth":"2022-05-01","parents_photo_data_uri":"data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="}`},
+		{"a prescription photo image type that cannot be printed", "printable image",
+			`{"date_of_birth":"2022-05-01","prescription_photo_data_uri":"data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="}`},
 		{"a date that is not a date", "date", `{"date_of_birth":"01-05-2022"}`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -169,6 +171,39 @@ func TestGeneratePutsThePhotoOnBook1Cover(t *testing.T) {
 	}
 	if strings.Contains(got.Book2, "data:image/png;base64,"+parentsPNG) {
 		t.Fatal("the parents' photograph must not appear in book 2")
+	}
+}
+
+// An uploaded prescription photo is validated the same way the cover photos are, embedded
+// in Book 1 only, and replaces that page's blank form.
+func TestGeneratePutsThePrescriptionPhotoOnBook1(t *testing.T) {
+	const rxPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADElEQVQI12NgAAIAAAUAAen63NgAAAAASUVORK5CYII="
+	body := `{"display_name":"Rx Child","date_of_birth":"2022-05-01",
+	          "prescription_photo_data_uri":"data:image/png;base64,` + rxPNG + `",
+	          "prescription_photo_caption":"Dr Sen, follow-up"}`
+
+	rec := postGenerate(t, generateRouter(t), "/api/books/generate", body)
+	if rec.Code != 200 {
+		t.Fatalf("got %d: %s", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		Book1 string `json:"book1_html"`
+		Book2 string `json:"book2_html"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !strings.Contains(got.Book1, "data:image/png;base64,"+rxPNG) {
+		t.Fatal("the prescription photograph must be embedded in book 1")
+	}
+	if !strings.Contains(got.Book1, "Dr Sen, follow-up") {
+		t.Fatal("the prescription photo's caption must print")
+	}
+	if strings.Contains(got.Book1, "To be completed by the examining doctor") {
+		t.Fatal("with a prescription photo supplied, the blank form must not also print")
+	}
+	if strings.Contains(got.Book2, "data:image/png;base64,"+rxPNG) {
+		t.Fatal("the prescription photograph must not appear in book 2")
 	}
 }
 

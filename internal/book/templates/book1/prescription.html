@@ -1,22 +1,38 @@
 {{/* B1-PRESCRIPTION-01: a blank clinical note and follow-up sheet, for the examining doctor to
-     complete by hand at or after consultation.
+     complete by hand at or after consultation -- unless a real, already-written prescription
+     was uploaded, in which case that photograph prints instead. See the branch on
+     .Metadata.PrescriptionPhoto below.
 
      No provider workbook defines a prescription -- verified live, nothing in the imported
      schema mentions one. Everything a prescription would actually state (a finding, a
      diagnosis, a drug name, a dose, a referral) is a clinical judgement this project has no
      basis to compute: the same reason B1-004 (growth trend interpretation) stays permanently
-     unmapped, applied to an entire page rather than one callout. So this page prints exactly
-     two kinds of thing -- the child's own identity, already recorded and printed everywhere
-     else in this book, and blank writing lines for everything a clinician alone can supply.
-     A blank form drawn from a declared layout invents nothing; this is that, for a form no
-     provider table declares, which is why even the six priority-recommendation labels below
-     are a static, hand-written scaffold (see prescriptionPriorities in book1.go) rather than
-     five distinct question types this project would have had to invent from nothing.
+     unmapped, applied to an entire page rather than one callout. So the blank form prints
+     exactly two kinds of thing -- the child's own identity, already recorded and printed
+     everywhere else in this book, and blank writing lines for everything a clinician alone
+     can supply. A blank form drawn from a declared layout invents nothing; this is that, for
+     a form no provider table declares, which is why even the six priority-recommendation
+     labels below are a static, hand-written scaffold (see prescriptionPriorities in book1.go)
+     rather than five distinct question types this project would have had to invent from
+     nothing.
 
      The examining doctor's own name is a writing line too, not prefilled from anywhere on the
      stored profile -- nothing this project collects names who will actually see this specific
      child, and printing a guess would misattribute a real clinical document. */}}
 {{ define "B1-PRESCRIPTION-01" }}
+{{ with .Metadata.PrescriptionPhoto }}
+<section class="page-break">
+  <div class="page-head">
+    <p class="kicker">Clinical</p>
+    <h2>Prescription &amp; Recommendation</h2>
+    <p class="block-purpose">The doctor's own prescription for {{ $.Child.DisplayName }}, attached as provided.</p>
+  </div>
+  <figure class="prescription-photo">
+    <img src="{{ .DataURI }}" alt="">
+    {{ with .Caption }}<figcaption>{{ . }}</figcaption>{{ end }}
+  </figure>
+</section>
+{{ else }}
 <section class="page-break">
   <div class="page-head">
     <p class="kicker">Clinical</p>
@@ -102,4 +118,5 @@
     </tbody>
   </table>
 </section>
+{{ end }}
 {{ end }}

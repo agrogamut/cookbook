@@ -46,6 +46,20 @@ type Metadata struct {
 	// size cap, base64, no SVG) are identical for any uploaded cover image regardless
 	// of who is in it.
 	ParentsPhoto *ChildPhoto `json:"-"`
+	// PrescriptionPhoto is an operator-uploaded photograph or scan of a prescription a
+	// doctor has already written and signed on paper, printed on B1-PRESCRIPTION-01 in
+	// place of that page's blank form. Book 1 only. Reuses ChildPhoto/ParsePhoto for the
+	// same reason ParentsPhoto does -- this is a real document someone already holds,
+	// embedded verbatim, not content this project computes or drafts.
+	//
+	// This does not reopen the 25 August "generated blank prescription page" ruling: the
+	// system still never fills in a finding, a drug name or a dose from form answers. It
+	// only lets an operator attach a real, already-written prescription instead of the
+	// hand-merge workaround CLAUDE.md's Prescription amendment describes -- the
+	// same-class decision as any other operator photo upload, not a change to what this
+	// project is willing to invent. The blank form stays the fallback when no photograph
+	// is attached, unchanged.
+	PrescriptionPhoto *ChildPhoto `json:"-"`
 }
 
 // ChildSummary is the personalization the provider's prototype actually relies on: the

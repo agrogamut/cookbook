@@ -70,6 +70,18 @@ export function ChildInputForm({
   const [photo, setPhoto] = useState<{ dataUri: string; name: string } | null>(null);
   const [caption, setCaption] = useState("");
   const [photoError, setPhotoError] = useState("");
+  // Book 1's back cover -- a separate upload from the front cover's child photo above, of
+  // whoever the family wants on the closing page. Optional, same as the front cover.
+  const [parentsPhoto, setParentsPhoto] = useState<{ dataUri: string; name: string } | null>(null);
+  const [parentsCaption, setParentsCaption] = useState("");
+  const [parentsPhotoError, setParentsPhotoError] = useState("");
+  // A photograph or scan of a prescription a doctor has already written and signed on paper.
+  // Printed on B1-PRESCRIPTION-01 in place of that page's blank form -- see
+  // internal/book/templates/book1/prescription.html. Not a diagnosis or dose entered here:
+  // this attaches a real document someone already holds.
+  const [prescriptionPhoto, setPrescriptionPhoto] = useState<{ dataUri: string; name: string } | null>(null);
+  const [prescriptionCaption, setPrescriptionCaption] = useState("");
+  const [prescriptionPhotoError, setPrescriptionPhotoError] = useState("");
 
   const [regions, setRegions] = useState<Region[]>([]);
   const [cuisines, setCuisines] = useState<Cuisine[]>([]);
@@ -92,19 +104,25 @@ export function ChildInputForm({
     set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
   }
 
-  function readPhoto(file: File) {
-    setPhotoError("");
+  // Shared by all three photo fields (front cover, back cover, prescription): same allowlist,
+  // same size cap, same failure modes, just a different pair of setters to land in.
+  function readPhotoInto(
+    file: File,
+    setValue: (p: { dataUri: string; name: string } | null) => void,
+    setError: (message: string) => void,
+  ) {
+    setError("");
     if (!photoTypes.includes(file.type)) {
-      setPhotoError(`${file.type || "that file"} cannot be printed. Use PNG, JPEG or WebP.`);
+      setError(`${file.type || "that file"} cannot be printed. Use PNG, JPEG or WebP.`);
       return;
     }
     if (file.size > maxPhotoBytes) {
-      setPhotoError(`${(file.size / 1048576).toFixed(1)} MB is over the 8 MB limit.`);
+      setError(`${(file.size / 1048576).toFixed(1)} MB is over the 8 MB limit.`);
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => setPhoto({ dataUri: String(reader.result), name: file.name });
-    reader.onerror = () => setPhotoError("Could not read that file.");
+    reader.onload = () => setValue({ dataUri: String(reader.result), name: file.name });
+    reader.onerror = () => setError("Could not read that file.");
     reader.readAsDataURL(file);
   }
 
@@ -127,6 +145,10 @@ export function ChildInputForm({
       ],
       photo_data_uri: photo?.dataUri,
       photo_caption: caption || undefined,
+      parents_photo_data_uri: parentsPhoto?.dataUri,
+      parents_photo_caption: parentsCaption || undefined,
+      prescription_photo_data_uri: prescriptionPhoto?.dataUri,
+      prescription_photo_caption: prescriptionCaption || undefined,
     };
     if (specialCare) {
       input.conditions = [{
@@ -342,7 +364,7 @@ export function ChildInputForm({
           <div className={field}>
             <Label htmlFor="g-photo">Image</Label>
             <Input id="g-photo" type="file" accept="image/png,image/jpeg,image/webp"
-                   onChange={(e) => { const f = e.target.files?.[0]; if (f) readPhoto(f); }} />
+                   onChange={(e) => { const f = e.target.files?.[0]; if (f) readPhotoInto(f, setPhoto, setPhotoError); }} />
           </div>
           <div className={field}>
             <Label htmlFor="g-caption">Caption</Label>
@@ -363,6 +385,73 @@ export function ChildInputForm({
           )}
         </div>
         {photoError && <p className="text-xs text-destructive">{photoError}</p>}
+      </section>
+
+      <section className="space-y-2">
+        <p className={legend}>Back cover photograph</p>
+        <p className="text-xs text-muted-foreground">
+          Optional. Prints full-bleed on Book 1&apos;s closing page &mdash; typically the
+          parents, separately from the child&apos;s photo on the front cover above.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className={field}>
+            <Label htmlFor="g-parents-photo">Image</Label>
+            <Input id="g-parents-photo" type="file" accept="image/png,image/jpeg,image/webp"
+                   onChange={(e) => { const f = e.target.files?.[0]; if (f) readPhotoInto(f, setParentsPhoto, setParentsPhotoError); }} />
+          </div>
+          <div className={field}>
+            <Label htmlFor="g-parents-caption">Caption</Label>
+            <Input id="g-parents-caption" value={parentsCaption} onChange={(e) => setParentsCaption(e.target.value)}
+                   placeholder="e.g. Aarav's parents, July 2026" />
+          </div>
+          {parentsPhoto && (
+            <div className="space-y-1">
+              <Label className="text-xs">Preview</Label>
+              <div className="flex items-center gap-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={parentsPhoto.dataUri} alt="Back cover preview"
+                     className="h-16 w-16 rounded border object-cover" />
+                <Button type="button" variant="ghost" size="sm"
+                        onClick={() => { setParentsPhoto(null); setParentsPhotoError(""); }}>Remove</Button>
+              </div>
+            </div>
+          )}
+        </div>
+        {parentsPhotoError && <p className="text-xs text-destructive">{parentsPhotoError}</p>}
+      </section>
+
+      <section className="space-y-2">
+        <p className={legend}>Prescription photograph</p>
+        <p className="text-xs text-muted-foreground">
+          Optional. A photo or scan of a prescription the doctor has already written and
+          signed on paper. Prints on the Prescription &amp; Recommendation page in place of
+          the blank form &mdash; this attaches a real document, it does not generate one.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className={field}>
+            <Label htmlFor="g-rx-photo">Image</Label>
+            <Input id="g-rx-photo" type="file" accept="image/png,image/jpeg,image/webp"
+                   onChange={(e) => { const f = e.target.files?.[0]; if (f) readPhotoInto(f, setPrescriptionPhoto, setPrescriptionPhotoError); }} />
+          </div>
+          <div className={field}>
+            <Label htmlFor="g-rx-caption">Caption</Label>
+            <Input id="g-rx-caption" value={prescriptionCaption} onChange={(e) => setPrescriptionCaption(e.target.value)}
+                   placeholder="e.g. Dr Sen, follow-up visit" />
+          </div>
+          {prescriptionPhoto && (
+            <div className="space-y-1">
+              <Label className="text-xs">Preview</Label>
+              <div className="flex items-center gap-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={prescriptionPhoto.dataUri} alt="Prescription preview"
+                     className="h-16 w-16 rounded border object-cover" />
+                <Button type="button" variant="ghost" size="sm"
+                        onClick={() => { setPrescriptionPhoto(null); setPrescriptionPhotoError(""); }}>Remove</Button>
+              </div>
+            </div>
+          )}
+        </div>
+        {prescriptionPhotoError && <p className="text-xs text-destructive">{prescriptionPhotoError}</p>}
       </section>
 
       <div className="flex items-center gap-3 border-t pt-4">

@@ -239,6 +239,10 @@ export interface GenerateInput {
   }[];
   photo_data_uri?: string;
   photo_caption?: string;
+  parents_photo_data_uri?: string;
+  parents_photo_caption?: string;
+  prescription_photo_data_uri?: string;
+  prescription_photo_caption?: string;
 }
 
 /** One generation run from inline inputs. Returns both books. */

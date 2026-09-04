@@ -7,16 +7,37 @@
 # Deploy: New > Blueprint in the Render dashboard, pointed at this repository. Render reads
 # this file and creates all three.
 
-databases:
-  - name: madamgy-db
-    databaseName: recipie
-    user: recipie
-    # A free Render database is deleted 30 days after creation. Nothing here is precious --
-    # the provider workbooks are committed and the importer rebuilds the whole database from
-    # them -- but a child profile entered through the console is not in that set and would go
-    # with it. Move off free before anyone records a real child.
-    plan: free
-    postgresMajorVersion: "16"
+# madamgy-db (Render Postgres, free plan) previously lived here as a `databases:` entry.
+# Removed 2026-09-05: the free plan's 30-day expiry (this instance was 13 days from deletion
+# when the move was made) is exactly the risk its own comment warned about -- "move off free
+# before anyone records a real child" -- and Postgres is now Supabase instead, per this
+# project's own stated fullstack default ("Prod via Supabase using the transaction pooler
+# port 6543 -- never the direct IPv6-only host"). The Render Postgres instance itself is not
+# deleted by removing it here; a Blueprint sync does not tear down resources it no longer
+# declares. Deleting the old `madamgy-db` instance in the Render dashboard is a separate,
+# deliberate step once Supabase is confirmed steady.
+#
+# madamgy-api's DATABASE_URL below changed from `fromDatabase` to a `sync: false` secret for
+# exactly the reason GEMINI_API_KEY already uses that pattern -- the real Supabase connection
+# string is not committed here.
+#
+# Two things this move required that a plain host swap would not have:
+#   1. The transaction-mode pooler (port 6543) breaks golang-migrate's own connection under
+#      pgx's default extended query protocol -- "prepared statement ... already exists"
+#      (SQLSTATE 42P05), because the pooler can route consecutive statements to different
+#      backend connections that do not share pgx's client-side statement cache. Fixed by
+#      appending `?default_query_exec_mode=simple_protocol` to the connection string --
+#      recognized directly by pgx.ParseConfig, so this needed no code change in internal/db.
+#   2. Supabase's default project setup grants `anon`/`authenticated` full
+#      SELECT/INSERT/UPDATE/DELETE on every table created in `public`, including
+#      `child_profile` and its four related tables -- real names, dates of birth, allergies,
+#      clinical conditions. That is Supabase's own Data API (PostgREST) exposure, a layer
+#      this project never had an opinion about because it never had one before. Closed by
+#      enabling row-level security with zero policies on every public table, run once
+#      directly against the database: `anon`/`authenticated` are now denied at every row,
+#      and the API's own connection is unaffected because RLS does not restrict a table's
+#      owner. Not expressed in this file because it is a one-time database-level change, not
+#      a Render resource.
 
 services:
   # ---------------------------------------------------------------------------------------
@@ -37,10 +58,12 @@ services:
     plan: free
     healthCheckPath: /healthz
     envVars:
+      # Supabase, transaction pooler (port 6543), with default_query_exec_mode=simple_protocol
+      # -- see the note above the `services:` key for why both of those are load-bearing, not
+      # stylistic. sync: false, same as GEMINI_API_KEY below: the real connection string is
+      # set once in the Render dashboard (madamgy-api service > Environment), never committed.
       - key: DATABASE_URL
-        fromDatabase:
-          name: madamgy-db
-          property: connectionString
+        sync: false
 
       # Load the provider's 14 workbooks on first boot. The importer is idempotent -- upsert
       # plus a sweep, every table content-hashed -- so leaving this set is safe, but it adds
