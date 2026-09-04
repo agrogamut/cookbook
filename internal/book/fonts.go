@@ -32,6 +32,9 @@ var poppins800 []byte
 //go:embed assets/fonts/poppins-600italic.woff2
 var poppins600Italic []byte
 
+//go:embed assets/fonts/poppins-400italic.woff2
+var poppins400Italic []byte
+
 func fontFaceRule(weight int, italic bool, data []byte) string {
 	style := "normal"
 	if italic {
@@ -54,5 +57,6 @@ var fontFacesCSS = template.CSS(
 		fontFaceRule(600, false, poppins600) + "\n" +
 		fontFaceRule(700, false, poppins700) + "\n" +
 		fontFaceRule(800, false, poppins800) + "\n" +
-		fontFaceRule(600, true, poppins600Italic),
+		fontFaceRule(600, true, poppins600Italic) + "\n" +
+		fontFaceRule(400, true, poppins400Italic),
 )

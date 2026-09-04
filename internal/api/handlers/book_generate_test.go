@@ -93,6 +93,10 @@ func TestGenerateRejectsWhatTheWritePathRejects(t *testing.T) {
 			`{"date_of_birth":"2022-05-01","allergens":[{"group":"Peanut","status":"maybe","source":"parent_reported"}]}`},
 		{"an image type that cannot be printed", "printable image",
 			`{"date_of_birth":"2022-05-01","photo_data_uri":"data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="}`},
+		// The parents' photo is validated by the same book.ParsePhoto as the child's own, and
+		// nothing before this fix-wave pass exercised that path with a malformed upload.
+		{"a parents' photo image type that cannot be printed", "printable image",
+			`{"date_of_birth":"2022-05-01","parents_photo_data_uri":"data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="}`},
 		{"a date that is not a date", "date", `{"date_of_birth":"01-05-2022"}`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -116,11 +120,19 @@ func TestGenerateRequiresDateOfBirth(t *testing.T) {
 	}
 }
 
-// A supplied photograph reaches the cover, and only Book 1's.
+// A supplied photograph reaches the cover, and only Book 1's. Both the child's own photo
+// (front cover) and the parents' photo (back cover, added later than the child's) are covered
+// here, together, since they are validated and embedded the same way and must both stay off
+// Book 2, a working recipe document with no photo upload of any kind.
 func TestGeneratePutsThePhotoOnBook1Cover(t *testing.T) {
 	const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+	// A second, distinct PNG (a real 1x1 red pixel, not a copy of the fixture above) so a
+	// bytes.Contains match against it can only mean the parents' photo specifically, never a
+	// coincidental match against the child's photo or an embedded illustration.
+	const parentsPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
 	body := `{"display_name":"Photo Child","date_of_birth":"2022-05-01",
-	          "photo_data_uri":"data:image/png;base64,` + png + `","photo_caption":"With her mother"}`
+	          "photo_data_uri":"data:image/png;base64,` + png + `","photo_caption":"With her mother",
+	          "parents_photo_data_uri":"data:image/png;base64,` + parentsPNG + `","parents_photo_caption":"Mum and dad"}`
 
 	rec := postGenerate(t, generateRouter(t), "/api/books/generate", body)
 	if rec.Code != 200 {
@@ -139,13 +151,24 @@ func TestGeneratePutsThePhotoOnBook1Cover(t *testing.T) {
 	if !strings.Contains(got.Book1, "With her mother") {
 		t.Fatal("the caption must print with the photograph")
 	}
+	// The parents' photo belongs on Book 1's back cover, the same book as the child's own
+	// front-cover photo -- both are the child's own book, just its two different covers.
+	// Unlike the front-cover photo, end.html prints no caption line for the parents' photo
+	// (see book1/end.html), so the assertion here is scoped to the photo's own bytes, not a
+	// caption string -- matching what the back cover actually renders today.
+	if !strings.Contains(got.Book1, "data:image/png;base64,"+parentsPNG) {
+		t.Fatal("the parents' photograph must be embedded in book 1")
+	}
 	// Book 2 is a recipe book; a portrait there is decoration on a working document. Book 2's
 	// own cover legitimately embeds PNG data URIs now -- the decorative corner illustrations
 	// and the kids-cooking hero image, all package-embedded and unrelated to any child (see
 	// internal/book/coverart.go) -- so the check has to be specific to the uploaded child
 	// photograph's own bytes, not "any PNG at all".
 	if strings.Contains(got.Book2, "data:image/png;base64,"+png) {
-		t.Fatal("the photograph must not appear in book 2")
+		t.Fatal("the child's photograph must not appear in book 2")
+	}
+	if strings.Contains(got.Book2, "data:image/png;base64,"+parentsPNG) {
+		t.Fatal("the parents' photograph must not appear in book 2")
 	}
 }
 

@@ -179,7 +179,21 @@ func TestUnrecordedValueRendersAsAWritingLine(t *testing.T) {
 	if !strings.Contains(blank, line) {
 		t.Fatal("an unrecorded value must render as a writing line")
 	}
-	if strings.Contains(blank, ">0<") || strings.Contains(blank, "n/a") {
+	// Scoped to the row's own <tr>...</tr>, not the whole document. Book1's body.html always
+	// renders B1-COVER-01 ahead of every section, including in this test's minimal fixture with
+	// no photo -- and that cover's no-photo state now carries embedded base64 PNG illustrations
+	// (a fix-wave addition, see book1/cover.html) plus the base64 woff2 font-face payloads in
+	// the inlined stylesheet. A base64 alphabet can and does contain "n/a" or ">0<"-shaped
+	// runs by pure chance across that much encoded binary data, which is not this row rendering
+	// a zero or a dash. Anchoring on the row's own label finds the one <tr> under test.
+	row := blank
+	if i := strings.Index(blank, "Feeding stage"); i >= 0 {
+		row = blank[i:]
+		if j := strings.Index(row, "</tr>"); j >= 0 {
+			row = row[:j]
+		}
+	}
+	if strings.Contains(row, ">0<") || strings.Contains(row, "n/a") {
 		t.Fatal("an unrecorded value must never render as zero or as a dash")
 	}
 
@@ -618,12 +632,35 @@ func TestBook1CoverPrintsTheChildPhotoAsAFullBleedBackground(t *testing.T) {
 	if !strings.Contains(out, `class="cover with-photo"`) {
 		t.Fatal("with a photo present, the cover must carry the with-photo variant class")
 	}
-	if !strings.Contains(out, "background-image:") {
+	if !strings.Contains(coverOpeningTag(t, out), "background-image:") {
 		t.Fatal("with a photo present, the cover must carry an inline full-bleed background-image")
 	}
 	if !strings.Contains(out, string(photo.DataURI)) {
 		t.Fatal("the child's own photo data URI must appear in the rendered cover")
 	}
+}
+
+// coverOpeningTag returns just the `<div class="cover ...">` opening tag's own text -- from
+// its `<div class="cover ` start through the first `>` that closes it -- rather than the whole
+// rendered document.
+//
+// TestBook1CoverWithNoPhotoPrintsNoBackgroundLayer used to search the entire document for
+// "background-image:", which inlines the whole stylesheet (tokens.css, via base.html's
+// {{ .CSS }}) into every rendered page. Any future @font-face, .corner-art, or other CSS rule
+// anywhere in tokens.css that happened to use a background-image property would fail that test
+// for a reason with nothing to do with the cover's own inline style attribute. Scoping the
+// search to the cover element's own opening tag is what the test actually means to assert.
+func coverOpeningTag(t *testing.T, html string) string {
+	t.Helper()
+	start := strings.Index(html, `<div class="cover `)
+	if start == -1 {
+		t.Fatal("no <div class=\"cover ...\"> element found in the rendered document")
+	}
+	end := strings.Index(html[start:], ">")
+	if end == -1 {
+		t.Fatal("the cover element's opening tag is never closed")
+	}
+	return html[start : start+end+1]
 }
 
 func TestBook1CoverWithNoPhotoPrintsNoBackgroundLayer(t *testing.T) {
@@ -635,7 +672,7 @@ func TestBook1CoverWithNoPhotoPrintsNoBackgroundLayer(t *testing.T) {
 	if err := RenderHTML(&buf, Kind1, b.Metadata, b); err != nil {
 		t.Fatalf("render: %v", err)
 	}
-	if strings.Contains(buf.String(), "background-image:") {
+	if strings.Contains(coverOpeningTag(t, buf.String()), "background-image:") {
 		t.Fatal("with no photo, the cover must not print an empty background-image")
 	}
 }

@@ -42,17 +42,19 @@ var templateFuncs = template.FuncMap{
 		return make([]struct{}, n)
 	},
 	// coverArt looks up one of the twelve embedded decorative illustrations by name (see
-	// coverart.go). This is a template function rather than a lookup through the renderContext
-	// field below, even though that field exists and carries the same map: html/template's `$`
-	// is reset to the argument of every {{template}} invocation ("no dynamic scoping" -- see
-	// text/template's exec.go, walkTemplate), and Book2's block templates are invoked with the
-	// Book2 value itself as their dot (body.html's `{{ template "B2-COVER-01" $b }}`), not with
-	// the render context that actually carries CoverArt. So `{{ index $.CoverArt "x" }}` inside
-	// a Book2 block template resolves $ to Book2, not to renderContext, and fails at execution
-	// time with "can't evaluate field CoverArt in type book.Book2" -- confirmed by hand before
-	// writing this comment, not assumed. A closure over the same package-level map sidesteps
-	// the scoping question: it needs no dot at all, so it works identically no matter which
-	// value a template happens to be invoked with.
+	// coverart.go). This is a template function rather than a lookup through a renderContext
+	// field, because html/template's `$` is reset to the argument of every {{template}}
+	// invocation ("no dynamic scoping" -- see text/template's exec.go, walkTemplate), and
+	// Book2's block templates are invoked with the Book2 value itself as their dot (body.html's
+	// `{{ template "B2-COVER-01" $b }}`), not with the render context. So a hypothetical
+	// `{{ index $.CoverArt "x" }}` inside a Book2 block template resolves $ to Book2, not to
+	// renderContext, and fails at execution time with "can't evaluate field CoverArt in type
+	// book.Book2" -- confirmed by hand before writing this comment, not assumed. renderContext
+	// carried a CoverArt field for exactly that broken access pattern once; it was never read by
+	// any template and was deleted rather than left as a trap for a future editor. A closure
+	// over the same package-level map sidesteps the scoping question entirely: it needs no dot
+	// at all, so it works identically no matter which value a template happens to be invoked
+	// with.
 	"coverArt": func(key string) template.URL {
 		v, ok := coverArt[key]
 		if !ok {
@@ -68,12 +70,7 @@ type renderContext struct {
 	CSS       template.CSS
 	FontFaces template.CSS
 	Watermark template.URL
-	// CoverArt carries the same package-level map the coverArt template function reads. It is
-	// threaded here too, for templates executed directly against the render context (base.html
-	// and any future top-level block), even though the coverArt function is what a Book1/Book2
-	// block template must use in practice -- see that function's own comment.
-	CoverArt map[string]template.URL
-	Data     any
+	Data      any
 }
 
 // RenderHTML writes one book as a standalone HTML document. The output is both the reviewer
@@ -105,7 +102,6 @@ func RenderHTML(w io.Writer, kind Kind, meta Metadata, data any) error {
 		CSS:       template.CSS(css),
 		FontFaces: fontFacesCSS,
 		Watermark: watermarkDataURI,
-		CoverArt:  coverArt,
 		Data:      data,
 	}
 	if err := t.ExecuteTemplate(w, "base.html", ctx); err != nil {

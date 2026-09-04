@@ -80,12 +80,21 @@
 /* cookbook_palette: one scheme across both books, supplied directly rather than derived --
    see the design spec section 2.1. --brand-deep is a darkened coral for AA-contrast heading
    text on the cream ground; check it against a printed proof (Task 4 step 6) before treating
-   it as final. */
+   it as final.
+
+   --accent was #f2a53d, a bright amber that measures 2.01:1 against --surface -- well under
+   even the 3:1 large-text floor, let alone the 4.5:1 normal-text floor WCAG AA requires. It
+   is the text colour of .callout/.note/.side-note h3, the clinical warning and note headings
+   avoid_color_only_meaning requires to carry real visual weight ("Warning: when to seek
+   advice"), so a fix-wave review flagged it as critical. Darkened to #9a5b12, the same warm
+   gold family as the original pre-redesign accent (#a8791d, itself only 3.785:1 and still
+   short of AA) -- #9a5b12 measures 5.29:1 against #fffcf6, computed with the same relative-
+   luminance method the design spec's Task 4 step 6 used for --brand-deep. */
 .book1, .book2 {
   --brand: #ff5858;
   --brand-deep: #c23c34;
   --surface: #fffcf6;
-  --accent: #f2a53d;
+  --accent: #9a5b12;
   --tint: #fdeee9;
 }
 
@@ -164,7 +173,12 @@ section + section { margin-top: 10mm; }
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--brand);
+  /* --brand-deep, not --brand: this is body-size text (--caption-size), and --brand
+     measures 3.02:1 on --surface -- below the 4.5:1 AA floor for normal text. --brand
+     stays correct on large numerals (.chapter-num, .recipe-num), rules and borders, and
+     the .meter fill, where it is either already AA-large-compliant or contrast rules do
+     not apply. */
+  color: var(--brand-deep);
   margin: 0 0 2.5mm;
 }
 .page-head h2 {
@@ -473,7 +487,7 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   background-position: center;
   background-repeat: no-repeat;
 }
-/* position: relative, added for Book 2's illustrated cover, not Book 1's: Book 2's corner
+/* position: relative, added for Book 2's illustrated cover originally: Book 2's corner
    illustrations are a `.cover-bg-illustrated` layer (`position: absolute; z-index: 0`) that is
    an earlier DOM sibling of `.cover-card`. Painting order in CSS2.1 is per stacking context --
    an explicit z-index (even 0) lifts an element into the "positioned" paint bucket, which
@@ -482,8 +496,11 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    painted over it and hid the card's text. `position: relative` (no z-index needed -- normal
    in-flow stacking already puts a later positioned sibling above an earlier one) lifts the
    card into the same bucket, painted in DOM order, so it paints after the illustrations and
-   stays legible. Confirmed harmless for Book 1: its cover has no earlier z-index'd sibling to
-   interact with -- the photo is `.cover`'s own `background-image`, not a layered `<img>`. */
+   stays legible. Book 1's with-photo cover has no earlier z-index'd sibling to interact with --
+   the photo is `.cover`'s own `background-image`, not a layered `<img>` -- but Book 1's
+   no-photo cover gained the identical `.cover-bg-illustrated` layer in a later fix-wave pass
+   (see book1/cover.html), so this rule is load-bearing there too now, by the same mechanism
+   proven on Book 2. */
 .cover-card {
   position: relative;
   background: var(--surface);
@@ -506,7 +523,9 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   font-weight: 600;
   letter-spacing: 0.24em;
   text-transform: uppercase;
-  color: var(--brand);
+  /* --brand-deep for the text colour, same AA-contrast reason as .page-head .kicker above
+     -- --brand stays on the border, a decorative rule rather than text. */
+  color: var(--brand-deep);
   padding-bottom: 3mm;
   border-bottom: 0.5mm solid var(--brand);
 }
@@ -544,30 +563,19 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   margin: 10mm 0 0;
 }
 .cover .cover-name-label { margin-bottom: 1.5mm; }
-/* The base declaration: pinned to the foot of the cover box, not pushed there by a margin --
-   see the note above .cover for why. Both books now nest `.cover-facts` inside `.cover-card`
-   (Book 1's own conversion, then Book 2's), so this absolute/pinned behaviour is never what
-   actually prints -- it is overridden back to normal flow by `.cover-card .cover-facts`
-   below, right after this rule so the override wins on equal specificity. Left in rather than
-   deleted: it is still the selector `.cover .cover-facts .label` etc. below build on, and a
-   `.cover-facts` outside `.cover-card` remains valid markup this rule would still apply to. */
+/* Normal flow inside the card, not pinned to the page foot -- the card itself carries the
+   tuned drop (see .cover.no-photo/.with-photo .cover-card above), so the facts row just sits
+   at the card's own bottom. Both books nest `.cover-facts` inside `.cover-card` (Book 1's own
+   conversion, then Book 2's), so there is no longer a case that needs the row pinned to the
+   page foot independently of the card -- an earlier absolutely-positioned version of this
+   rule, overridden back to static by a later, more specific one, was dead CSS the plan itself
+   called for deleting during Task 6 and a fix-wave pass caught having been missed. */
 .cover .cover-facts {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 4mm 6mm;
   border-top: 0.5mm solid var(--rule-strong);
   padding-top: 4mm;
-}
-/* A card-nested facts row: normal flow inside `.cover-card`, not pinned to the page foot --
-   the card itself carries the tuned drop, so the row just sits at the card's own bottom. Both
-   books use this shape now -- originally written for Book 1's card conversion, it applies
-   unchanged to Book 2's own facts row once Book 2's markup nests it inside `.cover-card` too. */
-.cover-card .cover-facts {
-  position: static;
   margin-top: 5mm;
 }
 .cover .cover-facts .label { display: block; margin-bottom: 1mm; }
@@ -596,16 +604,26 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 }
 /* The photo's own caption, printed directly under the card rather than under a small in-card
    portrait -- see the note above `.cover-photo-caption` in cover.html for why it is plain
-   normal flow rather than pinned to the photo itself. Set light against the photo it sits on,
-   with a text-shadow rather than a background strip so it reads on a light or a dark photo
-   alike without needing to know which it is. */
+   normal flow rather than pinned to the photo itself.
+
+   An earlier version set white text with a light text-shadow, on the reasoning that it would
+   read on a light or a dark photo alike. It does not: a low-opacity blur shadow does
+   essentially nothing against a near-white or overexposed phone photo, which real
+   operator-uploaded photographs sometimes are, and the caption became unreadable exactly
+   there. An opaque background chip behind the text guarantees legibility regardless of what is
+   behind it -- inline-block so the chip hugs the caption's own text rather than spanning the
+   full measure, centred by `.cover`'s own text-align: center since auto margins do nothing on
+   an inline-level box. */
 .cover-photo-caption {
+  display: inline-block;
   margin: 6mm auto 0;
   max-width: 116mm;
+  padding: 1.5mm 3mm;
+  border-radius: 2mm;
+  background: rgba(0, 0, 0, 0.5);
   font-family: var(--font-sans);
   font-size: var(--caption-size);
   color: #fff;
-  text-shadow: 0 0.3mm 1mm rgba(0, 0, 0, 0.55);
 }
 
 /* --------------------------------------------------------------------------------------
@@ -637,7 +655,9 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
   width: 12mm;
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  color: var(--brand);
+  /* --brand-deep, not --brand: this prints at --body-size, not as a large numeral, so the
+     4.5:1 AA floor applies rather than the 3:1 large-text floor. */
+  color: var(--brand-deep);
   font-weight: 600;
 }
 .contents-table .entry-id {
@@ -751,7 +771,9 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 .chapter li { margin: 0 0 2mm; }
 .chapter li .n {
   font-family: var(--font-mono);
-  color: var(--brand);
+  /* --brand-deep, not --brand: a chapter-opener list entry number prints at --body-size,
+     not as a large numeral like .chapter-num, so the 4.5:1 AA floor applies. */
+  color: var(--brand-deep);
   font-weight: 600;
   margin-right: 3mm;
 }
@@ -815,7 +837,7 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    partly-verified nutrition panel prints -- that was the difference between the page holding its
    tracker and spilling it onto a sheet of its own.
    
-   Safe because the strip is a grid container: it establishes its own formatting context, so it
+   Safe because the strip is a flex container: it establishes its own formatting context, so it
    narrows to the space beside the float instead of running under it and having its cells cut. */
 .metastrip { clear: none; }
 .recipe-head { display: flex; align-items: baseline; gap: 4mm; margin: 0 0 1mm; }
@@ -870,7 +892,13 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
 .metacell {
   min-width: 22mm;
   flex: 1;
-  padding: 0 4mm;
+  /* 2.5mm, not the 4mm this carried before: beside the 18mm dish-mark float (plus its 4mm
+     margin) the strip only has 148mm to lay out five cells in, and five cells at
+     min-width 22mm plus 0 4mm padding need about 150mm -- just enough to wrap the last
+     cell onto its own row on a one-line title, where the float clears above the strip on
+     a two-line title and never exposes it. 2.5mm brings the five-cell requirement to about
+     135mm, comfortably inside 148mm either way. */
+  padding: 0 2.5mm;
   position: relative;
   text-align: center;
 }
@@ -1276,7 +1304,16 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    source order, and is scoped to this one page rather than touching the shared rule every
    other page-break section also relies on. */
 .backcover-page { margin-top: 0; }
-.backcover { position: relative; min-height: 255mm; display: flow-root; }
+/* min-height was 255mm, the full usable text-block height, and sat exactly at the boundary
+   this file's own comment above .cover warns about: a box declared at exactly the
+   fragmentainer height is at the boundary Chromium treats as overflowing, which is why .cover
+   itself is deliberately set to 248mm, a few millimetres under. .backcover only worked at
+   255mm because .backcover-page's margin-top: 0 fix above happened to zero out the one
+   inherited margin that would otherwise have pushed it over -- a second, independent overflow
+   source landing on the same rule would have reintroduced the exact stray-page defect that fix
+   was written for, invisibly. Reduced to 250mm, a comparable few-millimetre safety margin to
+   .cover's own, rather than relying on there being no other future 5mm to trip over. */
+.backcover { position: relative; min-height: 250mm; display: flow-root; }
 .backcover-bg { position: absolute; inset: 0; z-index: 0; }
 .backcover-bg-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .backcover-card {

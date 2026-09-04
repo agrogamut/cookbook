@@ -26,7 +26,24 @@
      portrait. There is no figure any more -- the photo is the page's own background -- so the
      caption prints as its own line directly under the card instead, over the photo, in normal
      flow. See the note above for why a positioned photo layer would have painted over it. */}}
+{{/* The no-photo state carries its own decorative illustration layer, the same
+     cover-bg-illustrated/corner-art mechanism Book 2's cover uses (see book2/cover.html) --
+     without a photo this page was the one sheet in the whole redesign carrying no decoration
+     at all, a blank sheet with a small card floating on it. Scoped to the no-photo branch only:
+     the with-photo state already has a full-bleed photograph behind the card and needs nothing
+     added. Four different illustrations from the seven Book 2's own cover and chapter openers
+     do not already use, so this page doesn't repeat Book 2's exact corner set. Lookups go
+     through the coverArt template function, not `$.CoverArt` field access -- see render.go's
+     coverArt function comment for why that doesn't work inside a {{ template }}-invoked block. */}}
 <div class="cover {{ if .Child.Photo }}with-photo{{ else }}no-photo{{ end }}"{{ with .Child.Photo }} style="background-image: url('{{ .DataURI }}')"{{ end }}>
+  {{ if not .Child.Photo }}
+  <div class="cover-bg-illustrated">
+    <img class="corner-art corner-tl" src="{{ coverArt "dimsum" }}" alt="">
+    <img class="corner-art corner-tr" src="{{ coverArt "coconut" }}" alt="">
+    <img class="corner-art corner-bl" src="{{ coverArt "banana-leaf-rice" }}" alt="">
+    <img class="corner-art corner-br" src="{{ coverArt "wrapped-dumpling" }}" alt="">
+  </div>
+  {{ end }}
   <div class="cover-card">
     <div class="cover-kicker">MadamGY &middot; Growth, Nutrition &amp; Development</div>
     <h1>{{ .Child.DisplayName }}</h1>

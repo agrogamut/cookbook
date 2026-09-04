@@ -28,13 +28,16 @@ type Metadata struct {
 	Language       string    `json:"language"`
 	// Logo is the full MadamGY wordmark (see logo.go), set to the same package-level
 	// logoDataURI by both AssembleBook1 and AssembleBook2. It lives on Metadata rather than a
-	// renderContext field or a template.FuncMap entry because every one of the four templates
-	// that print it (both covers, both closing pages) is dispatched with a different pipeline
-	// (Book1, Book2, or Metadata alone -- see body.html in each book) and Metadata is the one
-	// struct all three already embed or equal. html/template rebinds "$" to each
-	// {{ template }} call's own pipeline rather than preserving the outermost Execute
-	// argument, so reaching upward with "$.Logo" does not work here -- confirmed the hard way,
-	// not assumed.
+	// renderContext field or a template.FuncMap entry because the templates that print it are
+	// dispatched with a different pipeline each (Book1, Book2, or Metadata alone -- see
+	// body.html in each book) and Metadata is the one struct all of them already embed or
+	// equal. html/template rebinds "$" to each {{ template }} call's own pipeline rather than
+	// preserving the outermost Execute argument, so reaching upward with "$.Logo" does not
+	// work here -- confirmed the hard way, not assumed.
+	//
+	// Only the two closing pages (book1/end.html, book2/end.html) print it now -- both covers
+	// stopped once this redesign gave each its own illustrated or photo background, and the
+	// mark would have competed with that art for the same small space.
 	Logo template.URL `json:"-"`
 	// ParentsPhoto is the back cover's optional full-bleed background, uploaded
 	// independently of Child.Photo (the front cover's photo). Book 1 only -- see
