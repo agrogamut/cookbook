@@ -142,10 +142,9 @@ func TestReferenceClinicalMarkersCoversEveryTriggerField(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
 	}
 	type markerValue struct {
-		Value     string `json:"value"`
-		RuleID    string `json:"rule_id"`
-		Loadable  bool   `json:"loadable"`
-		Escalates bool   `json:"escalates"`
+		Value    string `json:"value"`
+		RuleID   string `json:"rule_id"`
+		Loadable bool   `json:"loadable"`
 	}
 	var got []struct {
 		TriggerField    string        `json:"trigger_field"`
@@ -165,7 +164,7 @@ func TestReferenceClinicalMarkersCoversEveryTriggerField(t *testing.T) {
 		"less_than": true, "incompatible_with": true,
 	}
 
-	var escalatingMarkers int
+	var loadableMarkers int
 	byField := map[string][]markerValue{}
 	for _, m := range got {
 		if m.RuleIDs == "" {
@@ -186,50 +185,47 @@ func TestReferenceClinicalMarkersCoversEveryTriggerField(t *testing.T) {
 		if len(m.Values) == 0 {
 			t.Fatalf("%s reports zero values; every marker must carry at least one value", m.TriggerField)
 		}
-		var fieldEscalates bool
+		var fieldLoadable bool
 		for _, v := range m.Values {
 			if v.Value == "" {
 				t.Fatalf("%s carries a value entry with an empty value string", m.TriggerField)
 			}
-			if v.Escalates && !v.Loadable {
-				t.Fatalf("%s value %q reports escalates=true but loadable=false; an unloaded rule can never fire", m.TriggerField, v.Value)
-			}
-			if v.Escalates {
-				fieldEscalates = true
+			if v.Loadable {
+				fieldLoadable = true
 			}
 		}
-		if fieldEscalates {
-			escalatingMarkers++
+		if fieldLoadable {
+			loadableMarkers++
 		}
 		byField[m.TriggerField] = m.Values
 	}
-	if escalatingMarkers == 0 {
-		t.Fatal("no marker reports an escalating value, but the specialist tier is non-empty")
+	// The engine loads every domain but Age/Feeding and Data Quality, so the loadable set is
+	// most of the vocabulary rather than the handful the specialist tier used to be.
+	if loadableMarkers == 0 {
+		t.Fatal("no marker reports a loadable value, but clinicalFilter loads all but two domains")
 	}
 
-	// Finding 1, pinned: escalation is a per-value fact. Coeliac_Status must report both of
-	// its two values, with Confirmed escalating (CR-CEL-002, specialist tier) and
-	// Suspected_Not_Confirmed carrying loadable=false (CR-CEL-001 sits below the specialist
-	// tier and is not hard_exclude, so clinicalFilter's own query never loads it) -- a
-	// field-level bool_or would say the whole field holds, which is the bug this test kills.
+	// Loadability is a per-value fact and stays one after the 2026-09-05 gate removal, though
+	// for a narrower reason than before. Coeliac_Status is the case that proves it is still
+	// worth computing per value: both its rules sit in the Coeliac Disease domain, so both are
+	// loaded, and the field-level answer happens to match. The distinction survives because
+	// nothing guarantees that for a field whose rules span domains, and a field-level bool_or
+	// would report one answer for a field where the two values genuinely differ.
+	//
+	// The escalation half of this assertion is gone with the concept: Confirmed used to
+	// escalate through the specialist tier and Suspected_Not_Confirmed used to be unloaded
+	// entirely. Neither is true now -- the engine records both and blocks on neither.
 	coeliac := byField["Coeliac_Status"]
 	if len(coeliac) != 2 {
 		t.Fatalf("Coeliac_Status: expected exactly 2 values, got %d: %+v", len(coeliac), coeliac)
 	}
-	wantCoeliac := map[string]struct {
-		loadable, escalates bool
-	}{
-		"Confirmed":               {true, true},
-		"Suspected_Not_Confirmed": {false, false},
-	}
 	for _, v := range coeliac {
-		want, ok := wantCoeliac[v.Value]
-		if !ok {
+		if v.Value != "Confirmed" && v.Value != "Suspected_Not_Confirmed" {
 			t.Fatalf("Coeliac_Status: unexpected value %q", v.Value)
 		}
-		if v.Loadable != want.loadable || v.Escalates != want.escalates {
-			t.Fatalf("Coeliac_Status %q: loadable=%v escalates=%v, want loadable=%v escalates=%v",
-				v.Value, v.Loadable, v.Escalates, want.loadable, want.escalates)
+		if !v.Loadable {
+			t.Fatalf("Coeliac_Status %q: loadable=false, but Coeliac Disease is neither "+
+				"Age/Feeding nor Data Quality and clinicalFilter loads it", v.Value)
 		}
 	}
 
@@ -237,8 +233,8 @@ func TestReferenceClinicalMarkersCoversEveryTriggerField(t *testing.T) {
 	wantDiabetes := map[string]bool{"Type 1": true, "Type 2": true}
 	for _, v := range diabetes {
 		if wantDiabetes[v.Value] {
-			if !v.Escalates {
-				t.Fatalf("Diabetes_Type %q: expected escalates=true", v.Value)
+			if !v.Loadable {
+				t.Fatalf("Diabetes_Type %q: expected loadable=true", v.Value)
 			}
 			delete(wantDiabetes, v.Value)
 		}
@@ -247,26 +243,24 @@ func TestReferenceClinicalMarkersCoversEveryTriggerField(t *testing.T) {
 		t.Fatalf("Diabetes_Type missing value(s) %v", wantDiabetes)
 	}
 
-	// Finding 3, pinned, and it is a provider-drift alarm: if the provider makes any of
-	// these loadable, this test fails and someone must look.
+	// A provider-drift alarm: if the provider moves any of these out of its domain, or moves
+	// a new field into one, this test fails and someone must look.
 	//
-	// The set actually measured against the live workbook is FOURTEEN markers with no
-	// loadable value, not the eleven finding 3 names. It is the eleven named there, PLUS
-	// Age_Months and Texture_Skill (already known -- the prior commit marked both inert for
-	// an unsupported trigger_operator, and it turns out their rules are also never loaded:
-	// both sit in the Age/Feeding domain, which clinicalFilter's own WHERE clause excludes
-	// outright) AND Critical_Field_Completeness (Data Quality domain, excluded by the same
-	// clause, hard_exclude_yn='Y' but human_approval_level is 'Editorial/clinical workflow
-	// approval' rather than the specialist tier -- finding 3's enumeration missed it). The
-	// true set is pinned here rather than the predicted one.
+	// Four, down from fourteen before the 2026-09-05 gate removal. The old set was fourteen
+	// because `loadable` then meant "specialist tier or hard_exclude, and not in the two
+	// excluded domains", so ten ordinary clinical fields (Acute_Diarrhoea, Anemia_or_Iron_Risk,
+	// Constipation_Support and the rest) failed the first half of that test and were reported
+	// as offering nothing. The engine now loads every rule outside Age/Feeding and Data
+	// Quality, so those ten became loadable and the only fields left are the ones the two
+	// domain exclusions actually name.
+	//
+	// The two exclusions are structural rather than clinical: recipe_master's own age bounds
+	// enforce Age/Feeding, and Data Quality describes the dataset rather than the child.
 	wantNoLoadable := map[string]bool{
-		"Acute_Diarrhoea": true, "Age_Months": true, "Anemia_or_Iron_Risk": true,
-		"BMI_for_Age_Classification": true, "Bone_Health_Risk": true,
-		"Constipation_Support": true, "Critical_Field_Completeness": true,
-		"Diet_Type": true, "Force_Feeding_or_Cue_Issue": true,
-		"Growth_Faltering_Flag": true, "Multiple_Active_Rules": true,
-		"Post_Vaccine_Context": true, "Severe_Food_Aversion": true,
-		"Texture_Skill": true,
+		"Age_Months":                  true, // Age/Feeding
+		"Texture_Skill":               true, // Age/Feeding
+		"Critical_Field_Completeness": true, // Data Quality
+		"Multiple_Active_Rules":       true, // Data Quality
 	}
 	var gotNoLoadable []string
 	for field, values := range byField {
@@ -288,84 +282,6 @@ func TestReferenceClinicalMarkersCoversEveryTriggerField(t *testing.T) {
 	for _, field := range gotNoLoadable {
 		if !wantNoLoadable[field] {
 			t.Fatalf("%s has no loadable value but is not in the expected set -- provider drift, look at it", field)
-		}
-	}
-}
-
-// TestUnclassifiedMarkerValuesArePinned pins the invariant the console's
-// markerControl depends on. For a rule the engine loads and that fires there are exactly two
-// outcomes: it escalates, or clinicalFilter refuses the whole profile with an
-// unclassified-rule error. There is no third "filters something" outcome, because no
-// recipe-side column expresses these conditions.
-//
-// So a marker value with loadable = true and escalates = false always errors, and the
-// console must not offer it as a live control -- doing so promises a screen that cannot
-// happen, which is the false affordance this control has already been fixed for twice.
-//
-// Exactly one such rule exists today, CR-ALL-001, and it is invisible to the console only
-// because its trigger_operator is `contains`, which markerControl renders inert. That is a
-// coincidence of one column value, not a guarantee. If the provider adds an `equals` rule at
-// 'Clinical approval' with hard_exclude_yn = 'Y' in a domain outside escalationOnlyDomains,
-// this test fails -- and the right response is to classify that rule in the engine, not to
-// relax this assertion.
-func TestUnclassifiedMarkerValuesArePinned(t *testing.T) {
-	h := New(testPool(t), aidraft.Disabled)
-	req := httptest.NewRequest("GET", "/api/reference/clinical-markers", nil)
-	rec := httptest.NewRecorder()
-
-	h.ReferenceClinicalMarkers(rec, req)
-
-	if rec.Code != 200 {
-		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
-	}
-	var got []struct {
-		TriggerField    string `json:"trigger_field"`
-		TriggerOperator string `json:"trigger_operator"`
-		Values          []struct {
-			Value     string `json:"value"`
-			RuleID    string `json:"rule_id"`
-			Loadable  bool   `json:"loadable"`
-			Escalates bool   `json:"escalates"`
-		} `json:"values"`
-	}
-	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-
-	// The known set, pinned. CR-ALL-001 is loadable (hard_exclude_yn = 'Y') but sits at
-	// 'Clinical approval' in the Food Allergy domain, which escalationOnlyDomains does not
-	// name -- so firing it produces the engine's classification error rather than a hold.
-	// It is invisible to the console only because its operator is `contains`, which
-	// markerControl renders inert.
-	//
-	// A NEW entry here is the dangerous case, and an `equals` or `in_list` one especially:
-	// markerControl would offer it as a live control, and setting it would 500 rather than
-	// filter. The fix is to classify the rule in internal/engine/clinical.go -- at the
-	// specialist tier or in escalationOnlyDomains -- not to add it to this list.
-	want := map[string]bool{
-		"Confirmed_or_Highly_Suspected_Allergen=Allergen": true,
-	}
-
-	got2 := map[string]string{}
-	for _, m := range got {
-		for _, v := range m.Values {
-			if v.Loadable && !v.Escalates {
-				got2[m.TriggerField+"="+v.Value] = v.RuleID + ", operator " + m.TriggerOperator
-			}
-		}
-	}
-	for k, detail := range got2 {
-		if !want[k] {
-			t.Fatalf("new unclassified marker value %q (%s): the engine loads its rule and "+
-				"would refuse the profile rather than filter, and markerControl offers any "+
-				"equals/in_list value as a live control. Classify the rule in "+
-				"internal/engine/clinical.go rather than adding it here.", k, detail)
-		}
-	}
-	for k := range want {
-		if _, ok := got2[k]; !ok {
-			t.Fatalf("%q is no longer loadable-without-escalating. If its rule was classified, "+
-				"remove it from want and let markerControl offer it.", k)
 		}
 	}
 }

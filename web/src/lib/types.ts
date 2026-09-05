@@ -11,8 +11,10 @@ export interface ChildProfile {
    *  these are ranked down and never excluded. Distinct from `allergens`, which is step
    *  2's hard filter and is never relaxed. */
   suspected_allergens?: string[];
-  /** A special_care_condition_gate.condition_id. All six are STOP-REVIEW: the engine
-   *  blocks and names the required reviewer instead of returning a ranked list. */
+  /** A special_care_condition_gate.condition_id. All six are STOP-REVIEW in the provider's
+   *  master, and the engine used to stop on them. Since the 2026-09-05 gate removal it
+   *  records the provider's action, reviewer and stop text in the step list and ranks the
+   *  child like any other. */
   special_care_condition?: string;
   clinical_flags?: Record<string, string>;
   clinical_marker?: string;
@@ -89,14 +91,16 @@ export interface Allergen {
 }
 
 /** One selectable value for a clinical marker, and the truth the engine actually applies
- *  to it. loadable says whether internal/engine/clinical.go's clinicalFilter query would
- *  even see the rule behind this value; escalates says whether firing it holds generation
- *  for specialist review. escalates implies loadable -- an unloaded rule can never fire. */
+ *  to it. loadable says whether internal/engine/clinical.go's clinicalFilter query reads the
+ *  rule behind this value, which is every domain but Age/Feeding and Data Quality.
+ *
+ *  There was an `escalates` flag here saying whether firing the rule would hold generation
+ *  for specialist review. Nothing holds generation after the 2026-09-05 gate removal, so the
+ *  field went with the behaviour: a client cannot render a state the system cannot reach. */
 export interface ClinicalMarkerValue {
   value: string;
   rule_id: string;
   loadable: boolean;
-  escalates: boolean;
 }
 
 export interface ClinicalMarker {
@@ -109,9 +113,9 @@ export interface ClinicalMarker {
    *  operator (asserted by TestReferenceClinicalMarkersCoversEveryTriggerField).
    *  Determines which control renders. */
   trigger_operator: string;
-  /** Distinct trigger_value(s) for this field, each carrying its own loadable/escalates.
-   *  Escalation is a fact about a value, not the field -- see the handler's comment on
-   *  Coeliac_Status for why a field-level flag would lie. */
+  /** Distinct trigger_value(s) for this field, each carrying its own loadable. Loadability
+   *  is a fact about a value rather than the field -- see the handler's comment on
+   *  Coeliac_Status for why a field-level flag could lie. */
   values: ClinicalMarkerValue[];
 }
 

@@ -45,17 +45,14 @@ const CLINICAL_MARKERS = [
 const NONE = "__none__"; // Radix Select forbids an empty-string item value
 
 // A clinical flag must never be sendable as a value that cannot fire the rule it is named
-// after -- a badge reading "holds" next to a control that cannot actually trigger the hold
-// is a false assurance. markerControl is a whitelist that mirrors the engine's own
-// triggerFires switch (internal/engine/clinical.go) rather than inverting it: only the two
-// operators that switch actually implements a live case for produce a control here.
-// Everything else -- contains, less_than, incompatible_with, and any operator the provider
-// invents later -- renders inert, because nothing on this console could make it fire.
+// after. markerControl is a whitelist that mirrors the engine's own triggerFires switch
+// (internal/engine/clinical.go) rather than inverting it: only the two operators that switch
+// actually implements a live case for produce a control here. Everything else -- contains,
+// less_than, incompatible_with, and any operator the provider invents later -- renders
+// inert, because nothing on this console could make it fire.
 //
-// Within a supported operator, only VALUES the engine's own query would load are ever
-// offered. A value with loadable=false (e.g. Coeliac_Status's Suspected_Not_Confirmed) is
-// real data the provider recorded, but clinicalFilter's WHERE clause never reads the rule
-// behind it, so offering it as a live control would promise a hold that cannot happen.
+// Within a supported operator, only VALUES the engine's own query loads are offered. That is
+// now nearly all of them: clinicalFilter loads every domain but Age/Feeding and Data Quality.
 //
 // trigger_operator is singular and pure per marker (asserted by
 // TestReferenceClinicalMarkersCoversEveryTriggerField), so this is a function of the
@@ -70,37 +67,30 @@ function markerControl(m: ClinicalMarker): MarkerControl {
   const op = m.trigger_operator;
   if (op !== "equals" && op !== "in_list") {
     const note = op === "contains"
-      ? "matches a substring, not an exact value -- firing this rule trips the engine's " +
-        "unclassified-rule error by design. A confirmed allergen belongs in Declared " +
-        "allergens above, not here."
+      ? "matches a substring rather than an exact value, so this console has no control " +
+        "shape for it. A confirmed allergen belongs in Declared allergens above, not here."
       : `trigger_operator "${op}" has no case in the engine's own switch -- nothing here could fire it, so no control is offered.`;
     return { kind: "inert", note };
   }
-  // Only escalating values are offerable, and `loadable` alone is not enough to qualify.
-  // For a rule the engine loads and that fires there are exactly two outcomes, never three:
-  // it escalates (blocked = true, with the provider's specialist named), or the engine
-  // refuses the whole profile with an unclassified-rule error. There is no "filters
-  // something" outcome, because no recipe-side column expresses these conditions. So a value
-  // with loadable = true and escalates = false always errors, and offering it as a live
-  // control would promise a screen that cannot happen -- the same false affordance this
-  // control has already been fixed for twice.
+  // Offerable is now simply "the engine loads this rule", and that is a much wider set than
+  // it was: 27 of 28 trigger fields rather than 13.
   //
-  // Today exactly one such rule exists (CR-ALL-001) and it is unreachable only because its
-  // operator is `contains`, caught by the whitelist above. That is a coincidence of one
-  // column value, not a guarantee: an `equals` rule at 'Clinical approval' with
-  // hard_exclude_yn = 'Y' outside the ten escalation domains would reinstate the bug.
-  // TestUnclassifiedMarkerValuesArePinned pins the known set so a new one breaks the build.
-  const offerable = m.values.filter((v) => v.loadable && v.escalates);
-  const refusing = m.values.filter((v) => v.loadable && !v.escalates);
+  // This used to also require `escalates`, on the reasoning that a loaded rule which fired
+  // had exactly two outcomes -- hold generation for specialist review, or trip the engine's
+  // unclassified-rule error -- and never a third "filters something" outcome, so a
+  // non-escalating value was a false affordance. Both of those outcomes were deleted by the
+  // 2026-09-05 gate removal. A loaded rule that fires is now recorded in the engine's step
+  // list with the provider's own escalation_reason and specialist_required text, and it
+  // feeds nutrition-target selection and the drafted modification notes. That is a real
+  // effect, so every loadable value is a real control.
+  const offerable = m.values.filter((v) => v.loadable);
   const mixedCount = m.values.length - offerable.length;
   if (offerable.length === 0) {
     return {
       kind: "inert",
-      note: refusing.length > 0
-        ? "the engine loads a rule for this marker but cannot classify it, so setting it " +
-          "would make generation refuse rather than filter. Nothing is offered here."
-        : "the engine has no rule it can act on for this marker -- every value the provider " +
-          "recorded here sits below the tier clinicalFilter loads.",
+      note: "the engine loads no rule for this marker -- it sits in Age/Feeding, which " +
+        "recipe_master's own age bounds already enforce, or in Data Quality, which " +
+        "describes the dataset rather than the child.",
     };
   }
   if (offerable.length === 1) {
@@ -428,11 +418,11 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
                 <div className="flex flex-col gap-1.5">
                   {markerOptions.map((m) => {
                     const control = markerControl(m);
-                    // "holds" is a fact about a VALUE, not the field (finding 1). When something
-                    // is selected, show it only if that selected value escalates. When nothing is
-                    // selected, show it if any of the marker's values escalate -- a true statement
-                    // about the marker that primes the operator before they pick anything.
-                    const anyEscalates = m.values.some((v) => v.escalates);
+                    // No "holds" badge any more. It said this value would stop generation for
+                    // specialist review, which nothing does after the 2026-09-05 gate removal --
+                    // a badge for a state the system cannot reach is worse than no badge. What a
+                    // set flag does now is in the title: the rules it fires and their engine
+                    // actions, which is what the operator can actually act on.
                     const title = `${m.rule_ids} - ${m.engine_actions}`;
 
                     if (control.kind === "inert") {
@@ -446,7 +436,6 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
 
                     if (control.kind === "toggle") {
                       const on = clinicalFlags[m.trigger_field] === control.value.value;
-                      const holds = on ? control.value.escalates : anyEscalates;
                       return (
                         <div key={m.trigger_field} className="flex items-center gap-2">
                           <button
@@ -457,14 +446,11 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
                             aria-label={m.trigger_field}
                             className="focus-visible:ring-ring w-fit rounded focus-visible:outline-none focus-visible:ring-2"
                           >
-                            <Badge variant={on ? "default" : "outline"} className={holds ? "border-destructive" : ""}>
-                              {m.trigger_field}
-                              {holds && " - holds"}
-                            </Badge>
+                            <Badge variant={on ? "default" : "outline"}>{m.trigger_field}</Badge>
                           </button>
                           {control.mixedCount > 0 && (
                             <span className="text-xs text-muted-foreground">
-                              +{control.mixedCount} recorded value(s) not offered: no loadable rule, or a loaded rule the engine cannot classify
+                              +{control.mixedCount} recorded value(s) not offered: the engine loads no rule for them
                             </span>
                           )}
                         </div>
@@ -478,12 +464,11 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
                     // that cannot happen.
                     const current = clinicalFlags[m.trigger_field] ?? NONE;
                     const selected = control.values.find((v) => v.value === current);
-                    const holds = selected ? selected.escalates : anyEscalates;
+
                     return (
                       <div key={m.trigger_field} className="flex items-center gap-2" title={title}>
-                        <Badge variant={current !== NONE ? "default" : "outline"} className={holds ? "border-destructive" : ""}>
+                        <Badge variant={current !== NONE ? "default" : "outline"}>
                           {m.trigger_field}
-                          {holds && " - holds"}
                         </Badge>
                         <Select
                           value={current}
@@ -497,14 +482,13 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
                             {control.values.map((v) => (
                               <SelectItem key={v.value} value={v.value}>
                                 {v.value}
-                                {v.escalates && " (holds)"}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                         {control.mixedCount > 0 && (
                           <span className="text-xs text-muted-foreground">
-                            +{control.mixedCount} recorded value(s) not offered: no loadable rule, or a loaded rule the engine cannot classify
+                            +{control.mixedCount} recorded value(s) not offered: the engine loads no rule for them
                           </span>
                         )}
                       </div>
@@ -512,18 +496,18 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
                   })}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Three states appear here. A live control (toggle badge or dropdown) sends a value
-                  the engine's own rule query actually loads; outlined in red when the selected (or,
-                  if nothing is selected, any offerable) value holds generation for specialist
-                  review rather than filtering it -- no recipe list is returned for those. A dashed,
-                  unclickable marker has nothing this console can usefully send: either its operator
-                  has no case in the engine's switch (Age_Months, Texture_Skill, and the one
-                  substring-matching allergy flag, which belongs in Declared allergens instead), or
-                  every value the provider recorded for it sits below the tier clinicalFilter loads,
-                  or the engine loads a rule for it but cannot classify it, in which case setting it
-                  would make generation refuse rather than filter. A dropdown may still show a "+N
-                  recorded, not offered" note, which covers both of the last two cases: the value is
-                  left off the list rather than hidden entirely, because the provider did record it.
+                  Two states appear here. A live control (toggle badge or dropdown) sends a value
+                  the engine's rule query actually loads: the rule is recorded in the step list with
+                  the provider's own reason and specialist text, and it feeds nutrition-target
+                  selection and the drafted per-recipe modification notes. Setting one no longer
+                  stops generation -- nothing does. A dashed, unclickable marker has nothing this
+                  console can usefully send: either its operator has no case in the engine's switch
+                  (the one substring-matching allergy flag, which belongs in Declared allergens
+                  instead), or its rules sit in Age/Feeding or Data Quality, the two domains
+                  clinicalFilter excludes because recipe_master's age bounds already enforce the
+                  first and the second describes the dataset rather than the child. A dropdown may
+                  still show a "+N recorded, not offered" note: the value is left off the list
+                  rather than hidden entirely, because the provider did record it.
                 </p>
               </fieldset>
             </AccordionContent>

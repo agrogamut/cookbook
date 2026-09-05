@@ -188,28 +188,27 @@ func (h *Handlers) ReferenceAllergens(w http.ResponseWriter, r *http.Request) {
 // keys are guaranteed to resolve. ChildProfile.ClinicalFlags is validated against exactly
 // this vocabulary and an unrecognized key returns 400, so a free-text input is a trap.
 //
-// Escalation is a fact about a VALUE, not a field: Coeliac_Status fires CR-CEL-002
-// (specialist tier) on "Confirmed" but CR-CEL-001 (below tier, and not even loaded by the
-// engine's query) on "Suspected_Not_Confirmed". A field-level bool_or over that would tell
-// the operator every Coeliac_Status choice holds generation, which is false for one of the
-// two values. So every distinct trigger_value carries its own loadable and escalates,
-// computed with the same predicates internal/engine/clinical.go's clinicalFilter uses:
+// Every value carries `loadable`: whether the engine's clinicalFilter actually evaluates the
+// rule behind it, which is now simply
 //
-//	loadable  := (human_approval_level = 'Specialist clinical approval' OR hard_exclude_yn = 'Y')
-//	             AND clinical_domain NOT IN ('Age/Feeding', 'Data Quality')
-//	escalates := loadable AND (human_approval_level = 'Specialist clinical approval'
-//	             OR clinical_domain IN <the ten escalationOnlyDomains names>)
+//	loadable := clinical_domain NOT IN ('Age/Feeding', 'Data Quality')
 //
-// The ten domain names are inlined below rather than importing engine.escalationOnlyDomains:
-// handlers must not depend on engine internals, so the list is duplicated on purpose.
+// Age/Feeding is enforced structurally by recipe_master's own age bounds, and Data Quality
+// describes the dataset rather than the child. Everything else is loaded and recorded.
 //
-// Be precise about what guards that duplication, because it is less than it looks.
-// TestEscalationSourcesDisagreementIsPinned is engine-side and pins engine data only; it
-// never compares these two lists. This handler's own tests pin specific rows -- Coeliac_Status
-// and the fourteen inert markers -- so a divergence is caught only where it changes one of
-// those rows. Dropping a domain from this list that no pinned row touches would pass. Any
-// edit to escalationOnlyDomains must be mirrored here by hand, and the safe direction is to
-// treat that as a manual invariant rather than a tested one.
+// This used to be narrower, and used to sit beside an `escalates` flag saying whether a
+// value would hold generation for specialist review. Both are gone as of the 2026-09-05 gate
+// removal: the engine no longer blocks on any clinical rule, so nothing escalates, and its
+// rule query widened from the specialist-tier-or-hard-exclude subset to everything outside
+// those two domains. A field naming a behaviour the system no longer has is worse than an
+// absent one -- a client would render a badge for a state that cannot occur. The
+// hand-duplicated copy of engine.escalationOnlyDomains that used to live in this query went
+// with it, and with it a manual invariant nothing tested.
+//
+// `loadable` is still per-value rather than per-field, and that distinction survives for its
+// original reason: Coeliac_Status fires CR-CEL-002 on "Confirmed" and CR-CEL-001 on
+// "Suspected_Not_Confirmed", and the two rules can differ in whether the engine loads them.
+// A field-level bool_or would report one answer for both.
 //
 // A trigger_value with operator in_list (only BMI_for_Age_Classification today) is split on
 // ';' into one value per option, since "Overweight;Obesity" is two selectable values sharing
@@ -225,17 +224,12 @@ func (h *Handlers) ReferenceClinicalMarkers(w http.ResponseWriter, r *http.Reque
 				r.clinical_domain,
 				r.trigger_operator,
 				trim(both from val.value)                                       AS value,
-				(r.human_approval_level = 'Specialist clinical approval' OR r.hard_exclude_yn = 'Y')
-					AND r.clinical_domain NOT IN ('Age/Feeding', 'Data Quality') AS loadable,
-				r.human_approval_level,
-				-- Mirrors internal/engine/clinical.go's escalationOnlyDomains. Duplicated
-				-- deliberately: handlers must not import engine internals, and the two
-				-- lists are each asserted against the live workbook on their own side.
-				r.clinical_domain IN (
-					'Coeliac Disease', 'Eating Disorder Risk', 'Feeding/Swallowing',
-					'Vomiting / Poor Intake', 'Growth', 'GI Chronic Disease', 'Liver Disease',
-					'Metabolic Disease', 'Prematurity/Complex Care', 'Kidney Disease'
-				)                                                                AS in_escalation_domain,
+				-- Mirrors clinicalFilter's own WHERE clause exactly. Both exclusions are
+				-- structural rather than clinical, which is why this stayed a duplicated
+				-- literal rather than an import: handlers must not depend on engine
+				-- internals, and two domain names are a smaller thing to keep in step than
+				-- the ten-domain escalation list that used to sit here.
+				r.clinical_domain NOT IN ('Age/Feeding', 'Data Quality')         AS loadable,
 				coalesce(r.engine_action, '')                                    AS engine_action,
 				coalesce(r.specialist_required, '')                              AS specialist_required
 			FROM clinical_rule_master r
@@ -249,17 +243,11 @@ func (h *Handlers) ReferenceClinicalMarkers(w http.ResponseWriter, r *http.Reque
 			  AND r.trigger_value IS NOT NULL
 			  AND trim(both from val.value) <> ''
 		),
-		scored AS (
-			SELECT *,
-			       (loadable AND (human_approval_level = 'Specialist clinical approval' OR in_escalation_domain)) AS escalates
-			FROM loaded
-		),
 		per_value AS (
 			SELECT trigger_field, value,
 			       string_agg(DISTINCT rule_id, ', ' ORDER BY rule_id) AS rule_id,
-			       bool_or(loadable)  AS loadable,
-			       bool_or(escalates) AS escalates
-			FROM scored
+			       bool_or(loadable)  AS loadable
+			FROM loaded
 			GROUP BY trigger_field, value
 		),
 		field_agg AS (
@@ -269,17 +257,16 @@ func (h *Handlers) ReferenceClinicalMarkers(w http.ResponseWriter, r *http.Reque
 			       string_agg(DISTINCT engine_action, ' | ')                AS engine_actions,
 			       string_agg(DISTINCT specialist_required, ' | ')          AS specialist_required,
 			       array_agg(DISTINCT trigger_operator)                     AS operators,
-			       bool_or(escalates)                                      AS any_escalates
-			FROM scored
+			       bool_or(loadable)                                        AS any_loadable
+			FROM loaded
 			GROUP BY trigger_field
 		),
 		values_agg AS (
 			SELECT trigger_field,
 			       json_agg(
 			           jsonb_build_object(
-			               'value', value, 'rule_id', rule_id,
-			               'loadable', loadable, 'escalates', escalates
-			           ) ORDER BY escalates DESC, value
+			               'value', value, 'rule_id', rule_id, 'loadable', loadable
+			           ) ORDER BY loadable DESC, value
 			       ) AS values_json
 			FROM per_value
 			GROUP BY trigger_field
@@ -288,7 +275,7 @@ func (h *Handlers) ReferenceClinicalMarkers(w http.ResponseWriter, r *http.Reque
 		       f.operators, v.values_json
 		FROM field_agg f
 		JOIN values_agg v USING (trigger_field)
-		ORDER BY f.any_escalates DESC, f.trigger_field`)
+		ORDER BY f.any_loadable DESC, f.trigger_field`)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "clinical marker list failed: "+err.Error())
 		return
@@ -297,9 +284,8 @@ func (h *Handlers) ReferenceClinicalMarkers(w http.ResponseWriter, r *http.Reque
 
 	type markerValue struct {
 		Value     string `json:"value"`
-		RuleID    string `json:"rule_id"`
-		Loadable  bool   `json:"loadable"`
-		Escalates bool   `json:"escalates"`
+		RuleID   string `json:"rule_id"`
+		Loadable bool   `json:"loadable"`
 	}
 	type marker struct {
 		TriggerField       string        `json:"trigger_field"`
