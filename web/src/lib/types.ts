@@ -290,9 +290,18 @@ export interface StoredProfileAllergen {
   entered_by?: string;
 }
 
+export interface MatchCandidate {
+  child_id: string;
+  case_id?: string;
+  display_name?: string;
+  date_of_birth: string;
+  last_touched: string;
+}
+
 export interface StoredProfile {
   child_id: string;
   case_id?: string;
+  mother_name?: string;
   display_name?: string;
   date_of_birth: string;
   sex?: string;

@@ -2,6 +2,7 @@ import type {
   ChildProfile, EngineResult, RecipeDetail, Ingredient, NutritionDiscrepancy,
   Gap, ImportRun, Region, Cuisine, NutritionTarget, Book1Block,
   Allergen, ClinicalMarker, ReferenceEnums, StoredProfile, EngineInputResult, SpecialCareCondition,
+  MatchCandidate,
 } from "./types";
 
 /** Resolve the API base URL, tolerating an address given without a scheme.
@@ -112,6 +113,22 @@ export function putProfile(childID: string, body: StoredProfile): Promise<Stored
 export function getProfileEngineInput(childID: string): Promise<EngineInputResult> {
   return request<EngineInputResult>(
     `/api/profiles/${encodeURIComponent(childID)}/engine-input`);
+}
+
+/** Looks for an existing stored profile that might already be this child -- exact case_id,
+ *  or exact date_of_birth plus a case/whitespace-insensitive match on BOTH display_name and
+ *  mother_name. Never a fuzzy or similarity match. Returns an empty array, never throws,
+ *  when nothing is a plausible query (matching the server's own "nothing to search for"
+ *  behavior) so callers don't need a special case for an empty form. */
+export async function matchProfiles(query: {
+  case_id?: string; display_name?: string; mother_name?: string; date_of_birth?: string;
+}): Promise<MatchCandidate[]> {
+  const params = new URLSearchParams();
+  if (query.case_id) params.set("case_id", query.case_id);
+  if (query.display_name) params.set("display_name", query.display_name);
+  if (query.mother_name) params.set("mother_name", query.mother_name);
+  if (query.date_of_birth) params.set("date_of_birth", query.date_of_birth);
+  return request<MatchCandidate[]>(`/api/profile-matches?${params.toString()}`);
 }
 
 export function getSpecialCareConditions(): Promise<SpecialCareCondition[]> {
