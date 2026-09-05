@@ -62,4 +62,30 @@ describe("ChildInputForm", () => {
     await waitFor(() =>
       expect(screen.getByLabelText(/^name$/i)).toHaveValue("Aarav Sen"));
   });
+
+  it("never applies a match to the form until the operator explicitly loads it", async () => {
+    render(<ChildInputForm busy={false} onGenerate={() => {}} />);
+
+    const nameInput = screen.getByLabelText(/^name$/i);
+    await userEvent.type(nameInput, "Aarav");
+    await userEvent.type(screen.getByLabelText(/case id/i), "CASE-1");
+
+    expect(await screen.findByText(/MG-C-00042/, {}, { timeout: 2000 }))
+      .toBeInTheDocument();
+
+    // A match being found is not itself a reason to touch any field -- only the operator's
+    // explicit "Load this record" click may do that.
+    expect(nameInput).toHaveValue("Aarav");
+
+    await userEvent.click(screen.getByRole("button", { name: /load this record/i }));
+
+    await waitFor(() => expect(nameInput).toHaveValue("Aarav Sen"));
+
+    // loadMatch just rewrote caseId/name/dob/motherName to the loaded values -- exactly the
+    // debounce effect's own dependency array. That must not re-trigger a fresh query that
+    // finds the same record again and re-shows the banner the operator just dismissed by
+    // loading it. Wait past the 500ms debounce window to give a regression a chance to fire.
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    expect(screen.queryByRole("button", { name: /load this record/i })).not.toBeInTheDocument();
+  });
 });

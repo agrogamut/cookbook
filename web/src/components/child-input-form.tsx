@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   GenerateInput, getRegions, getCuisines, getAllergens, getEnums,
   getSpecialCareConditions, matchProfiles, getProfile,
@@ -62,6 +62,12 @@ export function ChildInputForm({
   const [motherName, setMotherName] = useState("");
   const [matches, setMatches] = useState<MatchCandidate[]>([]);
   const [dismissedMatch, setDismissedMatch] = useState(false);
+  const [loadMatchError, setLoadMatchError] = useState("");
+  // Set just before loadMatch rewrites caseId/name/dob/motherName -- the debounce effect's
+  // own dependency array -- so that self-triggered effect run can be told apart from the
+  // operator actually typing and skipped instead of re-querying and re-showing the banner
+  // the operator just dismissed by loading it.
+  const justLoadedRef = useRef(false);
   const [sex, setSex] = useState("");
   const [language, setLanguage] = useState("");
   const [region, setRegion] = useState("");
@@ -112,6 +118,14 @@ export function ChildInputForm({
   // suggestion for the current inputs, so accepting "this is a new child" does not re-show
   // the same banner on every keystroke afterward.
   useEffect(() => {
+    // loadMatch just rewrote these same four fields to load a chosen record -- that is a
+    // self-triggered run of this effect, not the operator typing, so skip it entirely rather
+    // than resetting dismissedMatch and re-querying to find (and re-show a banner for) the
+    // very record the operator just loaded.
+    if (justLoadedRef.current) {
+      justLoadedRef.current = false;
+      return;
+    }
     setDismissedMatch(false);
     if (!caseId && !(name && dob && motherName)) {
       setMatches([]);
@@ -124,7 +138,10 @@ export function ChildInputForm({
         mother_name: motherName || undefined,
         date_of_birth: dob || undefined,
       })
-        .then(setMatches)
+        .then((found) => {
+          setMatches(found);
+          setLoadMatchError("");
+        })
         .catch(() => setMatches([])); // A failed check is not itself an error worth surfacing --
         // it only means the suggestion banner does not appear, and generation proceeds exactly
         // as it does when there genuinely is no match.
@@ -133,7 +150,14 @@ export function ChildInputForm({
   }, [caseId, name, dob, motherName]);
 
   async function loadMatch(childID: string) {
-    const p = await getProfile(childID);
+    let p;
+    try {
+      p = await getProfile(childID);
+    } catch {
+      setLoadMatchError("Could not load this record. Try again.");
+      return;
+    }
+    justLoadedRef.current = true;
     setName(p.display_name ?? "");
     setDob(p.date_of_birth);
     setSex(p.sex ?? "");
@@ -146,6 +170,13 @@ export function ChildInputForm({
     setMotherName(p.mother_name ?? "");
     setConfirmed(p.allergens.filter((a) => a.status === "confirmed").map((a) => a.group));
     setSuspected(p.allergens.filter((a) => a.status === "suspected").map((a) => a.group));
+    // A clinical condition or growth visit typed for what turns out to be a different,
+    // already-existing child must not survive under the loaded child's identity -- the API
+    // has no clinical/growth fields on a stored profile to correctly refill these from (see
+    // profileDTO), so the honest fix is to clear them, not to guess.
+    setSpecialCare("");
+    setGrowth([]);
+    setLoadMatchError("");
     setMatches([]);
     setDismissedMatch(true);
   }
@@ -290,6 +321,7 @@ export function ChildInputForm({
             <Button type="button" size="sm" variant="ghost" onClick={() => setDismissedMatch(true)}>
               This is a different child
             </Button>
+            {loadMatchError && <p className="text-xs text-destructive">{loadMatchError}</p>}
           </AlertDescription>
         </Alert>
       )}
