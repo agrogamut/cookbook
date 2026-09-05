@@ -99,6 +99,7 @@ func NewRouter(pool *pgxpool.Pool, drafter aidraft.Drafter) http.Handler {
 		r.Put("/api/profiles/{childID}", h.PutProfile)
 		r.Get("/api/profiles/{childID}", h.GetProfile)
 		r.Get("/api/profiles/{childID}/engine-input", h.GetProfileEngineInput)
+		r.Get("/api/profile-matches", h.MatchProfiles)
 		// The set is the primary surface: one run, both books, one profile read. The
 		// per-book routes below remain for fetching one book directly.
 		// Generation from inline inputs: no child id, nothing persisted. This is what the

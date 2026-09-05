@@ -33,6 +33,7 @@ func profileRouter(t *testing.T) (*chi.Mux, *Handlers) {
 	r.Put("/api/profiles/{childID}", h.PutProfile)
 	r.Get("/api/profiles/{childID}", h.GetProfile)
 	r.Get("/api/profiles/{childID}/engine-input", h.GetProfileEngineInput)
+	r.Get("/api/profile-matches", h.MatchProfiles)
 	return r, h
 }
 
@@ -265,5 +266,109 @@ func TestPutProfileRejectsValuesTheCorpusDoesNotCarry(t *testing.T) {
 		if rec.Code != http.StatusOK {
 			t.Fatalf("a valid profile must still write, got %d: %s", rec.Code, rec.Body.String())
 		}
+	}
+}
+
+func TestMatchProfilesByCaseID(t *testing.T) {
+	r, h := profileRouter(t)
+	t.Cleanup(func() {
+		_, _ = h.pool.Exec(context.Background(),
+			`DELETE FROM child_profile WHERE child_id = 'TEST-CHILD-001'`)
+	})
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest("PUT", "/api/profiles/TEST-CHILD-001",
+		bytes.NewReader([]byte(putProfileBody))))
+	if rec.Code != 200 {
+		t.Fatalf("seed put: got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest("GET", "/api/profile-matches?case_id=TEST-CASE-001", nil))
+	if rec.Code != 200 {
+		t.Fatalf("got %d: %s", rec.Code, rec.Body.String())
+	}
+	var got []struct {
+		ChildID string `json:"child_id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got) != 1 || got[0].ChildID != "TEST-CHILD-001" {
+		t.Fatalf("want exactly TEST-CHILD-001, got %+v", got)
+	}
+}
+
+// putProfileBodyWithMother is putProfileBody plus mother_name, under a distinct child_id
+// so it can seed a test independently of putProfileBody's own fixture and cleanup.
+const putProfileBodyWithMother = `{
+  "child_id": "TEST-CHILD-002",
+  "display_name": "Test Child Two",
+  "mother_name": "Test Mother",
+  "date_of_birth": "2022-03-10",
+  "created_by": "integration-test",
+  "allergens": []
+}`
+
+func TestMatchProfilesByNameDateOfBirthAndMotherName(t *testing.T) {
+	r, h := profileRouter(t)
+	t.Cleanup(func() {
+		_, _ = h.pool.Exec(context.Background(),
+			`DELETE FROM child_profile WHERE child_id = 'TEST-CHILD-002'`)
+	})
+
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest("PUT", "/api/profiles/TEST-CHILD-002",
+		bytes.NewReader([]byte(putProfileBodyWithMother))))
+	if rec.Code != 200 {
+		t.Fatalf("seed put: got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest("GET",
+		"/api/profile-matches?display_name=test+child+two&mother_name=test+mother&date_of_birth=2022-03-10", nil))
+	if rec.Code != 200 {
+		t.Fatalf("got %d: %s", rec.Code, rec.Body.String())
+	}
+	var got []struct {
+		ChildID string `json:"child_id"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(got) != 1 || got[0].ChildID != "TEST-CHILD-002" {
+		t.Fatalf("want exactly TEST-CHILD-002, got %+v", got)
+	}
+
+	// Same name and date of birth, no mother_name in the query at all -- must not match.
+	rec = httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest("GET",
+		"/api/profile-matches?display_name=test+child+two&date_of_birth=2022-03-10", nil))
+	if rec.Code != 200 {
+		t.Fatalf("got %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.TrimSpace(rec.Body.String()) != "[]" {
+		t.Fatalf("name+dob alone, with no mother_name, must not match, got %q", rec.Body.String())
+	}
+}
+
+func TestMatchProfilesReturnsEmptyArrayNotNullWithNoQuery(t *testing.T) {
+	r, _ := profileRouter(t)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest("GET", "/api/profile-matches", nil))
+	if rec.Code != 200 {
+		t.Fatalf("got %d: %s", rec.Code, rec.Body.String())
+	}
+	if strings.TrimSpace(rec.Body.String()) != "[]" {
+		t.Fatalf("want an empty JSON array, got %q", rec.Body.String())
+	}
+}
+
+func TestMatchProfilesRejectsAMalformedDate(t *testing.T) {
+	r, _ := profileRouter(t)
+	rec := httptest.NewRecorder()
+	r.ServeHTTP(rec, httptest.NewRequest("GET", "/api/profile-matches?date_of_birth=01-05-2022", nil))
+	if rec.Code != 400 {
+		t.Fatalf("want 400 for a malformed date, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

@@ -34,6 +34,7 @@ type profileAllergenDTO struct {
 type profileDTO struct {
 	ChildID              string               `json:"child_id"`
 	CaseID               string               `json:"case_id,omitempty"`
+	MotherName           string               `json:"mother_name,omitempty"`
 	DisplayName          string               `json:"display_name,omitempty"`
 	DateOfBirth          string               `json:"date_of_birth"`
 	Sex                  string               `json:"sex,omitempty"`
@@ -52,7 +53,8 @@ type profileDTO struct {
 
 func toDTO(s profile.Stored) profileDTO {
 	d := profileDTO{
-		ChildID: s.ChildID, CaseID: s.CaseID, DisplayName: s.DisplayName,
+		ChildID: s.ChildID, CaseID: s.CaseID,
+		MotherName: s.MotherName, DisplayName: s.DisplayName,
 		DateOfBirth: s.DateOfBirth.UTC().Format(dateLayout),
 		Sex:         s.Sex, LanguageID: s.LanguageID, RegionCulture: s.RegionCulture,
 		CuisineCode: s.CuisineCode, DietType: s.DietType, Vegan: s.Vegan,
@@ -82,7 +84,8 @@ func fromDTO(d profileDTO) (profile.Stored, error) {
 		return profile.Stored{}, err
 	}
 	s := profile.Stored{
-		ChildID: d.ChildID, CaseID: d.CaseID, DisplayName: d.DisplayName,
+		ChildID: d.ChildID, CaseID: d.CaseID,
+		MotherName: d.MotherName, DisplayName: d.DisplayName,
 		DateOfBirth: dob, Sex: d.Sex, LanguageID: d.LanguageID,
 		RegionCulture: d.RegionCulture, CuisineCode: d.CuisineCode,
 		DietType: d.DietType, Vegan: d.Vegan,
@@ -347,4 +350,51 @@ func (h *Handlers) GetProfileEngineInput(w http.ResponseWriter, r *http.Request)
 		// different query. Returning it makes the response reproducible.
 		"as_of": asOf.Format(dateLayout),
 	})
+}
+
+type matchCandidateDTO struct {
+	ChildID     string `json:"child_id"`
+	CaseID      string `json:"case_id,omitempty"`
+	DisplayName string `json:"display_name,omitempty"`
+	DateOfBirth string `json:"date_of_birth"`
+	LastTouched string `json:"last_touched"`
+}
+
+// MatchProfiles looks for an existing stored profile that might already be this child,
+// surfaced for an operator to look at and decide about -- never applied automatically. See
+// profile.FindMatches for the exact-match-only rule this never relaxes: no fuzzy or
+// similarity matching, ever.
+func (h *Handlers) MatchProfiles(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	caseID := q.Get("case_id")
+	displayName := q.Get("display_name")
+	motherName := q.Get("mother_name")
+
+	var dob time.Time
+	if raw := q.Get("date_of_birth"); raw != "" {
+		parsed, err := time.Parse(dateLayout, raw)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "date_of_birth "+raw+" is not a YYYY-MM-DD date")
+			return
+		}
+		dob = parsed
+	}
+
+	matches, err := profile.FindMatches(r.Context(), h.pool, caseID, displayName, motherName, dob)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "profile match failed: "+err.Error())
+		return
+	}
+
+	// Never nil: a client rendering "N possible matches" should not need a null check to
+	// show zero.
+	out := make([]matchCandidateDTO, 0, len(matches))
+	for _, m := range matches {
+		out = append(out, matchCandidateDTO{
+			ChildID: m.ChildID, CaseID: m.CaseID, DisplayName: m.DisplayName,
+			DateOfBirth: m.DateOfBirth.UTC().Format(dateLayout),
+			LastTouched: m.LastTouched.UTC().Format(time.RFC3339),
+		})
+	}
+	writeJSON(w, http.StatusOK, out)
 }
