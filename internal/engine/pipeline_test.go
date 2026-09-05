@@ -31,18 +31,15 @@ func TestRunPersonaQueriesNeverCollapse(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Run: %v", err)
 			}
-			if result.Blocked {
-				t.Fatalf("persona %q must not be blocked: %s", c.name, result.BlockReason)
-			}
 			if len(result.Recipes) == 0 {
 				t.Fatalf("persona %q returned zero recipes; ranker steps must never collapse a result set. Steps: %+v", c.name, result.Steps)
 			}
-			if len(result.Steps) != 16 {
-				t.Fatalf("persona %q: expected 16 recorded steps (1-13, with steps 2 and 4 each "+
-					"recorded twice -- a hard filter plus a ranker half -- and step 3 recorded "+
-					"twice as the special-care stop gate plus the clinical rule filter; step 8 "+
-					"has no data source and step 14 is a human release gate, neither runs in "+
-					"the engine), got %d", c.name, len(result.Steps))
+			if len(result.Steps) != 17 {
+				t.Fatalf("persona %q: expected 17 recorded steps (1-13, with steps 1, 2 and 4 "+
+					"each recorded twice -- a first half plus a ranker half -- and step 3 "+
+					"recorded twice as the special-care row plus the clinical rule record; "+
+					"step 8 has no data source and step 14 is a human release gate, neither "+
+					"runs in the engine), got %d", c.name, len(result.Steps))
 			}
 		})
 	}

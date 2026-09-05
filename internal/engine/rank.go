@@ -40,6 +40,82 @@ func applyMealFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProf
 	return filtered, models.StepResult{Step: 6, Name: "Meal category", Kind: "ranker", CandidatesIn: stepIn, CandidatesOut: len(filtered)}, nil
 }
 
+// sortWithinAgeBand orders by score without ever crossing the age partition applyAgeRank
+// set: no later adjustment can lift an out-of-band recipe above an in-band one.
+//
+// Every ranker after applyAgeRank sorts with this rather than by score alone. Without it,
+// a matching region (+0.05) or a liked ingredient would be enough to put a teenage power
+// bowl in front of a seven-month-old whose in-band purees happen to score lower inside
+// their own band, which is exactly the comparison recipe_target_score's per-band
+// normalisation makes meaningless.
+//
+// Before applyAgeRank has run, every AgeInBand is false and this degrades to a plain score
+// sort, which is what rankByTarget wants anyway.
+func sortWithinAgeBand(out []models.RankedRecipe) {
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].AgeInBand != out[j].AgeInBand {
+			return out[i].AgeInBand
+		}
+		return out[i].RankedScore > out[j].RankedScore
+	})
+}
+
+// applyAgeRank is step 1's ranker half. It stably partitions the ranked list: every recipe
+// whose age band contains the child's age first, in the score order rankByTarget produced,
+// then everything else, in the same order.
+//
+// A partition rather than a score adjustment, unlike every other ranker in this file, and
+// the reason is that the scores are not comparable across age bands.
+// recipe_target_score normalises within a band, so a teenage recipe scoring 0.9 among
+// teenage recipes and a six-month puree scoring 0.7 among purees say nothing about each
+// other. No constant in this file's family (culture 0.05, availability 0.05, budget 0.03,
+// suspected allergen -0.15, against a live ranked_score spread of about 0.65) can guarantee
+// the puree wins, and a constant large enough to guarantee it (>= 1.0) is a hard filter
+// wearing a ranker's clothes. The partition states the actual intent and leaves every score
+// undistorted.
+//
+// Every ranker that runs after this one must sort by AgeInBand first, or it silently undoes
+// the partition: a liked ingredient or a matching region is not a reason to lift a teenage
+// power bowl above a puree for a seven-month-old.
+func applyAgeRank(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile, recipes []models.RankedRecipe) ([]models.RankedRecipe, models.StepResult, error) {
+	stepIn := len(recipes)
+	if stepIn == 0 {
+		return recipes, models.StepResult{
+			Step: 1, Name: "Age / feeding stage, ranker", Kind: "ranker",
+			CandidatesIn: 0, CandidatesOut: 0, Note: "empty pool, step is a no-op",
+		}, nil
+	}
+
+	band, err := inBandIDs(ctx, pool, p)
+	if err != nil {
+		return nil, models.StepResult{}, err
+	}
+	inBand := make(map[string]bool, len(band))
+	for _, id := range band {
+		inBand[id] = true
+	}
+
+	out := make([]models.RankedRecipe, len(recipes))
+	copy(out, recipes)
+	var n int
+	for i := range out {
+		out[i].AgeInBand = inBand[out[i].RecipeID]
+		if out[i].AgeInBand {
+			n++
+		}
+	}
+	// Only the partition is compared. SliceStable preserves the incoming score order inside
+	// each half, so nothing needs to re-sort by score here.
+	sort.SliceStable(out, func(i, j int) bool { return out[i].AgeInBand && !out[j].AgeInBand })
+
+	return out, models.StepResult{
+		Step: 1, Name: "Age / feeding stage, ranker", Kind: "ranker",
+		CandidatesIn: stepIn, CandidatesOut: stepIn,
+		Note: fmt.Sprintf("%d of %d recipes are in this child's age band and sort first; none removed",
+			n, stepIn),
+	}, nil
+}
+
 // applyCultureRank is engine step 7. An explicit RegionCulture or CuisineCode beats the
 // project's region_focus default tiers (CLAUDE.md, "A user's stated region beats our
 // default"): matching recipes get a flat boost that reorders within the pool the
@@ -80,7 +156,7 @@ func applyCultureRank(ctx context.Context, pool *pgxpool.Pool, p models.ChildPro
 			out[i].RankedScore += boost
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].RankedScore > out[j].RankedScore })
+	sortWithinAgeBand(out)
 
 	return out, models.StepResult{
 		Step: 7, Name: "Culture and location", Kind: "ranker",
@@ -147,7 +223,7 @@ func applyAvailabilityRank(ctx context.Context, pool *pgxpool.Pool, p models.Chi
 	for i := range out {
 		out[i].RankedScore += weight * share[out[i].RecipeID]
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].RankedScore > out[j].RankedScore })
+	sortWithinAgeBand(out)
 
 	return out, models.StepResult{
 		Step: 9, Name: "Ingredient availability", Kind: "ranker",
@@ -190,7 +266,7 @@ func applyDietRank(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfil
 			matched++
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].RankedScore > out[j].RankedScore })
+	sortWithinAgeBand(out)
 
 	note := fmt.Sprintf("%d of %d candidates match the declared practice %q exactly and were ranked up by %.2f",
 		matched, stepIn, p.DietType, boost)
@@ -270,7 +346,7 @@ func applyBudgetRank(ctx context.Context, pool *pgxpool.Pool, p models.ChildProf
 			out[i].RankedScore += boost
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].RankedScore > out[j].RankedScore })
+	sortWithinAgeBand(out)
 
 	return out, models.StepResult{Step: 10, Name: "Budget", Kind: "ranker", CandidatesIn: stepIn, CandidatesOut: stepIn}, nil
 }
@@ -447,7 +523,7 @@ func dedupeNearDuplicates(ctx context.Context, pool *pgxpool.Pool, recipes []mod
 			keptRice = append(keptRice, rice)
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].RankedScore > out[j].RankedScore })
+	sortWithinAgeBand(out)
 
 	return out, models.StepResult{
 		Step: 12, Name: "Diversity / duplication", Kind: "ranker",
@@ -536,7 +612,7 @@ func applySuspectedAllergenRank(ctx context.Context, pool *pgxpool.Pool, p model
 			out[i].RankedScore -= penalty
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].RankedScore > out[j].RankedScore })
+	sortWithinAgeBand(out)
 
 	unscreened, err := unscreenedGroups(ctx, pool, p.SuspectedAllergens)
 	if err != nil {

@@ -23,26 +23,60 @@ func testPool(t *testing.T) *pgxpool.Pool {
 	return pool
 }
 
-func TestAgeFilterExcludesOutOfBand(t *testing.T) {
+// Step 1 hands the whole corpus downstream. It removes nothing, which is the change SP1
+// made; applyAgeRank is what age actually does now. See
+// docs/superpowers/specs/2026-09-05-direct-generation-design.md.
+func TestAgeStepReturnsTheWholeCorpus(t *testing.T) {
 	pool := testPool(t)
-	ids, step, err := ageFilter(context.Background(), pool, models.ChildProfile{AgeMonths: 8})
+	ctx := context.Background()
+
+	var total int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM recipe_master`).Scan(&total); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+
+	ids, step, err := ageStep(ctx, pool)
 	if err != nil {
-		t.Fatalf("ageFilter: %v", err)
+		t.Fatalf("ageStep: %v", err)
+	}
+	if len(ids) != total {
+		t.Fatalf("step 1 must remove nothing: got %d of %d recipes", len(ids), total)
+	}
+	if step.CandidatesIn != step.CandidatesOut {
+		t.Fatalf("step 1 removed %d recipes", step.CandidatesIn-step.CandidatesOut)
+	}
+}
+
+// The in-band lookup applyAgeRank uses to decide the partition. It is a real subset: if it
+// ever returned everything, the partition would be a no-op and out-of-band recipes would
+// mix freely into a child's list without anything failing.
+func TestInBandIDsIsAStrictSubsetForAnInfant(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	var total int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM recipe_master`).Scan(&total); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+
+	ids, err := inBandIDs(ctx, pool, models.ChildProfile{AgeMonths: 8})
+	if err != nil {
+		t.Fatalf("inBandIDs: %v", err)
 	}
 	if len(ids) == 0 {
 		t.Fatal("8-month age band must return candidates: it is the best-covered infant band")
 	}
-	if step.CandidatesOut != len(ids) {
-		t.Fatalf("step.CandidatesOut = %d, want %d", step.CandidatesOut, len(ids))
+	if len(ids) >= total {
+		t.Fatalf("an 8-month band cannot contain the whole corpus: %d of %d", len(ids), total)
 	}
 }
 
 func TestAllergyFilterExcludesDeclaredAllergen(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	all, _, err := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	all, err := inBandIDs(ctx, pool, models.ChildProfile{AgeMonths: 36})
 	if err != nil {
-		t.Fatalf("ageFilter: %v", err)
+		t.Fatalf("inBandIDs: %v", err)
 	}
 	filtered, step, _, err := allergyFilter(ctx, pool, models.ChildProfile{Allergens: []string{"Peanut"}}, all)
 	if err != nil {
@@ -59,9 +93,9 @@ func TestAllergyFilterExcludesDeclaredAllergen(t *testing.T) {
 func TestAllergyFilterErrorsOnUnmatchedAllergen(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	all, _, err := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	all, err := inBandIDs(ctx, pool, models.ChildProfile{AgeMonths: 36})
 	if err != nil {
-		t.Fatalf("ageFilter: %v", err)
+		t.Fatalf("inBandIDs: %v", err)
 	}
 	_, _, _, err = allergyFilter(ctx, pool, models.ChildProfile{Allergens: []string{"Peanut", "not-a-real-allergen"}}, all)
 	if err == nil {
@@ -102,9 +136,9 @@ func TestAllergyFilterExcludesGroundnutOilRecipeForPeanut(t *testing.T) {
 func TestAllergyFilterWheatMatchesGlutenContainingCerealTag(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	all, _, err := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	all, err := inBandIDs(ctx, pool, models.ChildProfile{AgeMonths: 36})
 	if err != nil {
-		t.Fatalf("ageFilter: %v", err)
+		t.Fatalf("inBandIDs: %v", err)
 	}
 	filtered, _, _, err := allergyFilter(ctx, pool, models.ChildProfile{Allergens: []string{"Wheat"}}, all)
 	if err != nil {
@@ -122,9 +156,9 @@ func TestAllergyFilterWheatMatchesGlutenContainingCerealTag(t *testing.T) {
 func TestAllergyFilterGenuinelyAbsentGroupNotesZeroExclusions(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	all, _, err := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	all, err := inBandIDs(ctx, pool, models.ChildProfile{AgeMonths: 36})
 	if err != nil {
-		t.Fatalf("ageFilter: %v", err)
+		t.Fatalf("inBandIDs: %v", err)
 	}
 	filtered, step, _, err := allergyFilter(ctx, pool, models.ChildProfile{Allergens: []string{"Tree nuts"}}, all)
 	if err != nil {
@@ -141,9 +175,9 @@ func TestAllergyFilterGenuinelyAbsentGroupNotesZeroExclusions(t *testing.T) {
 func TestAllergyFilterReportsUnscreenedGroups(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	all, _, err := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	all, err := inBandIDs(ctx, pool, models.ChildProfile{AgeMonths: 36})
 	if err != nil {
-		t.Fatalf("ageFilter: %v", err)
+		t.Fatalf("inBandIDs: %v", err)
 	}
 
 	cases := []struct {

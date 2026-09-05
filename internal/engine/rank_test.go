@@ -13,7 +13,7 @@ import (
 func TestApplyMealFilterDegradesOnEmptyResult(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	ids, _, _ := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 8})
+	ids, _ := inBandIDs(ctx, pool, models.ChildProfile{AgeMonths: 8})
 	ranked, _, err := rankByTarget(ctx, pool, "NT01", ids)
 	if err != nil {
 		t.Fatalf("rankByTarget: %v", err)
@@ -33,7 +33,7 @@ func TestApplyMealFilterDegradesOnEmptyResult(t *testing.T) {
 func TestCapToTargetUsesProviderRecipeCount(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	ids, _, _ := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	ids, _ := inBandIDs(ctx, pool, models.ChildProfile{AgeMonths: 36})
 	ranked, _, err := rankByTarget(ctx, pool, "NT00", ids)
 	if err != nil {
 		t.Fatalf("rankByTarget: %v", err)
@@ -71,7 +71,7 @@ func TestCapToTargetUsesProviderRecipeCount(t *testing.T) {
 func TestDedupeNearDuplicatesDemotesSharedCoreIngredients(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	ids, _, _ := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	ids, _ := inBandIDs(ctx, pool, models.ChildProfile{AgeMonths: 36})
 	ranked, _, err := rankByTarget(ctx, pool, "NT00", ids)
 	if err != nil {
 		t.Fatalf("rankByTarget: %v", err)
@@ -192,9 +192,9 @@ func TestDedupeNearDuplicatesLeniencyIsRiceOnly(t *testing.T) {
 func TestApplySuspectedAllergenRankDemotesButNeverRemoves(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	ids, _, err := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	ids, err := inBandIDs(ctx, pool, models.ChildProfile{AgeMonths: 36})
 	if err != nil {
-		t.Fatalf("ageFilter: %v", err)
+		t.Fatalf("inBandIDs: %v", err)
 	}
 	ranked, _, err := rankByTarget(ctx, pool, "NT00", ids)
 	if err != nil {
@@ -291,7 +291,7 @@ func taggedRecipeIDs(t *testing.T, pool *pgxpool.Pool, group string) map[string]
 func TestApplySuspectedAllergenRankIsANoOpWhenNoneDeclared(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	ids, _, _ := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	ids, _ := inBandIDs(ctx, pool, models.ChildProfile{AgeMonths: 36})
 	ranked, _, _ := rankByTarget(ctx, pool, "NT00", ids)
 
 	out, step, err := applySuspectedAllergenRank(ctx, pool, models.ChildProfile{AgeMonths: 36}, ranked)
@@ -306,9 +306,9 @@ func TestApplySuspectedAllergenRankIsANoOpWhenNoneDeclared(t *testing.T) {
 func TestApplyDietRankLiftsTheDeclaredPracticeWithoutReSorting(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	ids, _, err := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	ids, err := inBandIDs(ctx, pool, models.ChildProfile{AgeMonths: 36})
 	if err != nil {
-		t.Fatalf("ageFilter: %v", err)
+		t.Fatalf("inBandIDs: %v", err)
 	}
 	ranked, _, err := rankByTarget(ctx, pool, "NT00", ids)
 	if err != nil {
@@ -372,7 +372,7 @@ func TestApplyDietRankLiftsTheDeclaredPracticeWithoutReSorting(t *testing.T) {
 func TestApplyDietRankLeavesAVegetarianProfileUntouched(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	ids, _, _ := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	ids, _ := inBandIDs(ctx, pool, models.ChildProfile{AgeMonths: 36})
 	ranked, _, err := rankByTarget(ctx, pool, "NT00", ids)
 	if err != nil {
 		t.Fatalf("rankByTarget: %v", err)
@@ -404,7 +404,7 @@ func TestApplyDietRankLeavesAVegetarianProfileUntouched(t *testing.T) {
 func TestApplyDietRankIsANoOpWithNoDeclaredPractice(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	ids, _, _ := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	ids, _ := inBandIDs(ctx, pool, models.ChildProfile{AgeMonths: 36})
 	ranked, _, _ := rankByTarget(ctx, pool, "NT00", ids)
 
 	out, step, err := applyDietRank(ctx, pool, models.ChildProfile{AgeMonths: 36}, ranked)
@@ -413,5 +413,78 @@ func TestApplyDietRankIsANoOpWithNoDeclaredPractice(t *testing.T) {
 	}
 	if len(out) != len(ranked) || step.CandidatesIn != step.CandidatesOut {
 		t.Fatalf("no declared practice must be a pure no-op: %+v", step)
+	}
+}
+
+// Every in-band recipe sorts above every out-of-band one, all the way through the pipeline
+// and not merely immediately after applyAgeRank. This is the guard that catches a later
+// ranker sorting by score across the partition instead of within it: without
+// sortWithinAgeBand, a matching region or a liked ingredient is enough to lift a teenage
+// recipe above an infant's purees, because recipe_target_score normalises within a band and
+// the two scores were never comparable.
+func TestAgeAppropriateRecipesSortAboveEveryOutOfBandOne(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	// A region preference is set deliberately: applyCultureRank adds a flat 0.05 boost, and
+	// an unguarded score sort there is exactly how the partition would break.
+	p := models.ChildProfile{AgeMonths: 7, RegionCulture: "South India"}
+	res, err := Run(ctx, pool, p)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(res.Recipes) == 0 {
+		t.Fatal("empty result list")
+	}
+
+	seenOutOfBand := false
+	for i, r := range res.Recipes {
+		if !r.AgeInBand {
+			seenOutOfBand = true
+			continue
+		}
+		if seenOutOfBand {
+			t.Fatalf("recipe %d (%s) is in this child's age band but sits below an out-of-band recipe",
+				i, r.RecipeID)
+		}
+	}
+}
+
+// Age removes nothing. Asked for the whole corpus, the pipeline returns the whole corpus.
+func TestAgeNeverRemovesARecipe(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	var total int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM recipe_master`).Scan(&total); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+
+	// Limit 0 would take the category default, so ask for everything explicitly. No diet,
+	// no allergens: the two hard filters that legitimately still remove recipes stay no-ops
+	// here, leaving age as the only thing that could have cut the list.
+	res, err := Run(ctx, pool, models.ChildProfile{AgeMonths: 7, Limit: total})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(res.Recipes) != total {
+		t.Fatalf("age must not remove a recipe: got %d of %d", len(res.Recipes), total)
+	}
+}
+
+// A seven-month-old's list still opens with recipes actually meant for a seven-month-old.
+// Removing the hard filter is only safe because this holds.
+func TestAnInfantsListOpensWithInfantRecipes(t *testing.T) {
+	pool := testPool(t)
+	res, err := Run(context.Background(), pool, models.ChildProfile{AgeMonths: 7})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(res.Recipes) == 0 {
+		t.Fatal("empty result list")
+	}
+	if !res.Recipes[0].AgeInBand {
+		t.Fatalf("the top recipe (%s, %s) is not in this child's age band",
+			res.Recipes[0].RecipeID, res.Recipes[0].AgeGroup)
 	}
 }

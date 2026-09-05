@@ -13,14 +13,22 @@ import (
 	"github.com/madamgy/recipie/internal/models"
 )
 
-// ageFilter is engine step 1, a hard filter that is never relaxed. It has no "candidate
-// IDs in" parameter because it is always the first step in the pipeline.
-func ageFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) ([]string, models.StepResult, error) {
-	rows, err := pool.Query(ctx,
-		`SELECT recipe_id FROM recipe_master WHERE min_age_months <= $1 AND max_age_months >= $1`,
-		p.AgeMonths)
+// ageStep is engine step 1. It returns the whole corpus and removes nothing.
+//
+// It was a hard filter, and the filter was the right shape for a non-clinical operator: a
+// recipe outside a child's age band is not for that child, and nobody downstream could be
+// relied on to notice. The input is now a verified doctor, and an empty page is worse than
+// a short one that opens with the closest fits. Age still decides the ordering -- see
+// applyAgeRank, which partitions rather than removes -- so an out-of-band recipe surfaces
+// only once the in-band pool has run out. See
+// docs/superpowers/specs/2026-09-05-direct-generation-design.md.
+//
+// It has no "candidate IDs in" parameter because it is always the first step in the
+// pipeline, and no profile parameter because it no longer looks at the child at all.
+func ageStep(ctx context.Context, pool *pgxpool.Pool) ([]string, models.StepResult, error) {
+	rows, err := pool.Query(ctx, `SELECT recipe_id FROM recipe_master`)
 	if err != nil {
-		return nil, models.StepResult{}, fmt.Errorf("engine: age filter: %w", err)
+		return nil, models.StepResult{}, fmt.Errorf("engine: age step: %w", err)
 	}
 	defer rows.Close()
 
@@ -28,19 +36,45 @@ func ageFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			return nil, models.StepResult{}, fmt.Errorf("engine: age filter scan: %w", err)
+			return nil, models.StepResult{}, fmt.Errorf("engine: age step scan: %w", err)
 		}
 		ids = append(ids, id)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, models.StepResult{}, fmt.Errorf("engine: age filter rows: %w", err)
+		return nil, models.StepResult{}, fmt.Errorf("engine: age step rows: %w", err)
 	}
 
 	return ids, models.StepResult{
-		Step: 1, Name: "Age / feeding stage", Kind: "hard_filter",
-		CandidatesIn:  -1, // no upstream step; the caller fills this in from the total recipe count
-		CandidatesOut: len(ids),
+		Step: 1, Name: "Age / feeding stage", Kind: "record",
+		CandidatesIn: len(ids), CandidatesOut: len(ids),
+		Note: "age orders the list rather than filtering it; see step 1's ranker half",
 	}, nil
+}
+
+// inBandIDs returns the recipes whose [min_age_months, max_age_months] contains the child's
+// age. This is the query ageFilter used to be, kept because applyAgeRank needs exactly it to
+// decide which half of the partition a recipe belongs in.
+func inBandIDs(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) ([]string, error) {
+	rows, err := pool.Query(ctx,
+		`SELECT recipe_id FROM recipe_master WHERE min_age_months <= $1 AND max_age_months >= $1`,
+		p.AgeMonths)
+	if err != nil {
+		return nil, fmt.Errorf("engine: in-band recipes: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("engine: in-band recipes scan: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("engine: in-band recipes rows: %w", err)
+	}
+	return ids, nil
 }
 
 // allergyFilter is engine step 2, a hard filter that is never relaxed and never

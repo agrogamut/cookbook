@@ -11,9 +11,9 @@ import (
 func TestDietFilterVeganExcludesAnimalFoodGroups(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	all, _, err := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	all, err := inBandIDs(ctx, pool, models.ChildProfile{AgeMonths: 36})
 	if err != nil {
-		t.Fatalf("ageFilter: %v", err)
+		t.Fatalf("inBandIDs: %v", err)
 	}
 	veg, _, err := dietFilter(ctx, pool, models.ChildProfile{DietType: "Vegetarian"}, all)
 	if err != nil {
@@ -40,9 +40,9 @@ func TestDietFilterIsNestedNotCategorical(t *testing.T) {
 	// Age 84 months: above the 6-9 year floor of the corpus's only egg recipe
 	// (MG-R-00692), so the eggetarian superset is observable rather than filtered out
 	// by age before the diet step ever runs.
-	all, _, err := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 84})
+	all, err := inBandIDs(ctx, pool, models.ChildProfile{AgeMonths: 84})
 	if err != nil {
-		t.Fatalf("ageFilter: %v", err)
+		t.Fatalf("inBandIDs: %v", err)
 	}
 
 	set := func(dietType string) map[string]bool {
@@ -94,9 +94,9 @@ func TestDietFilterRejectsUnknownPractice(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 
-	all, _, err := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	all, err := inBandIDs(ctx, pool, models.ChildProfile{AgeMonths: 36})
 	if err != nil {
-		t.Fatalf("ageFilter: %v", err)
+		t.Fatalf("inBandIDs: %v", err)
 	}
 	_, _, err = dietFilter(ctx, pool, models.ChildProfile{DietType: "Pescatarian"}, all)
 	if !errors.Is(err, ErrInvalidProfile) {
@@ -123,9 +123,9 @@ func TestDietFilterVeganExcludesGheeByAllergenTag(t *testing.T) {
 		t.Skip("no recipe in this dataset contains ghee (ING0060); nothing to assert")
 	}
 
-	all, _, err := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	all, err := inBandIDs(ctx, pool, models.ChildProfile{AgeMonths: 36})
 	if err != nil {
-		t.Fatalf("ageFilter: %v", err)
+		t.Fatalf("inBandIDs: %v", err)
 	}
 	vegan, _, err := dietFilter(ctx, pool, models.ChildProfile{DietType: "Vegetarian", Vegan: true}, all)
 	if err != nil {

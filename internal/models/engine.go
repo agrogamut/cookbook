@@ -34,6 +34,12 @@ type RankedRecipe struct {
 	DietType       string  `json:"diet_type"`
 	ClinicalTag    string  `json:"clinical_tag"`
 	AgeGroup       string  `json:"age_group"`
+
+	// AgeInBand reports whether this recipe's [min_age_months, max_age_months] contains
+	// the child's age. Age orders the list rather than filtering it: every in-band recipe
+	// sorts above every out-of-band one, and an out-of-band recipe is reachable only once
+	// the in-band pool is exhausted. See engine.applyAgeRank.
+	AgeInBand bool `json:"age_in_band"`
 	NutritionScore float64 `json:"nutrition_score"`
 	RankedScore    float64 `json:"ranked_score"`
 	ScoredAxes     string  `json:"scored_axes"`

@@ -32,9 +32,9 @@ func TestSelectTargetFallsBackToNT00(t *testing.T) {
 func TestRankByTargetOrdersDescending(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
-	ids, _, err := ageFilter(ctx, pool, models.ChildProfile{AgeMonths: 36})
+	ids, err := inBandIDs(ctx, pool, models.ChildProfile{AgeMonths: 36})
 	if err != nil {
-		t.Fatalf("ageFilter: %v", err)
+		t.Fatalf("inBandIDs: %v", err)
 	}
 	ranked, step, err := rankByTarget(ctx, pool, "NT00", ids)
 	if err != nil {

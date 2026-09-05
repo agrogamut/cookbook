@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/madamgy/recipie/internal/models"
@@ -18,15 +17,10 @@ import (
 func Run(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (models.EngineResult, error) {
 	var steps []models.StepResult
 
-	ids, step1, err := ageFilter(ctx, pool, p)
+	ids, step1, err := ageStep(ctx, pool)
 	if err != nil {
 		return models.EngineResult{}, err
 	}
-	var totalInBand int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM recipe_master`).Scan(&totalInBand); err != nil {
-		return models.EngineResult{}, fmt.Errorf("engine: total recipe count: %w", err)
-	}
-	step1.CandidatesIn = totalInBand
 	steps = append(steps, step1)
 
 	ids, step2, unscreened, err := allergyFilter(ctx, pool, p, ids)
@@ -66,6 +60,15 @@ func Run(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (models
 		return models.EngineResult{}, err
 	}
 	steps = append(steps, step5)
+
+	// Age's ranker half runs first among the post-scoring rankers: it is the coarsest
+	// relevance signal, and every later ranker sorts within the two halves it sets rather
+	// than across them.
+	ranked, step1rank, err := applyAgeRank(ctx, pool, p, ranked)
+	if err != nil {
+		return models.EngineResult{}, err
+	}
+	steps = append(steps, step1rank)
 
 	// Step 2's ranking half runs before step 4's, because a suspected allergen is a safety
 	// signal and step 2 outranks step 4 in the spec's priority order. Like step 4's ranker,
