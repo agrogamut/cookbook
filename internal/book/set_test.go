@@ -80,7 +80,10 @@ func TestASetDescribesOneChildAtOneInstant(t *testing.T) {
 // The stop gate stops every artifact issued in the child's name. A set is all-or-nothing:
 // there is no partial run handing over the daily-life book while the recipe book is withheld,
 // which would read as though the clinician's stop applied only to food.
-func TestASetIsBlockedWholeOrNotAtAll(t *testing.T) {
+// A set is produced whole for every special-care condition. The all-or-nothing property
+// this test was written for survives SP1 with its other half removed: there is no partial
+// run, and now there is no blocked run either.
+func TestASetIsProducedWholeForEverySpecialCareCondition(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 	asOf := time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC)
@@ -117,16 +120,15 @@ func TestASetIsBlockedWholeOrNotAtAll(t *testing.T) {
 		}
 
 		set, err := AssembleSet(ctx, pool, s, asOf)
-		if err == nil {
-			t.Fatalf("%s: a special-care child must get no set, got one with %d book-1 "+
-				"sections and %d book-2 chapters",
+		if err != nil {
+			t.Fatalf("%s: a special-care child must still get a set, got %v", id, err)
+		}
+		// All-or-nothing still holds, in the direction that is left: a set is both books
+		// or it is an error. There is no half run handing over the daily-life book while
+		// the recipe book is withheld.
+		if len(set.Book1.Sections) == 0 || len(set.Book2.MealSections) == 0 {
+			t.Fatalf("%s: a set must carry both books, got %d book-1 sections and %d book-2 chapters",
 				id, len(set.Book1.Sections), len(set.Book2.MealSections))
-		}
-		if !strings.Contains(err.Error(), ErrBlocked.Error()) {
-			t.Fatalf("%s: a stop must be ErrBlocked, got %v", id, err)
-		}
-		if len(set.Book1.Sections) != 0 || len(set.Book2.MealSections) != 0 {
-			t.Fatalf("%s: a blocked run must return no book content", id)
 		}
 	}
 }

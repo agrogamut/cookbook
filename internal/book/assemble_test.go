@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"errors"
 	"html/template"
 	"os"
 	"strings"
@@ -335,7 +334,14 @@ func TestRenderedSectionsAreNotEmpty(t *testing.T) {
 // Every condition id is read from special_care_condition_gate rather than hardcoding one:
 // the gate covers six conditions, and a test that exercises one of them proves nothing about
 // the other five.
-func TestBlockedEngineProducesNoBook(t *testing.T) {
+// Every one of the provider's six STOP-REVIEW conditions still produces both books.
+//
+// This test used to assert the opposite, and the inversion is the whole of SP1: the stop
+// was sized against a non-clinical operator, and the input is now a verified doctor. The
+// loop over every condition id in the table is kept, because the property worth pinning is
+// still "all six behave the same way", only the way has changed. See
+// docs/superpowers/specs/2026-09-05-direct-generation-design.md.
+func TestEverySpecialCareConditionStillProducesBothBooks(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 	asOf := time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC)
@@ -369,28 +375,22 @@ func TestBlockedEngineProducesNoBook(t *testing.T) {
 			}},
 		}
 
-		_, _, err := AssembleBook2(ctx, pool, s, asOf)
-		if !errors.Is(err, ErrBlocked) {
-			t.Fatalf("%s: a blocked result must not become a recipe book, got err = %v",
+		b2, _, err := AssembleBook2(ctx, pool, s, asOf)
+		if err != nil {
+			t.Fatalf("%s: a special-care child must still get a recipe book, got err = %v",
 				conditionID, err)
+		}
+		if len(b2.MealSections) == 0 {
+			t.Fatalf("%s: the recipe book has no chapters", conditionID)
 		}
 
 		b1, _, err := AssembleBook1(ctx, pool, s, asOf)
-		if !errors.Is(err, ErrBlocked) {
-			t.Fatalf("%s: a blocked result must not become a Book 1 either, got err = %v "+
-				"with %d sections", conditionID, err, len(b1.Sections))
+		if err != nil {
+			t.Fatalf("%s: a special-care child must still get a Book 1, got err = %v",
+				conditionID, err)
 		}
-		// The provider's own stop text, not a sentence composed here, is what the caller
-		// gets to show the operator.
-		var reviewer string
-		if err := pool.QueryRow(ctx,
-			`SELECT coalesce(mandatory_reviewer, '') FROM special_care_condition_gate WHERE condition_id = $1`,
-			conditionID).Scan(&reviewer); err != nil {
-			t.Fatalf("%s: reviewer lookup: %v", conditionID, err)
-		}
-		if reviewer != "" && !strings.Contains(err.Error(), reviewer) {
-			t.Fatalf("%s: the block reason must quote the provider's mandatory reviewer %q, got %q",
-				conditionID, reviewer, err.Error())
+		if len(b1.Sections) == 0 {
+			t.Fatalf("%s: Book 1 has no sections", conditionID)
 		}
 	}
 }

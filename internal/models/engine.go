@@ -5,7 +5,11 @@ package models
 type StepResult struct {
 	Step          int               `json:"step"`
 	Name          string            `json:"name"`
-	Kind          string            `json:"kind"` // "hard_filter" | "ranker" | "target" | "escalation"
+	// Kind is one of "hard_filter", "ranker", "target", "record" or "escalation".
+	// "record" is a step that neither filters nor reorders: it looks a provider row up and
+	// reports what it says, which is what the special-care and clinical-rule steps do now
+	// that neither stops generation.
+	Kind          string            `json:"kind"`
 	CandidatesIn  int               `json:"candidates_in"`
 	CandidatesOut int               `json:"candidates_out"`
 	Note          string            `json:"note,omitempty"`

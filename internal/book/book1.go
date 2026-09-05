@@ -165,13 +165,11 @@ type nutritionTargetRow struct {
 // The second return names every block that was skipped and why, so a reviewer sees what the
 // book does not contain rather than assuming the absence is deliberate.
 //
-// The special-care stop gate is consulted before anything is assembled, and returns
-// ErrBlocked exactly as AssembleBook2 does. Book 1 runs no *ranking* engine of its own --
-// it carries no recipe to filter -- which is precisely how a child with a STOP-REVIEW
-// diagnosis got a full book of general-population milestone tables in their own name with
-// no mention of the clinician's stop. The provider's rule is a stop on generation, not a
-// recipe filter, so the gate has to sit here too. Blocking needs no clinical sign-off;
-// issuing the document does. It does call engine.SelectTarget (the target-selection half
+// Book 1 consults no gate. It used to check the special-care stop before assembling
+// anything, because it carries no recipe and so never reaches engine.Run; that stop is gone
+// (see internal/engine/special_care.go and
+// docs/superpowers/specs/2026-09-05-direct-generation-design.md), and nothing here refuses
+// to produce a book. It does call engine.SelectTarget (the target-selection half
 // of step 5), for the Personal Nutrition Target page -- narrower than a full engine.Run:
 // no age/allergy/clinical filter and no recipe ranking, only "which of the thirteen
 // NT00-NT12 rows applies to this child," the same question Book 2's recipe pages already
@@ -185,14 +183,6 @@ func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 	cp, dropped, err := s.ToChildProfile(asOf)
 	if err != nil {
 		return Book1{}, nil, fmt.Errorf("book: derive engine input: %w", err)
-	}
-
-	blocked, reason, err := engine.SpecialCareBlock(ctx, pool, cp)
-	if err != nil {
-		return Book1{}, nil, fmt.Errorf("book: special-care gate: %w", err)
-	}
-	if blocked {
-		return Book1{}, nil, fmt.Errorf("%w: %s", ErrBlocked, reason)
 	}
 
 	targetCode, targetReason, err := engine.SelectTarget(ctx, pool, cp)

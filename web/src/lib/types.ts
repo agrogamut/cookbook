@@ -28,7 +28,10 @@ export interface ChildProfile {
 export interface StepResult {
   step: number;
   name: string;
-  kind: "hard_filter" | "ranker" | "target" | "escalation";
+  /** "record" is a step that neither filters nor reorders: it looks a provider row up and
+   *  reports what it says. The special-care and clinical-rule steps are both records now
+   *  that neither stops generation. */
+  kind: "hard_filter" | "ranker" | "target" | "record" | "escalation";
   candidates_in: number;
   candidates_out: number;
   note?: string;

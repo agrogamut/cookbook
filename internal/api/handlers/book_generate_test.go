@@ -209,7 +209,12 @@ func TestGeneratePutsThePrescriptionPhotoOnBook1(t *testing.T) {
 
 // The stop gate holds on the inline route. A child whose condition stops generation must not
 // be able to get a book by skipping the saved profile.
-func TestGenerateIsBlockedByTheStopGate(t *testing.T) {
+// A declared special-care condition produces books like any other profile.
+//
+// The inverse of what this asserted before SP1. The provider's own stop text still travels
+// in the engine's step list for an operator to read; what it no longer does is withhold the
+// document. See docs/superpowers/specs/2026-09-05-direct-generation-design.md.
+func TestGenerateProducesBooksForEverySpecialCareCondition(t *testing.T) {
 	h := New(testPool(t), aidraft.Disabled)
 	r := chi.NewRouter()
 	r.Post("/api/books/generate", h.BookGenerate)
@@ -218,11 +223,21 @@ func TestGenerateIsBlockedByTheStopGate(t *testing.T) {
 		body := `{"display_name":"SC Child","date_of_birth":"2022-05-01","conditions":[
 		           {"trigger_field":"Special_Care_Condition","flag_value":"` + id + `","class":"chronic"}]}`
 		rec := postGenerate(t, r, "/api/books/generate", body)
-		if rec.Code != 409 {
-			t.Fatalf("%s: expected 409, got %d: %s", id, rec.Code, rec.Body.String())
+		if rec.Code != 200 {
+			t.Fatalf("%s: expected 200, got %d: %s", id, rec.Code, rec.Body.String())
 		}
-		if bytes.Contains(rec.Body.Bytes(), []byte("<html")) {
-			t.Fatalf("%s: a blocked child must not receive a document", id)
+		// Decoded rather than substring-matched: the documents are JSON string values, so
+		// their markup arrives escaped as <html and a raw "<html" search never matches
+		// even on a full, correct response.
+		var got struct {
+			Book1HTML string `json:"book1_html"`
+			Book2HTML string `json:"book2_html"`
+		}
+		if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+			t.Fatalf("%s: decode: %v", id, err)
+		}
+		if !strings.Contains(got.Book1HTML, "<html") || !strings.Contains(got.Book2HTML, "<html") {
+			t.Fatalf("%s: the response is missing one of the two documents", id)
 		}
 	}
 }

@@ -76,17 +76,14 @@ func specialCareConditionIDs(t *testing.T, h *Handlers) []string {
 	return ids
 }
 
-// A clinical stop and a broken renderer must not look alike to an operator. A child with a
-// declared special-care condition must never get a book, blocked or otherwise -- the
-// special-care stop gate exists because the feeding decision for these children is a
-// clinician's, and this test pins that the HTTP layer carries the block through as 409
-// rather than papering over it with an empty 200.
+// A child with a declared special-care condition gets a real document on every route.
 //
-// Both books and both routes, over every condition the gate defines. Book 1 runs no engine
-// of its own, so it was the branch where a STOP-REVIEW child got a 200 and a full book of
-// general-population milestone tables in their own name; asserting only book2 is what let
-// that stand while this test's own doc comment claimed otherwise.
-func TestBlockedChildGets409NotAnEmptyBook(t *testing.T) {
+// The inverse of what this pinned before SP1, and kept at the same breadth deliberately:
+// both books, all six routes, every condition the gate defines. Book 1 runs no engine of
+// its own and was historically the branch where behaviour diverged, so it stays covered
+// even though the divergence being guarded against has flipped direction. No route may
+// return 409 any more -- that status is gone from this API entirely.
+func TestASpecialCareChildGetsBooksOnEveryRoute(t *testing.T) {
 	r, h := booksRouter(t)
 	const childID = "BOOK-TEST-BLOCKED-001"
 	cleanupChild(t, h, childID)
@@ -94,7 +91,7 @@ func TestBlockedChildGets409NotAnEmptyBook(t *testing.T) {
 	for _, conditionID := range specialCareConditionIDs(t, h) {
 		s := profile.Stored{
 			ChildID:     childID,
-			DisplayName: "Blocked Test Child",
+			DisplayName: "Special Care Test Child",
 			DateOfBirth: time.Now().AddDate(0, -36, 0),
 			CreatedBy:   "books_test",
 			Conditions: []profile.ClinicalCondition{
@@ -108,61 +105,37 @@ func TestBlockedChildGets409NotAnEmptyBook(t *testing.T) {
 			t.Fatalf("profile.Save: %v", err)
 		}
 
-		// Read from special_care_condition_gate.mandatory_reviewer directly, the same
-		// source the handler is supposed to use, rather than hardcoding the provider's
-		// current text -- this pins the join, not the workbook's current wording.
-		var wantReviewer string
-		if err := h.pool.QueryRow(context.Background(),
-			`SELECT mandatory_reviewer FROM special_care_condition_gate WHERE condition_id = $1`,
-			conditionID).Scan(&wantReviewer); err != nil {
-			t.Fatalf("reviewer lookup: %v", err)
+		// The HTML routes always run. The printing routes need a browser, and an absent
+		// Chromium is a 503 that says so -- an operational fault, unrelated to what this
+		// test is about -- so they are only exercised when one is on PATH.
+		paths := []string{
+			"/api/books/" + childID + "/book1/preview",
+			"/api/books/" + childID + "/book2/preview",
+			// The set is the surface the console actually calls, so a divergence between
+			// it and the per-book routes would show up in the only place it matters.
+			"/api/books/" + childID + "/preview",
+		}
+		if bookBrowserOnPath() {
+			paths = append(paths,
+				"/api/books/"+childID+"/book1.pdf",
+				"/api/books/"+childID+"/book2.pdf",
+				"/api/books/"+childID+"/books.zip")
 		}
 
-		for _, path := range []string{
-			"/api/books/" + childID + "/book1/preview",
-			"/api/books/" + childID + "/book1.pdf",
-			"/api/books/" + childID + "/book2/preview",
-			"/api/books/" + childID + "/book2.pdf",
-			// The set is the surface the console actually calls, so a stop that held on
-			// the per-book routes and leaked through this one would leak in the only
-			// place it matters.
-			"/api/books/" + childID + "/preview",
-			"/api/books/" + childID + "/books.zip",
-		} {
+		for _, path := range paths {
 			rec := httptest.NewRecorder()
 			r.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
 
-			// 409 and nothing else. 503 in particular is reserved for a broken renderer:
-			// an operator who reads a clinical stop as a service fault will retry it, and
-			// this stop is not a thing to retry.
-			if rec.Code != 409 {
-				t.Fatalf("%s (%s): a special-care child must get 409, got %d: %s",
+			if rec.Code != 200 {
+				t.Fatalf("%s (%s): a special-care child must get a document, got %d: %s",
 					path, conditionID, rec.Code, rec.Body.String())
 			}
-			if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
-				t.Fatalf("%s (%s): a 409 body must be JSON, got Content-Type %q",
-					path, conditionID, ct)
-			}
-			// No book may leak through the block, in either binding.
-			if bytes.Contains(rec.Body.Bytes(), []byte("<html")) {
-				t.Fatalf("%s (%s): a blocked child must not receive a rendered document",
+			// 409 is gone from this API. Naming it explicitly rather than only checking for
+			// 200 means a reintroduced stop fails here with the reason spelled out, instead
+			// of as an unexplained status mismatch.
+			if rec.Code == 409 {
+				t.Fatalf("%s (%s): the stop gate is removed and no route may return 409",
 					path, conditionID)
-			}
-
-			var body struct {
-				Error    string `json:"error"`
-				Reviewer string `json:"reviewer"`
-			}
-			if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
-				t.Fatalf("%s (%s): decode: %v", path, conditionID, err)
-			}
-			if body.Error == "" {
-				t.Fatalf("%s (%s): a 409 body with no reason leaves the operator no next step",
-					path, conditionID)
-			}
-			if body.Reviewer != wantReviewer {
-				t.Fatalf("%s (%s): reviewer = %q, want %q from special_care_condition_gate",
-					path, conditionID, body.Reviewer, wantReviewer)
 			}
 		}
 	}

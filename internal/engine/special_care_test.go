@@ -8,7 +8,11 @@ import (
 	"github.com/madamgy/recipie/internal/models"
 )
 
-func TestSpecialCareConditionBlocksAndNamesTheReviewer(t *testing.T) {
+// The gate no longer stops anything, but the provider's own text still has to survive it
+// intact. That text is the reason an operator can act on the condition at all, and it is
+// quoted rather than paraphrased for the same reason it always was: paraphrasing clinical
+// instruction is how a summary becomes advice.
+func TestSpecialCareConditionRecordsTheProvidersOwnText(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 
@@ -26,40 +30,33 @@ func TestSpecialCareConditionBlocksAndNamesTheReviewer(t *testing.T) {
 		{"SC-ID", "Intellectual disability"},
 	} {
 		t.Run(c.conditionID, func(t *testing.T) {
-			step, blocked, reason, err := specialCareGate(ctx, pool,
+			step, err := specialCareGate(ctx, pool,
 				models.ChildProfile{AgeMonths: 36, SpecialCareCondition: c.conditionID})
 			if err != nil {
 				t.Fatalf("specialCareGate: %v", err)
 			}
-			if !blocked {
-				t.Fatalf("%s is STOP-REVIEW in the provider's master and must block", c.conditionID)
-			}
-			if reason == "" {
-				t.Fatal("a block with no reason leaves the operator no next step")
-			}
-			// The reviewer is the operator's actual next action, so it has to be in the
-			// text -- verbatim, not paraphrased. Read the expected value from the row
-			// rather than matching keywords: SC-CHD's reviewer is "Pediatric
-			// cardiology/pediatrician + dietitian", which contains neither "clinician"
-			// nor "team", so any keyword guess would be testing the guess.
+			// Read the expected reviewer from the row rather than matching keywords:
+			// SC-CHD's is "Pediatric cardiology/pediatrician + dietitian", which contains
+			// neither "clinician" nor "team", so any keyword guess would be testing the
+			// guess.
 			var wantReviewer string
 			if err := pool.QueryRow(ctx,
 				`SELECT mandatory_reviewer FROM special_care_condition_gate WHERE condition_id = $1`,
 				c.conditionID).Scan(&wantReviewer); err != nil {
 				t.Fatalf("reviewer lookup: %v", err)
 			}
-			if !strings.Contains(reason, wantReviewer) {
-				t.Fatalf("block reason must quote the provider's reviewer %q, got %q",
-					wantReviewer, reason)
+			if !strings.Contains(step.Note, wantReviewer) {
+				t.Fatalf("the step note must quote the provider's reviewer %q, got %q",
+					wantReviewer, step.Note)
 			}
-			if !strings.Contains(reason, c.name) {
-				t.Fatalf("block reason must name the condition %q, got %q", c.name, reason)
+			if !strings.Contains(step.Note, c.name) {
+				t.Fatalf("the step note must name the condition %q, got %q", c.name, step.Note)
 			}
-			if step.Kind != "hard_filter" {
-				t.Fatalf("the stop gate is a hard filter, got kind %q", step.Kind)
+			if step.Kind != "record" {
+				t.Fatalf("the gate records rather than filters or ranks, got kind %q", step.Kind)
 			}
 			if step.Step != 3 {
-				t.Fatalf("the stop gate belongs to step 3, got %d", step.Step)
+				t.Fatalf("the special-care row belongs to step 3, got %d", step.Step)
 			}
 		})
 	}
@@ -67,13 +64,10 @@ func TestSpecialCareConditionBlocksAndNamesTheReviewer(t *testing.T) {
 
 func TestSpecialCareGateIsANoOpWhenNoConditionGiven(t *testing.T) {
 	pool := testPool(t)
-	step, blocked, reason, err := specialCareGate(context.Background(), pool,
+	step, err := specialCareGate(context.Background(), pool,
 		models.ChildProfile{AgeMonths: 36})
 	if err != nil {
 		t.Fatalf("specialCareGate: %v", err)
-	}
-	if blocked || reason != "" {
-		t.Fatalf("no condition declared must not block: blocked=%v reason=%q", blocked, reason)
 	}
 	if step.Note == "" {
 		t.Fatal("a step that did nothing must say so rather than looking like it ran")
@@ -81,60 +75,67 @@ func TestSpecialCareGateIsANoOpWhenNoConditionGiven(t *testing.T) {
 }
 
 // An unknown condition id is an error, not a silent pass. Accepting it would mean the
-// operator believes they recorded a condition the engine never saw.
+// operator believes they recorded a condition the engine never saw. This survives the gate
+// removal unchanged: it is input validation, not a clinical stop.
 func TestSpecialCareGateRejectsAnUnknownCondition(t *testing.T) {
 	pool := testPool(t)
-	_, _, _, err := specialCareGate(context.Background(), pool,
+	_, err := specialCareGate(context.Background(), pool,
 		models.ChildProfile{AgeMonths: 36, SpecialCareCondition: "SC-NOPE"})
 	if err == nil {
 		t.Fatal("an unrecognised special-care condition id must error, not pass silently")
 	}
 }
 
-// The whole pipeline must stop, not merely record a step. A ranked list alongside a block
-// is exactly the false assurance the gate exists to prevent.
-func TestRunReturnsNoRecipesForASpecialCareChild(t *testing.T) {
+func TestSpecialCareConditionNoLongerStopsGeneration(t *testing.T) {
 	pool := testPool(t)
-	res, err := Run(context.Background(), pool,
-		models.ChildProfile{AgeMonths: 36, SpecialCareCondition: "SC-CP"})
+	ctx := context.Background()
+
+	p := models.ChildProfile{AgeMonths: 36, SpecialCareCondition: "SC-CP"}
+	res, err := Run(ctx, pool, p)
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if !res.Blocked {
-		t.Fatal("a special-care condition must block the pipeline")
+	if len(res.Recipes) == 0 {
+		t.Fatal("a declared special-care condition must not empty the result list")
 	}
-	if len(res.Recipes) != 0 {
-		t.Fatalf("a blocked result must carry no recipes, got %d", len(res.Recipes))
+
+	var note string
+	for _, s := range res.Steps {
+		if s.Name == "Special-care condition" {
+			note = s.Note
+		}
 	}
-	if res.BlockReason == "" {
-		t.Fatal("a blocked result must carry a reason")
+	if note == "" {
+		t.Fatal("the special-care step must still record the provider's own text")
+	}
+	if !strings.Contains(note, "SC-CP") {
+		t.Fatalf("step note must name the condition, got %q", note)
 	}
 }
 
-// The stop must not depend on the child also matching a clinical rule, a diet or an age
-// band that happens to have recipes. A profile that would otherwise return a full list
-// must still return nothing.
-func TestSpecialCareBlocksAProfileThatWouldOtherwiseSucceed(t *testing.T) {
+// The condition must not quietly change the result either. It is recorded and it feeds
+// target selection and the drafted modification notes; it does not add or remove a recipe
+// on its own.
+func TestSpecialCareConditionDoesNotChangeTheRecipeList(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 
 	base := models.ChildProfile{AgeMonths: 36, DietType: "Vegetarian"}
-	ok, err := Run(ctx, pool, base)
+	without, err := Run(ctx, pool, base)
 	if err != nil {
 		t.Fatalf("Run baseline: %v", err)
 	}
-	if ok.Blocked || len(ok.Recipes) == 0 {
-		t.Fatalf("baseline must succeed for this test to mean anything: blocked=%v recipes=%d",
-			ok.Blocked, len(ok.Recipes))
+	if len(without.Recipes) == 0 {
+		t.Fatal("baseline must return recipes for this test to mean anything")
 	}
 
 	base.SpecialCareCondition = "SC-DS"
-	got, err := Run(ctx, pool, base)
+	with, err := Run(ctx, pool, base)
 	if err != nil {
 		t.Fatalf("Run with condition: %v", err)
 	}
-	if !got.Blocked || len(got.Recipes) != 0 {
-		t.Fatalf("the same profile with a special-care condition must return nothing: "+
-			"blocked=%v recipes=%d", got.Blocked, len(got.Recipes))
+	if len(with.Recipes) != len(without.Recipes) {
+		t.Fatalf("the condition is recorded, not filtered: %d recipes without it, %d with",
+			len(without.Recipes), len(with.Recipes))
 	}
 }
