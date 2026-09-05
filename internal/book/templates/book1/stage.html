@@ -175,9 +175,11 @@
       {{ end }}
     </tbody>
   </table>
-  {{ if not .Next }}
-    <p class="domain-limit">This is the last stage the provider's feeding master defines.</p>
-  {{ end }}
+  {{/* A "this is the last stage the provider's feeding master defines" line used to print
+       here. True, and off the page now: it put an internal data-source name in front of a
+       family and gave them nothing to do about it. The table ending is what says the table
+       ends. GAP-027 still records that the stages stop at 216 months while the content
+       blocks declare 228. */}}
 {{ end }}
 {{ end }}
 {{ end }}

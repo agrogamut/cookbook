@@ -1,8 +1,12 @@
 {{/* B1-ILLNESS-01: feeding through the five illness situations the provider defines.
 
-     book_engine_limit prints on every situation, not once at the foot of the page. It is the
-     sentence that keeps this a feeding page rather than a treatment page, and a reader who
-     turns straight to "Vomiting" must see it there rather than three situations earlier. */}}
+     book_engine_limit no longer prints. It said, at every situation, that the guidance beside
+     it was general rather than specific to this child -- five repetitions of a caveat on a
+     page a doctor has entered this child's conditions into and will sign. Same call as the
+     2026-08-25 amendment made for the per-recipe Draft label: repeated per-section status
+     text is this project's to print or not, and the provider's own per-row data flags are
+     not. IllnessBlock.EngineLimit stays populated on the struct and in the JSON for an
+     operator to read before the signature page. */}}
 {{ define "B1-ILLNESS-01" }}
 {{ range .Illness }}
   <div class="illness">
@@ -19,7 +23,6 @@
         <p>{{ . }}</p>
       </div>
     {{ end }}
-    {{ with .EngineLimit }}<p class="domain-limit">{{ . }}</p>{{ end }}
   </div>
 {{ end }}
 {{/* B1-016 seeds a monitoring template rather than illness rows -- it is the "supportive

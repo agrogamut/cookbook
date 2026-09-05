@@ -7,9 +7,11 @@
      and the referral below it -- and the arrangement is the provider's too, declared in
      book1_display and the ideal_vs_actual flag.
 
-     ai_limit prints on the page it constrains. It is the provider telling this system what
-     the page may not become ("Do not diagnose sleep disorder"), and a reader who can see it
-     can also see that the page has not become that. */}}
+     ai_limit no longer prints. It is the provider telling this system what the page may not
+     become ("Do not diagnose sleep disorder") -- a constraint on the generator, addressed to
+     the generator, and the page obeying it is the evidence, not a line of small print at the
+     foot of thirteen consecutive domains. DailyLifeModule.AILimit stays populated on the
+     struct and in the JSON, where an operator can check it before signing. */}}
 {{ define "B1-DAILY-01" }}
 {{ range .Domains }}
   <div class="domain">
@@ -45,7 +47,6 @@
       </div>
     {{ end }}
     {{ with .Referral }}<p class="domain-referral"><strong>Who to approach:</strong> {{ . }}</p>{{ end }}
-    {{ with .AILimit }}<p class="domain-limit">Scope of this page: {{ . }}</p>{{ end }}
     </div>
 
     {{ with .Tracker }}{{ template "B1-GRID" . }}{{ end }}

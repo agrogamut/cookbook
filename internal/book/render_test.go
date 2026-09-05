@@ -264,6 +264,11 @@ func TestEveryContentKindReachesThePage(t *testing.T) {
 		templateID string
 		section    Section
 		want       []string
+		// notWant is for a field that is deliberately populated on the struct and
+		// deliberately absent from the page. Dropping such a field from want would let a
+		// change that reintroduces it pass silently, which is the whole failure mode this
+		// test exists for, only inverted.
+		notWant []string
 	}{
 		{
 			templateID: "B1-DAILY-01",
@@ -273,8 +278,12 @@ func TestEveryContentKindReachesThePage(t *testing.T) {
 				Referral: "DOMAINREFERRAL", AILimit: "DOMAINLIMIT", Tracker: &grid,
 			}}},
 			want: []string{"DOMAINNAME", "AGECONTEXT", "DOMAINREF", "DOMAINGOAL",
-				"DOMAINREDFLAG", "DOMAINREFERRAL", "DOMAINLIMIT",
+				"DOMAINREDFLAG", "DOMAINREFERRAL",
 				"TRACKERTITLE", "COLONE", "COLTWO", "TRACKERALARM", "TRACKERREVIEW"},
+			// ai_limit is a constraint on this generator, addressed to this generator. The
+			// page obeying it is the evidence; a line of small print at the foot of thirteen
+			// consecutive domains is not. Still on the struct and in the JSON.
+			notWant: []string{"DOMAINLIMIT"},
 		},
 		{
 			templateID: "B1-ILLNESS-01",
@@ -288,7 +297,11 @@ func TestEveryContentKindReachesThePage(t *testing.T) {
 				Trackers: []TrackerSpec{grid},
 			},
 			want: []string{"SITUATIONNAME", "ILLNESSMESSAGE", "ILLNESSMONITOR",
-				"ILLNESSREDFLAG", "ILLNESSLIMIT", "TRACKERTITLE", "COLONE"},
+				"ILLNESSREDFLAG", "TRACKERTITLE", "COLONE"},
+			// book_engine_limit said, at every one of five situations, that the guidance
+			// beside it was general rather than specific to this child -- on a page a doctor
+			// has entered this child's conditions into and will sign.
+			notWant: []string{"ILLNESSLIMIT"},
 		},
 		{
 			templateID: "B1-TRACKER-01",
@@ -317,6 +330,11 @@ func TestEveryContentKindReachesThePage(t *testing.T) {
 				SourceID: "SRCID", Authority: "SRCAUTHORITY", Topic: "SRCTOPIC",
 				Reference: "SRCREFERENCE", HowUsed: "SRCHOWUSED", Limitation: "SRCLIMITATION",
 			}}},
+			// SRCLIMITATION stays on the page, unlike the two caveats above, and the
+			// distinction is CLAUDE.md's 2026-08-25 amendment: important_limitation states
+			// what each cited source can and cannot support ("Does not replace clinical
+			// assessment"), which is a fact about the source rather than about this book's
+			// review status. A references table that drops it claims more than the sources do.
 			want: []string{"SRCID", "SRCAUTHORITY", "SRCTOPIC", "SRCREFERENCE",
 				"SRCHOWUSED", "SRCLIMITATION"},
 		},
@@ -327,6 +345,12 @@ func TestEveryContentKindReachesThePage(t *testing.T) {
 			for _, want := range tc.want {
 				if !strings.Contains(html, want) {
 					t.Errorf("%s: %q is in the model and not on the page", tc.templateID, want)
+				}
+			}
+			for _, notWant := range tc.notWant {
+				if strings.Contains(html, notWant) {
+					t.Errorf("%s: %q is deliberately off the page and printed anyway",
+						tc.templateID, notWant)
 				}
 			}
 		})
