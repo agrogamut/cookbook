@@ -45,22 +45,11 @@ func Run(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (models
 	}
 	steps = append(steps, scStep)
 
-	ids, step3, blocked, blockReason, err := clinicalFilter(ctx, pool, p, ids)
+	ids, step3, err := clinicalFilter(ctx, pool, p, ids)
 	if err != nil {
 		return models.EngineResult{}, err
 	}
 	steps = append(steps, step3)
-	if blocked {
-		// Same nil-vs-empty-array concern as the final return below: an unset Recipes
-		// field is the Go zero value (nil), which marshals to JSON null.
-		return models.EngineResult{
-			Recipes:             []models.RankedRecipe{},
-			Steps:               steps,
-			Blocked:             true,
-			BlockReason:         blockReason,
-			UnscreenedAllergens: unscreened,
-		}, nil
-	}
 
 	ids, step4, err := dietFilter(ctx, pool, p, ids)
 	if err != nil {

@@ -3,29 +3,40 @@ package engine
 import (
 	"context"
 	"errors"
-	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/madamgy/recipie/internal/models"
 )
 
-func TestClinicalFilterBlocksUnmappableCondition(t *testing.T) {
+// A clinical flag records the rules it fires and removes nothing.
+//
+// This asserted the opposite before SP1: CKD held generation because no renal-safe tag
+// exists on any recipe-side table, so the honest options were "block" or "pass through",
+// and blocking was the conservative one for a non-clinical operator. The input is now a
+// verified doctor. See docs/superpowers/specs/2026-09-05-direct-generation-design.md.
+func TestClinicalFilterRecordsAnUnmappableConditionWithoutRemovingAnything(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
+	in := []string{"MG-R-00001", "MG-R-00002"}
 	p := models.ChildProfile{
 		AgeMonths:     36,
 		ClinicalFlags: map[string]string{"CKD": "Yes"},
 	}
-	_, step, blocked, reason, err := clinicalFilter(ctx, pool, p, []string{"MG-R-00001"})
+	out, step, err := clinicalFilter(ctx, pool, p, in)
 	if err != nil {
 		t.Fatalf("clinicalFilter: %v", err)
 	}
-	if !blocked {
-		t.Fatal("CKD has no queryable recipe-side safety tag in the schema; the engine must block, not silently pass a recipe list through")
+	if len(out) != len(in) {
+		t.Fatalf("a clinical flag must not remove a candidate: %d in, %d out", len(in), len(out))
 	}
-	if reason == "" || step.CandidatesOut != 0 {
-		t.Fatalf("blocked result must explain why and return zero candidates: reason=%q out=%d", reason, step.CandidatesOut)
+	if step.Kind != "record" {
+		t.Fatalf("the step records rather than filters, got kind %q", step.Kind)
+	}
+	// CKD fires CR-REN-001 and CR-REN-002. Naming them is what makes the step useful to
+	// the doctor reading it, now that it no longer changes the result.
+	if !strings.Contains(step.Note, "CR-REN") {
+		t.Fatalf("the note must name the rules that fired, got %q", step.Note)
 	}
 }
 
@@ -33,19 +44,24 @@ func TestClinicalFilterNoOpWithoutFlags(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 	in := []string{"MG-R-00001", "MG-R-00002"}
-	out, _, blocked, _, err := clinicalFilter(ctx, pool, models.ChildProfile{AgeMonths: 36}, in)
+	out, step, err := clinicalFilter(ctx, pool, models.ChildProfile{AgeMonths: 36}, in)
 	if err != nil {
 		t.Fatalf("clinicalFilter: %v", err)
 	}
-	if blocked || len(out) != len(in) {
-		t.Fatalf("no clinical flags set: expected pass-through, got blocked=%v out=%d", blocked, len(out))
+	if len(out) != len(in) {
+		t.Fatalf("no clinical flags set: expected pass-through, got %d of %d", len(out), len(in))
+	}
+	if step.Note == "" {
+		t.Fatal("a step that did nothing must say so rather than looking like it ran")
 	}
 }
 
-// TestClinicalFilterErrorsOnUnrecognizedFlagKey pins the fix for the final whole-branch
-// review's Important #7: an unrecognized ClinicalFlags key (a typo like "CDK" for "CKD")
-// must fail loudly with ErrInvalidProfile rather than silently failing open into a full,
-// unescalated recipe list -- the same validation class allergyFilter already had.
+// An unrecognized ClinicalFlags key (a typo like "CDK" for "CKD") must still fail loudly
+// with ErrInvalidProfile.
+//
+// This survives SP1 deliberately, and the distinction is the point: rejecting a typo is
+// input validation, not a clinical gate. Without it a misspelled key silently records
+// nothing while the doctor believes they entered a condition.
 func TestClinicalFilterErrorsOnUnrecognizedFlagKey(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
@@ -53,19 +69,22 @@ func TestClinicalFilterErrorsOnUnrecognizedFlagKey(t *testing.T) {
 		AgeMonths:     36,
 		ClinicalFlags: map[string]string{"not-a-real-trigger-field": "Yes"},
 	}
-	_, _, blocked, _, err := clinicalFilter(ctx, pool, p, []string{"MG-R-00001"})
+	_, _, err := clinicalFilter(ctx, pool, p, []string{"MG-R-00001"})
 	if err == nil {
 		t.Fatal("clinicalFilter must error on an unrecognized trigger field key, got nil")
 	}
 	if !errors.Is(err, ErrInvalidProfile) {
 		t.Fatalf("error must wrap ErrInvalidProfile so the HTTP layer maps it to 400: %v", err)
 	}
-	if blocked {
-		t.Fatal("an error return must not also report blocked=true; the caller checks err first")
-	}
 }
 
-func TestClinicalFilterBlocksAtTheProviderSpecialistTier(t *testing.T) {
+// Every flag that used to escalate now records instead. Kept as a table over the same four
+// cases the block test used, because the interesting property is still "all of these behave
+// the same way", and these four span the two sources the old code unioned: the provider's
+// specialist tier (diabetes, multiple food allergies), the hand-written domain map
+// (persistent vomiting, which sat at 'Clinical approval' and was map-only), and one in both
+// (CKD).
+func TestFlagsThatUsedToEscalateNowRecord(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 
@@ -73,172 +92,85 @@ func TestClinicalFilterBlocksAtTheProviderSpecialistTier(t *testing.T) {
 		name  string
 		flags map[string]string
 	}{
-		// Both were invisible before: the rule query filtered on hard_exclude_yn = 'Y'
-		// (these are 'N') and excluded the Food Allergy domain outright.
 		{"diabetes", map[string]string{"Diabetes_Type": "Type 1"}},
 		{"multiple food allergies", map[string]string{"Multiple_Food_Allergies": "Yes"}},
-		// Already caught by the hand-written domain map; must stay caught.
 		{"kidney disease", map[string]string{"CKD": "Yes"}},
-		// Kidney Disease's mapped rules (CR-REN-001/002) also sit at the specialist tier,
-		// so that case alone never isolates escalationOnlyDomains -- the whole suite would
-		// still pass with `|| escalationOnlyDomains[...]` deleted from the escalates
-		// expression. CR-GI-002 (Vomiting / Poor Intake) is the one loaded rule that is
-		// map-only and not tier: hard_exclude_yn = 'Y' so the query loads it, but its
-		// human_approval_level is 'Clinical approval'. This case is the one that actually
-		// exercises the map half of the union.
-		{"persistent vomiting (map-only, not tier)", map[string]string{"Persistent_Vomiting": "Yes"}},
+		{"persistent vomiting", map[string]string{"Persistent_Vomiting": "Yes"}},
 	}
 
+	in := []string{"MG-R-00001", "MG-R-00002"}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, step, blocked, reason, err := clinicalFilter(ctx, pool,
-				models.ChildProfile{AgeMonths: 36, ClinicalFlags: c.flags},
-				[]string{"MG-R-00001"})
+			out, step, err := clinicalFilter(ctx, pool,
+				models.ChildProfile{AgeMonths: 36, ClinicalFlags: c.flags}, in)
 			if err != nil {
 				t.Fatalf("clinicalFilter: %v", err)
 			}
-			if !blocked {
-				t.Fatalf("%s sits at the provider's Specialist clinical approval tier and "+
-					"must hold generation, not return a recipe list", c.name)
+			if len(out) != len(in) {
+				t.Fatalf("%s must not remove a candidate: %d in, %d out", c.name, len(in), len(out))
 			}
-			if reason == "" || step.CandidatesOut != 0 {
-				t.Fatalf("a blocked result must explain itself and return zero candidates: reason=%q out=%d", reason, step.CandidatesOut)
+			if step.CandidatesOut != step.CandidatesIn {
+				t.Fatalf("%s: in %d out %d", c.name, step.CandidatesIn, step.CandidatesOut)
+			}
+			if !strings.Contains(step.Note, "recorded not filtered") {
+				t.Fatalf("%s: the note must say the rules were recorded, got %q", c.name, step.Note)
 			}
 		})
 	}
 }
 
-func TestClinicalFilterBlockReasonQuotesTheProviderSpecialist(t *testing.T) {
-	pool := testPool(t)
-	_, _, blocked, reason, err := clinicalFilter(context.Background(), pool,
-		models.ChildProfile{AgeMonths: 36, ClinicalFlags: map[string]string{"CKD": "Yes"}},
-		[]string{"MG-R-00001"})
-	if err != nil {
-		t.Fatalf("clinicalFilter: %v", err)
-	}
-	if !blocked {
-		t.Fatal("CKD must block")
-	}
-	// specialist_required is free text naming which specialist. CR-REN-001 reads
-	// "Paediatric nephrology/dietitian". It is rendered verbatim, never parsed.
-	if !strings.Contains(reason, "nephrology") {
-		t.Fatalf("BlockReason must quote the provider's specialist_required text so the "+
-			"operator knows which specialist is needed; got %q", reason)
-	}
-}
-
-func TestClinicalFilterDoesNotBlockANonEscalatingRule(t *testing.T) {
-	pool := testPool(t)
-	// CR-IRON-001 sits at 'Clinical approval' and its engine_action is "Boost iron-rich
-	// recipes". Its specialist_required text ("Pediatrician/dietitian as indicated") is
-	// non-empty like every other row's, which is exactly why that column must never be
-	// treated as a flag.
-	out, _, blocked, _, err := clinicalFilter(context.Background(), pool,
-		models.ChildProfile{AgeMonths: 36, ClinicalFlags: map[string]string{"Anemia_or_Iron_Risk": "Yes"}},
-		[]string{"MG-R-00001", "MG-R-00002"})
-	if err != nil {
-		t.Fatalf("clinicalFilter: %v", err)
-	}
-	if blocked {
-		t.Fatal("an iron-risk flag must not hold generation; it is a ranking signal")
-	}
-	if len(out) != 2 {
-		t.Fatalf("non-escalating flags pass candidates through untouched, got %d of 2", len(out))
-	}
-}
-
-// TestEscalationSourcesDisagreementIsPinned pins every rule where the provider's
-// specialist tier and the hand-written domain map disagree, in both directions, against
-// the live clinical_rule_master content. The engine escalates the union of the two, but
-// only over rules the rule query in clinicalFilter actually loads -- see the long comment
-// on escalationOnlyDomains for the rules that sit in a mapped domain but are never loaded
-// at all, which is a different distinction from the one this test pins.
+// CR-ALL-001 used to be refused outright: it says a confirmed allergen must be excluded,
+// which step 2 does, but only for allergens also listed in Allergens, so the flag alone was
+// a half-specified profile and failing loudly beat half-applying a clinical filter.
 //
-// A prior version of this test only t.Logf'd the two lists and asserted nothing, so
-// deleting a domain from escalationOnlyDomains, or the provider retagging a rule's
-// human_approval_level, passed silently -- go test without -v never prints Logf output
-// from a passing test, so the "visible list" the original comment promised was invisible
-// in CI. This version fails the build on either kind of drift instead.
-func TestEscalationSourcesDisagreementIsPinned(t *testing.T) {
-	pool := testPool(t)
-	rows, err := pool.Query(context.Background(), `
-		SELECT rule_id, clinical_domain, human_approval_level
-		FROM clinical_rule_master
-		ORDER BY rule_id`)
-	if err != nil {
-		t.Fatalf("query: %v", err)
-	}
-	defer rows.Close()
-
-	var tierOnly, mapOnly []string
-	for rows.Next() {
-		var id, domain, level string
-		if err := rows.Scan(&id, &domain, &level); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		atTier := level == specialistApprovalLevel
-		inMap := escalationOnlyDomains[domain]
-		switch {
-		case atTier && !inMap:
-			tierOnly = append(tierOnly, id+" ("+domain+")")
-		case inMap && !atTier:
-			mapOnly = append(mapOnly, id+" ("+domain+")")
-		}
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("rows: %v", err)
-	}
-	t.Logf("at the specialist tier but not in escalationOnlyDomains: %v", tierOnly)
-	t.Logf("in escalationOnlyDomains but not at the specialist tier: %v", mapOnly)
-
-	// Pinned against the live workbook as read on 2026-08-18. If this fails, read the
-	// tierOnly/mapOnly output above (rerun with -v): either the provider moved a rule's
-	// approval level, or someone edited escalationOnlyDomains. Either way a human has to
-	// decide how the change affects the union, not this test.
-	wantTierOnly := []string{
-		"CR-ALL-002 (Food Allergy)",
-		"CR-ALL-003 (Food Allergy)",
-		"CR-DM-001 (Diabetes)",
-		"CR-DM-002 (Diabetes)",
-	}
-	wantMapOnly := []string{
-		"CR-CEL-001 (Coeliac Disease)",
-		"CR-FEED-003 (Feeding/Swallowing)",
-		"CR-GI-002 (Vomiting / Poor Intake)",
-		"CR-GROW-001 (Growth)",
-		"CR-GROW-003 (Growth)",
-	}
-	if !reflect.DeepEqual(tierOnly, wantTierOnly) {
-		t.Fatalf("tier-only rules changed: got %v, want %v", tierOnly, wantTierOnly)
-	}
-	if !reflect.DeepEqual(mapOnly, wantMapOnly) {
-		t.Fatalf("map-only rules changed: got %v, want %v", mapOnly, wantMapOnly)
-	}
-}
-
-// TestClinicalFilterRefusesAnUnclassifiedRule pins the one rule that becomes reachable
-// when the Food Allergy domain stops being excluded and that sits at neither the
-// specialist tier nor a mapped escalation domain. CR-ALL-001 says a confirmed allergen
-// must be excluded -- which step 2 already does, but only for allergens the operator also
-// listed in Allergens. Setting this flag alone is a half-specified profile, and refusing
-// it explicitly beats half-applying a clinical filter or silently ignoring the rule.
+// With no block left, refusing is not an option the engine has. The flag is recorded like
+// any other and the honest position is that it changes nothing on its own: the confirmed
+// allergen hard filter at step 2 is what actually excludes, and it reads Allergens. That
+// filter is untouched by SP1, and this test pins the pass-through so the two are not
+// confused for each other later.
 //
 // The flag value must contain "allergen" for the rule's contains-operator to fire; see
-// triggerFires. A value of "Yes", which is what the console sends, does not reach here.
-func TestClinicalFilterRefusesAnUnclassifiedRule(t *testing.T) {
+// triggerFires. A value of "Yes", which is what the console sends, does not reach it.
+func TestAnAllergenFlagAloneRecordsAndExcludesNothing(t *testing.T) {
 	pool := testPool(t)
-	_, _, _, _, err := clinicalFilter(context.Background(), pool,
+	in := []string{"MG-R-00001"}
+	out, step, err := clinicalFilter(context.Background(), pool,
 		models.ChildProfile{
 			AgeMonths:     36,
 			ClinicalFlags: map[string]string{"Confirmed_or_Highly_Suspected_Allergen": "Peanut allergen"},
 		},
-		[]string{"MG-R-00001"})
-	if err == nil {
-		t.Fatal("CR-ALL-001 is loaded by the widened rule query but sits at neither the " +
-			"specialist tier nor a mapped escalation domain; it must fail loudly rather " +
-			"than pass a clinically-flagged profile through unhandled")
+		in)
+	if err != nil {
+		t.Fatalf("clinicalFilter: %v", err)
 	}
-	if !strings.Contains(err.Error(), "CR-ALL-001") {
-		t.Fatalf("the error must name the rule so an operator can act on it, got %v", err)
+	if len(out) != len(in) {
+		t.Fatalf("the flag alone must not exclude: %d in, %d out", len(in), len(out))
+	}
+	if !strings.Contains(step.Note, "CR-ALL-001") {
+		t.Fatalf("the note must still name the rule that fired, got %q", step.Note)
+	}
+}
+
+// The rule query loads every domain except Age/Feeding and Data Quality. Those two
+// exclusions are the only ones left, and both are structural rather than clinical:
+// recipe_master's own age bounds enforce Age/Feeding, and Data Quality describes the
+// dataset rather than the child. Pinned because widening the query to "all rules" was part
+// of SP1, and a future narrowing would silently shrink what the step reports.
+func TestTheRuleQueryExcludesOnlyTheTwoStructuralDomains(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	var total, loaded int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM clinical_rule_master`).Scan(&total); err != nil {
+		t.Fatalf("count all: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM clinical_rule_master
+		WHERE clinical_domain NOT IN ('Age/Feeding', 'Data Quality')`).Scan(&loaded); err != nil {
+		t.Fatalf("count loaded: %v", err)
+	}
+	if loaded == 0 || loaded == total {
+		t.Fatalf("expected the two structural domains to exclude some but not all rules: "+
+			"%d of %d loaded", loaded, total)
 	}
 }
