@@ -28,7 +28,6 @@ type clinicalRule struct {
 	triggerOperator    string
 	triggerValue       string
 	escalationReason   string
-	humanApprovalLevel string
 	specialistRequired string
 }
 
@@ -109,7 +108,7 @@ func clinicalFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfi
 	// CR-REN-002.
 	rows, err := pool.Query(ctx, `
 		SELECT rule_id, clinical_domain, trigger_field, trigger_operator, trigger_value,
-		       escalation_reason, human_approval_level, coalesce(specialist_required, '')
+		       escalation_reason, coalesce(specialist_required, '')
 		FROM clinical_rule_master
 		WHERE clinical_domain NOT IN ('Age/Feeding', 'Data Quality')
 		ORDER BY CASE rule_priority
@@ -128,7 +127,7 @@ func clinicalFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfi
 	for rows.Next() {
 		var r clinicalRule
 		if err := rows.Scan(&r.ruleID, &r.clinicalDomain, &r.triggerField, &r.triggerOperator,
-			&r.triggerValue, &r.escalationReason, &r.humanApprovalLevel, &r.specialistRequired); err != nil {
+			&r.triggerValue, &r.escalationReason, &r.specialistRequired); err != nil {
 			return nil, models.StepResult{}, fmt.Errorf("engine: clinical rule scan: %w", err)
 		}
 		rules = append(rules, r)

@@ -1035,3 +1035,57 @@ func TestDoctorApproachNoteNeverReachesGatedBlocks(t *testing.T) {
 		}
 	}
 }
+
+// A chapter filled with out-of-band recipes says so in the omissions, and nowhere else.
+//
+// Two things are pinned together here because they are two halves of one decision. The
+// printed page carries no age label, by decision: a recipe book that annotates its own
+// recipes as not-quite-right is the hedging this project stopped printing on 2026-08-25.
+// The signing doctor still has to be able to see it, so it goes to book2_omissions, which is
+// an operator surface and reaches no family.
+//
+// Without this the 2026-09-05 age change is a silent regression: a chapter short of in-band
+// candidates used to fall through to topUpInvented and report a shortfall, and now fills
+// with real out-of-band recipes and reports nothing at all.
+func TestAnOutOfBandChapterIsReportedToTheOperatorAndNotToTheReader(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	asOf := time.Date(2026, 9, 5, 0, 0, 0, 0, time.UTC)
+
+	// Three years old: the largest cohort in the corpus and the one where the shortfall is
+	// structural rather than incidental (17 in-band Breakfast recipes against a 25 target).
+	s := profile.Stored{
+		ChildID:     "BOOK-TEST-AGEBAND",
+		DisplayName: "Age Band Child",
+		DateOfBirth: asOf.AddDate(-3, 0, 0),
+	}
+
+	b2, omissions, err := AssembleBook2(ctx, pool, s, asOf)
+	if err != nil {
+		t.Fatalf("AssembleBook2: %v", err)
+	}
+
+	var reported bool
+	for _, o := range omissions {
+		if strings.Contains(o, "outside this child's age band") {
+			reported = true
+		}
+	}
+	if !reported {
+		t.Fatalf("no chapter reported an out-of-band fill; omissions were %v", omissions)
+	}
+
+	// And nothing about it reaches the page. RecipeCard carries no age-band field at all, so
+	// this checks the rendered document rather than the model: a future template that starts
+	// printing AgeGroup would pass a struct-level check and fail this one.
+	var buf bytes.Buffer
+	if err := RenderHTML(&buf, Kind2, b2.Metadata, b2); err != nil {
+		t.Fatalf("RenderHTML: %v", err)
+	}
+	for _, phrase := range []string{"outside this child's age band", "age band", "13-18 years"} {
+		if strings.Contains(buf.String(), phrase) {
+			t.Errorf("%q printed in the recipe book; the age partition is an operator signal, "+
+				"not something a family's book comments on", phrase)
+		}
+	}
+}

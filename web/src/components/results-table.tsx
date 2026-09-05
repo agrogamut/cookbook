@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { ProvenanceChip } from "@/components/provenance-chip";
 import type { RankedRecipe } from "@/lib/types";
 
@@ -13,6 +14,7 @@ export function ResultsTable({ recipes }: { recipes: RankedRecipe[] }) {
       <TableHeader>
         <TableRow>
           <TableHead>Recipe</TableHead>
+          <TableHead>Age band</TableHead>
           <TableHead>Region</TableHead>
           <TableHead>Meal</TableHead>
           <TableHead>Clinical tag</TableHead>
@@ -28,6 +30,21 @@ export function ResultsTable({ recipes }: { recipes: RankedRecipe[] }) {
                 {r.recipe_id}
               </Link>
               <div className="text-sm">{r.recipe_name}</div>
+            </TableCell>
+            {/* Age orders this list rather than filtering it, so an out-of-band recipe is a
+                real result the operator may act on. It is also the one thing about a
+                generated book that the printed page deliberately does not say, which makes
+                this column the only place the distinction is visible before a book is
+                signed. Outside comes first in the eye because it is the row that needs a
+                decision. */}
+            <TableCell className="text-xs">
+              {r.age_in_band ? (
+                <span className="text-muted-foreground">{r.age_group}</span>
+              ) : (
+                <Badge variant="secondary" className="font-mono text-[10px]">
+                  outside &middot; {r.age_group}
+                </Badge>
+              )}
             </TableCell>
             <TableCell className="text-xs">{r.region_culture}</TableCell>
             <TableCell className="text-xs">{r.meal_type}</TableCell>

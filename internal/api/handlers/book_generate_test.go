@@ -207,8 +207,6 @@ func TestGeneratePutsThePrescriptionPhotoOnBook1(t *testing.T) {
 	}
 }
 
-// The stop gate holds on the inline route. A child whose condition stops generation must not
-// be able to get a book by skipping the saved profile.
 // A declared special-care condition produces books like any other profile.
 //
 // The inverse of what this asserted before SP1. The provider's own stop text still travels

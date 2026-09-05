@@ -52,8 +52,8 @@ func TestEverySpecialCareConditionIsAStopGate(t *testing.T) {
 		t.Fatalf("gate level query: %v", err)
 	}
 	if notStop != 0 {
-		t.Fatalf("%d special-care conditions are not STOP-REVIEW; internal/engine/special_care.go "+
-			"blocks every one of them, so a non-stop condition needs an explicit decision "+
+		t.Fatalf("%d special-care conditions are not STOP-REVIEW; the provider ships all six at "+
+			"that level and this pins that, so a non-stop condition needs an explicit decision "+
 			"rather than an inherited block", notStop)
 	}
 }

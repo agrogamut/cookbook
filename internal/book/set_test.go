@@ -77,9 +77,6 @@ func TestASetDescribesOneChildAtOneInstant(t *testing.T) {
 	}
 }
 
-// The stop gate stops every artifact issued in the child's name. A set is all-or-nothing:
-// there is no partial run handing over the daily-life book while the recipe book is withheld,
-// which would read as though the clinician's stop applied only to food.
 // A set is produced whole for every special-care condition. The all-or-nothing property
 // this test was written for survives SP1 with its other half removed: there is no partial
 // run, and now there is no blocked run either.

@@ -234,9 +234,9 @@ func (h *Handlers) BookGenerate(w http.ResponseWriter, r *http.Request) {
 
 // BookGenerateOne runs one generation from inline inputs and prints a single book.
 //
-// The set is still assembled whole -- both books come from one profile read at one instant,
-// and the stop gate still withholds both -- but only the requested half is printed. An
-// operator who wants Book 2 alone should not wait for Book 1's print.
+// The set is still assembled whole -- both books come from one profile read at one instant --
+// but only the requested half is printed. An operator who wants Book 2 alone should not wait
+// for Book 1's print.
 func (h *Handlers) BookGenerateOne(w http.ResponseWriter, r *http.Request) {
 	which := chi.URLParam(r, "book")
 	if which != "book1" && which != "book2" {

@@ -303,6 +303,12 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		if note != "" {
 			skipped = append(skipped, note)
 		}
+		// After the top-up, so the count reflects what actually prints. An invented card is
+		// drafted against the child's own age and never lands out of band, so it can only
+		// lower this proportion, never raise it.
+		if n := outOfBandNote(cat, cards, catRes); n != "" {
+			skipped = append(skipped, n)
+		}
 
 		sections = append(sections, MealSection{
 			MealCategoryID:    cat.ID,
@@ -808,6 +814,50 @@ func selectionReasons(res models.EngineResult, cp models.ChildProfile, r models.
 		reasons = append(reasons, fmt.Sprintf("Diet practice: %s", r.DietType))
 	}
 	return reasons
+}
+
+// outOfBandNote reports how many of a chapter's printed cards fall outside the child's age
+// band. It is written to the operator's omissions list and to nowhere else.
+//
+// Nothing about this prints in the book, deliberately. The 2026-09-05 gate removal made age
+// a ranker rather than a filter, and the printed page carries no label saying which half of
+// the partition a card came from -- a recipe book that annotates its own recipes as
+// not-quite-right is the kind of hedging this project decided to stop printing. The signing
+// doctor still needs to know before they sign, and book2_omissions is the channel that
+// already reaches them without reaching a family.
+//
+// It also restores a signal the age change silently removed. Before, a chapter short of
+// in-band candidates fell through to topUpInvented, which either drafted a card marked
+// ai-invented or appended a shortfall note. Now the chapter fills with real out-of-band
+// recipes, len(cards) reaches the target, and topUpInvented returns nothing at all -- so the
+// operator went from an explicit "this chapter came up short" to no signal whatsoever. That
+// is a straight regression against this project's "every unit of a book is either rendered
+// or reported" rule, and this is the repair.
+//
+// The shortfall is structural rather than exceptional: a 2-to-5-year-old has 17 in-band
+// Breakfast recipes against a 25 target even with no allergens and no diet declared. It
+// shrinks as the corpus grows.
+func outOfBandNote(cat mealCategory, cards []RecipeCard, res models.EngineResult) string {
+	outOfBand := make(map[string]bool, len(res.Recipes))
+	for _, r := range res.Recipes {
+		if !r.AgeInBand {
+			outOfBand[r.RecipeID] = true
+		}
+	}
+	var n int
+	for _, c := range cards {
+		if outOfBand[c.RecipeID] {
+			n++
+		}
+	}
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf(
+		"%s (%s): %d of %d printed recipes are outside this child's age band. The corpus holds "+
+			"too few in-band recipes for this chapter, so the ranker filled it with the closest "+
+			"fits rather than printing a short chapter. The printed page does not mark them.",
+		cat.ID, cat.Name, n, len(cards))
 }
 
 // nutritionTags carries only the provider's own tags (clinical_tag, growth_target) plus the

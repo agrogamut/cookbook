@@ -96,14 +96,18 @@ var gapMeasures = []gapMeasure{
 	             WHERE NOT EXISTS (
 	                 SELECT 1 FROM recipe_master r WHERE r.recipe_name = c.recipe_name)`},
 
-	// Special-care output rules with no engine implementation. Only OR-001, the
-	// condition-detected stop, is implemented; the other 13 need feeding route, prescribed
-	// IDDSI level, cardiology fluid orders, post-operative status, pica or sensory profile,
-	// none of which this project collects.
+	// Special-care output rules with no engine implementation, which is now all of them.
 	//
-	// Counted from the table rather than hardcoded at 13, so reissuing the workbook with
-	// more rules raises the number instead of leaving it stale.
-	{"GAP-022", `SELECT count(*) FROM special_care_output_rule WHERE rule_id <> 'OR-001'`},
+	// This used to exclude OR-001, the condition-detected stop, as the one rule that was
+	// implemented. The 2026-09-05 gate removal deleted that stop, so OR-001 joined the other
+	// thirteen and the exclusion started under-counting by one. The thirteen were never
+	// blocked on the stop in any case: they need feeding route, prescribed IDDSI level,
+	// cardiology fluid orders, post-operative status, pica or sensory profile, none of which
+	// this project collects.
+	//
+	// Counted from the table rather than hardcoded, so reissuing the workbook with more rules
+	// raises the number instead of leaving it stale.
+	{"GAP-022", `SELECT count(*) FROM special_care_output_rule`},
 
 	// Recipes that can reach no Book 2 chapter. Counted through the mapping table rather
 	// than by comparing vocabularies, so a provider ruling that adds a mapping drops this

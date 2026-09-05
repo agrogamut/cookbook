@@ -5,10 +5,12 @@ package models
 type StepResult struct {
 	Step          int               `json:"step"`
 	Name          string            `json:"name"`
-	// Kind is one of "hard_filter", "ranker", "target", "record" or "escalation".
+	// Kind is one of "hard_filter", "ranker", "target" or "record".
+	//
 	// "record" is a step that neither filters nor reorders: it looks a provider row up and
 	// reports what it says, which is what the special-care and clinical-rule steps do now
-	// that neither stops generation.
+	// that neither stops generation. It replaced "escalation", which had exactly one
+	// producer -- the clinical escalation block -- and was removed with it on 2026-09-05.
 	Kind          string            `json:"kind"`
 	CandidatesIn  int               `json:"candidates_in"`
 	CandidatesOut int               `json:"candidates_out"`

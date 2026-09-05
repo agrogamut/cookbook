@@ -30,8 +30,9 @@ export interface StepResult {
   name: string;
   /** "record" is a step that neither filters nor reorders: it looks a provider row up and
    *  reports what it says. The special-care and clinical-rule steps are both records now
-   *  that neither stops generation. */
-  kind: "hard_filter" | "ranker" | "target" | "record" | "escalation";
+   *  that neither stops generation. It replaced "escalation", whose only producer was the
+   *  clinical escalation block and which went with it. */
+  kind: "hard_filter" | "ranker" | "target" | "record";
   candidates_in: number;
   candidates_out: number;
   note?: string;
@@ -52,6 +53,17 @@ export interface RankedRecipe {
   diet_type: string;
   clinical_tag: string;
   age_group: string;
+  /** Whether this recipe's age band contains the child's age.
+   *
+   *  Age orders the result list rather than filtering it, so an out-of-band recipe is a real
+   *  result the operator may act on, not an escaped one. It sorts below every in-band recipe
+   *  and is only reached once the in-band pool runs out, which for the 2-to-5 band happens
+   *  routinely: the corpus holds 17 in-band Breakfast recipes against a 25 target.
+   *
+   *  This is the operator's signal and it exists on no printed page. A generated book gives a
+   *  family no indication which half of the partition a recipe came from, by decision, so the
+   *  console is the only place the distinction is visible before a book is signed. */
+  age_in_band: boolean;
   nutrition_score: number;
   ranked_score: number;
   scored_axes: string;

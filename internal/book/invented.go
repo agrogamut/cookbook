@@ -17,7 +17,8 @@ import (
 // recipe gets texture safety structurally, from recipe_master.texture and
 // age_feeding_stage_master; an invented recipe has no row in either. Rather than invent a
 // texture check this project has no verified source for, the fallback simply never runs below
-// this age -- the same conservative direction steps 1 and 2 already take on real recipes.
+// this age. Step 2's confirmed-allergen filter is the surviving comparison here: step 1 became
+// a ranker on 2026-09-05 and no longer excludes anything.
 const inventedRecipeMinAgeMonths = 24
 
 // inventedReviewStatus matches a real recipe's most common Review_Status verbatim
