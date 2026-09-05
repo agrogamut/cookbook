@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import {
   GenerateInput, getRegions, getCuisines, getAllergens, getEnums,
-  getSpecialCareConditions,
+  getSpecialCareConditions, matchProfiles, getProfile,
 } from "@/lib/api";
 import type {
-  Region, Cuisine, Allergen, ReferenceEnums, SpecialCareCondition,
+  Region, Cuisine, Allergen, ReferenceEnums, SpecialCareCondition, MatchCandidate,
 } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
 /** maxPhotoBytes mirrors the server's own cap in internal/book/photo.go.
  *
@@ -57,6 +58,10 @@ export function ChildInputForm({
 }) {
   const [name, setName] = useState("");
   const [dob, setDob] = useState("");
+  const [caseId, setCaseId] = useState("");
+  const [motherName, setMotherName] = useState("");
+  const [matches, setMatches] = useState<MatchCandidate[]>([]);
+  const [dismissedMatch, setDismissedMatch] = useState(false);
   const [sex, setSex] = useState("");
   const [language, setLanguage] = useState("");
   const [region, setRegion] = useState("");
@@ -100,6 +105,51 @@ export function ChildInputForm({
     getSpecialCareConditions().then(setConditions).catch(() => {});
   }, []);
 
+  // Debounced: fires 500ms after the operator stops typing, so a check doesn't fire on
+  // every keystroke. Fires on a case id alone, or once name+date-of-birth+mother's-name are
+  // ALL filled in -- matching profile.FindMatches's own rule that name+dob alone is never
+  // enough. Cleared and never fired again once the operator explicitly dismisses a
+  // suggestion for the current inputs, so accepting "this is a new child" does not re-show
+  // the same banner on every keystroke afterward.
+  useEffect(() => {
+    setDismissedMatch(false);
+    if (!caseId && !(name && dob && motherName)) {
+      setMatches([]);
+      return;
+    }
+    const handle = setTimeout(() => {
+      matchProfiles({
+        case_id: caseId || undefined,
+        display_name: name || undefined,
+        mother_name: motherName || undefined,
+        date_of_birth: dob || undefined,
+      })
+        .then(setMatches)
+        .catch(() => setMatches([])); // A failed check is not itself an error worth surfacing --
+        // it only means the suggestion banner does not appear, and generation proceeds exactly
+        // as it does when there genuinely is no match.
+    }, 500);
+    return () => clearTimeout(handle);
+  }, [caseId, name, dob, motherName]);
+
+  async function loadMatch(childID: string) {
+    const p = await getProfile(childID);
+    setName(p.display_name ?? "");
+    setDob(p.date_of_birth);
+    setSex(p.sex ?? "");
+    setLanguage(p.language_id ?? "");
+    setRegion(p.region_culture ?? "");
+    setCuisine(p.cuisine_code ?? "");
+    setDiet(p.diet_type ?? "");
+    setBudget(p.budget_band ?? "");
+    setCaseId(p.case_id ?? "");
+    setMotherName(p.mother_name ?? "");
+    setConfirmed(p.allergens.filter((a) => a.status === "confirmed").map((a) => a.group));
+    setSuspected(p.allergens.filter((a) => a.status === "suspected").map((a) => a.group));
+    setMatches([]);
+    setDismissedMatch(true);
+  }
+
   function toggle(list: string[], set: (v: string[]) => void, value: string) {
     set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
   }
@@ -130,6 +180,8 @@ export function ChildInputForm({
     const input: GenerateInput = {
       date_of_birth: dob,
       display_name: name || undefined,
+      case_id: caseId || undefined,
+      mother_name: motherName || undefined,
       sex: sex || undefined,
       language_id: language || undefined,
       region_culture: region || undefined,
@@ -177,7 +229,12 @@ export function ChildInputForm({
     <div className="space-y-5">
       <section className="space-y-2">
         <p className={legend}>Child</p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+          <div className={field}>
+            <Label htmlFor="g-case-id">Case ID</Label>
+            <Input id="g-case-id" value={caseId} onChange={(e) => setCaseId(e.target.value)}
+                   placeholder="clinic/case number, if any" className="font-mono" />
+          </div>
           <div className={field}>
             <Label htmlFor="g-name">Name</Label>
             <Input id="g-name" value={name} onChange={(e) => setName(e.target.value)}
@@ -206,8 +263,36 @@ export function ChildInputForm({
             <Input id="g-lang" value={language} onChange={(e) => setLanguage(e.target.value)}
                    placeholder="e.g. bn" className="font-mono" />
           </div>
+          <div className={field}>
+            <Label htmlFor="g-mother">Mother&apos;s name</Label>
+            <Input id="g-mother" value={motherName} onChange={(e) => setMotherName(e.target.value)}
+                   placeholder="for matching an existing record" />
+          </div>
         </div>
       </section>
+
+      {matches.length > 0 && !dismissedMatch && (
+        <Alert>
+          <AlertTitle>
+            {matches.length === 1 ? "This may already be a saved child" : `${matches.length} possible matches found`}
+          </AlertTitle>
+          <AlertDescription className="space-y-2">
+            {matches.map((m) => (
+              <div key={m.child_id} className="flex items-center justify-between gap-3">
+                <span className="font-mono text-xs">
+                  {m.child_id} {m.case_id && `· case ${m.case_id}`} · {m.display_name} · DOB {m.date_of_birth}
+                </span>
+                <Button type="button" size="sm" variant="outline" onClick={() => loadMatch(m.child_id)}>
+                  Load this record
+                </Button>
+              </div>
+            ))}
+            <Button type="button" size="sm" variant="ghost" onClick={() => setDismissedMatch(true)}>
+              This is a different child
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <section className="space-y-2">
         <p className={legend}>Food practice and place</p>

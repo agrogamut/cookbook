@@ -239,6 +239,8 @@ export async function getBookSet(childID: string): Promise<BookSet> {
  *  once and gets the books, and nothing about the child is written down. */
 export interface GenerateInput {
   display_name?: string;
+  case_id?: string;
+  mother_name?: string;
   date_of_birth: string;
   sex?: string;
   language_id?: string;
