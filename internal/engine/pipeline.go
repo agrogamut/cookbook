@@ -11,9 +11,17 @@ import (
 // dislikes / sensory) has no data source anywhere in the schema -- CLAUDE.md never
 // claims a questionnaire-preference table exists -- so it is skipped, not faked; step 14
 // (human audit / release gate) is an editorial process, not a query, and does not belong
-// in a request-scoped function. Step 4 is recorded twice -- once as its hard filter,
-// once as the preference ranker that runs after step 5 scores the pool -- so the
-// returned step count is 14 entries for steps 1-13, not 15 for the full spec.
+// in a request-scoped function.
+//
+// Steps 1, 2 and 4 are each recorded twice: a first half, then a ranker half that cannot run
+// beside it because it adjusts a RankedScore that does not exist until step 5 has scored the
+// pool. Step 3 is recorded twice too, as the special-care row and the clinical rule record.
+// So the returned step count is 17 entries for steps 1-13, not 15 for the full spec.
+//
+// Nothing in here stops. Every step either narrows the pool or reorders it, and the two that
+// can still narrow it to nothing are step 2 (confirmed allergens) and step 4 (declared diet),
+// both of which are carrying out what the doctor entered. See
+// docs/superpowers/specs/2026-09-05-direct-generation-design.md.
 func Run(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (models.EngineResult, error) {
 	var steps []models.StepResult
 

@@ -200,8 +200,10 @@ a real prescription's actual content - a clinical finding, a diagnosis, a drug n
 dose, a referral priority - is clinical judgement, not data. That is a harder line than
 anything else this project auto-drafts: the Book 2 recipe-content ruling (18/24 August)
 licenses paraphrasing real provider rows into prose; generating a drug name and dose from
-form answers would be prescribing, which nothing in this codebase has a basis to do and
-which the special-care stop gate exists precisely to keep out of an automated path.
+form answers would be prescribing, which nothing in this codebase has a basis to do. This
+line holds independently of the 2026-09-05 gate removal, and is now the harder of the two:
+that amendment removed the gates that refused to *generate a book*, and did not give this
+project a basis to write a prescription it never had.
 
 So the page prints exactly two kinds of thing:
 
@@ -524,13 +526,18 @@ rather than handing people a SQL client. For any result, a `Sheet` that shows:
 That last one is the answer to "where did recipe X go", and it is only answerable because
 the engine records its steps rather than returning a bare list.
 
-### Safety, unchanged
+### Safety
 
-Steps 1 (age) and 2 (allergy) stay hard filters. There is **no operator override**, no
-"show excluded anyway" toggle that returns them to the result set. An internal audience
-makes the machinery visible; it does not make the safety boundary adjustable. The UI may
-explain that a recipe was excluded for an allergen and must not offer a way to un-exclude
-it.
+Step 2 (confirmed allergens) and step 4 (declared diet) stay hard filters. There is **no
+operator override**, no "show excluded anyway" toggle that returns them to the result set.
+The UI may explain that a recipe was excluded for an allergen and must not offer a way to
+un-exclude it.
+
+That is narrower than it was: step 1 (age) was a hard filter here too until the 2026-09-05
+direct-generation decision below made it a ranker. The two that remain are the two that
+execute the doctor's own stated input rather than second-guessing it - excluding peanut
+because a doctor wrote "peanut allergy" is carrying out their instruction, and removing
+that filter would make the field they filled in do nothing.
 
 ### Status
 
@@ -918,9 +925,9 @@ step 3: a declared special-care condition stops the pipeline and returns no reci
 quoting the provider's own `automatic_action`, `mandatory_reviewer` and `stop_if` verbatim.
 It runs **before** the clinical rule filter, because it is the broader statement.
 
-**The engine now records 16 steps**, not 14. Steps 2 and 4 are each recorded twice (a hard
-filter plus a ranker half), and step 3 is recorded twice (the special-care stop gate plus
-the clinical rule filter). The why-panel keys its rows on step number, kind and name for
+**The engine now records 17 steps**, not 14. Steps 1, 2 and 4 are each recorded twice (a
+first half plus a ranker half), and step 3 is recorded twice (the special-care row plus the
+clinical rule record). The why-panel keys its rows on step number, kind and name for
 exactly this reason.
 
 Blocking needed no clinical sign-off, and that asymmetry is the point: a block never puts
@@ -936,6 +943,77 @@ pica and sensory profile - none of which this project collects, so implementing 
 mean inventing their inputs. `GAP-022` counts them. The stop is what makes their absence
 safe: no ranked list is produced for these children at all.
 
+### Amendment - no gate stops generation; input is a verified doctor (2026-09-05)
+
+The section above describes the special-care stop gate as implemented. It is not, any more.
+Neither is the clinical escalation block, and neither is the age hard filter. Design and
+plans: `docs/superpowers/specs/2026-09-05-direct-generation-design.md` and the four
+`docs/superpowers/plans/2026-09-05-sp*.md` files.
+
+**The operating model changed, and that is the whole argument.** Every gate in this engine
+was sized against an *operator* - clinic staff serving families, not clinically qualified,
+who could repeat a wrong number to a parent without knowing it was wrong. Against that
+reader, blocking was always the safe direction: a block never puts an unsafe recipe in front
+of someone who cannot evaluate it. The input is now a **registered, verified doctor**. A
+doctor who declares cerebral palsy and receives HTTP 409 telling them to route to a mandatory
+reviewer has been handed nothing by a system that just told the reviewer to go find
+themselves. The stop was standing in for an absent clinical judgement that is now present at
+the point of input.
+
+What changed:
+
+- **The special-care stop gate no longer stops.** `specialCareGate` looks the row up and
+  records the provider's `automatic_action`, `mandatory_reviewer` and `stop_if` verbatim in
+  its step note. `SpecialCareBlock` is deleted, and with it Book 1's separate consultation of
+  the gate.
+- **The clinical escalation block no longer blocks.** `escalationOnlyDomains` and
+  `specialistApprovalLevel` are deleted. This is not a loss of filtering, and
+  `escalationOnlyDomains`' own comment said why: no renal-safe, gluten-free,
+  dysphagia-texture or FODMAP tag exists on any table, so the block was standing in for a
+  filter that could never be written. Every rule a child's flags fire is now named in the
+  step note with the provider's own `escalation_reason` and `specialist_required` text. The
+  clinical signal still reaches the output twice over - `SelectTarget` picks the nutrition
+  target from it, and `ActiveClinicalRuleActions` feeds the per-recipe modification notes.
+- **Age is a ranker, not a filter.** Step 1 returns the whole corpus; `applyAgeRank` stably
+  partitions the ranked list so every in-band recipe sorts above every out-of-band one, and
+  an out-of-band recipe is reachable only once the in-band pool is exhausted. A partition
+  rather than a score penalty because `recipe_target_score` normalises *within* an age band,
+  so scores are not comparable across bands and no constant in `rank.go`'s family could
+  guarantee the right ordering. Every ranker after it sorts through `sortWithinAgeBand`, or
+  a matching region would lift a teenage recipe above an infant's purees.
+- **`ErrBlocked`, `BlockedDetail`, `EngineResult.Blocked`, `writeBlocked` and HTTP 409 are
+  gone**, along with the console's blocked banner and stop-gate warning. 503 (renderer
+  unavailable) and 500 (print failed) are untouched and still read differently from each
+  other.
+- **Three printed scope caveats came off the page** - `book_engine_limit` on the illness
+  page, `ai_limit` on the daily-life pages, and stage.html's "last stage the provider's
+  feeding master defines" line. All three stay populated on the struct and in the JSON for an
+  operator to read before the signature page. Same line the 2026-08-25 amendment drew for the
+  per-recipe `Draft` label.
+
+**What this does not touch, on purpose:**
+
+- **Confirmed allergens (step 2) and declared diet (step 4) stay hard filters.** They are not
+  the system second-guessing a doctor; they are the system carrying out what the doctor
+  entered. Removing them would make those fields do nothing, which is ignoring the doctor
+  rather than trusting them.
+- **The hard rule on inventing data values.** Unchanged and still outranking everything.
+- **`book1_content_block.ai_can_draft = 'N'`** on all five gated blocks.
+- **`refs.html`'s per-source `important_limitation` column.** The 2026-08-25 amendment
+  already ruled on this exact column: it states what each cited source can and cannot
+  support, a fact about the source rather than about this book's review status. SP1's own
+  plan listed it for removal and was wrong.
+- **The provider's dataset sign-off is still outstanding**, and the per-book physical
+  signature page is unchanged. This amendment removes *this project's* gates on generation.
+  It makes no claim that the provider's data has been reviewed.
+
+**The premise this rests on, stated so it is on the record:** there is no authentication in
+this codebase. `internal/api/router.go` has no auth middleware, no session, no JWT. "Only
+verified doctors" is enforced by deployment - the service reachable only on a private network
+- not by anything in this repository. That is the project owner's explicit call. **If the
+service is ever exposed publicly, this amendment's entire justification lapses and these
+gates are the wrong thing to have removed.**
+
 ### Deviation from the spec, and why
 
 The spec makes steps 1, 2, 3, 4 and 6 hard filters. With the current data that guarantees
@@ -943,9 +1021,10 @@ empty result sets (see "Filter collapse" below). Decision: **steps 3 and 6 are d
 rankers with graceful degradation** - return closest matches with a "closest fit" badge
 rather than an empty page.
 
-**Steps 1 (age) and 2 (allergy/safety) stay hard filters and must never be relaxed.**
-Those two are the safety boundary. Loosening a clinical filter is a safety decision, not a
-UI decision, and needs the provider's written sign-off before it ships.
+**Step 2 (allergy/safety) and step 4 (declared diet) stay hard filters.** Step 1 (age) was
+one of these until the 2026-09-05 amendment below; it is now a ranker that partitions rather
+than removes. Loosening either of the two that remain is a safety decision, not a UI
+decision.
 
 ## Datasets
 
@@ -1098,11 +1177,11 @@ Three decisions already settled, so they do not need re-litigating when the file
   report naming the row number, the column and the reason. Good rows process; bad rows are
   reported. That is the hard rule applied to a batch: an unexplained absence is the failure
   mode, not a shorter output.
-- **A special-care stop is not an error.** Rows carrying a STOP-REVIEW condition produce no
-  books and are reported *separately* from failures, with the provider's mandatory reviewer
-  named. An operator who reads a clinical stop as a data problem will try to fix it.
+- ~~**A special-care stop is not an error.**~~ Settled before the 2026-09-05 amendment and
+  no longer applicable: a STOP-REVIEW condition produces books like any other row. Nothing in
+  a batch is withheld for a clinical reason, so the report has two outcomes rather than three.
 - **Books come back as one archive** - `<child>-book1.pdf` and `<child>-book2.pdf` per child
-  plus a `report.csv` covering all three outcomes.
+  plus a `report.csv` covering both outcomes.
 
 Two things to know before scoping it:
 
@@ -1669,7 +1748,7 @@ must leave a writing line for it.
 | Diet, region, cuisine, budget, prep/cook time | yes, `child_profile` | drives Book 2 selection |
 | Allergies, three-state | yes, `child_allergen` | Child Profile, confirmed and suspected both named |
 | Dated growth measurements | yes, `child_growth_measurement` - date, weight, height, head circumference, three z-scores, interpretation, measured-by | Growth Monitoring (B1-003), one row per visit, oldest first |
-| Clinical conditions | yes, `child_clinical_condition` | drives the stop gate and clinical filters |
+| Clinical conditions | yes, `child_clinical_condition` | recorded in the engine's step list, and drives nutrition-target selection and the drafted modification notes |
 | Food likes/dislikes | yes, `child_preference` | ranker only |
 | **Vaccine history** | **no** - `book1_vaccine_schedule` is the IAP reference schedule, not this child's record | the tracker prints the schedule with blank columns to write in |
 | **Development observations** | **no** - `book1_development_milestone` is the reference, not this child's record | the same: reference skill, blank observation columns |
@@ -1695,14 +1774,11 @@ them; none is ever computed.
 
 Two rules the package enforces and that must not be relaxed:
 
-- **The special-care stop gate blocks both books, and a set is all-or-nothing.** A declared
-  special-care condition returns 409 with the provider's mandatory reviewer, for Book 1 as
-  well as Book 2 and for the set routes. There is no partial run handing over the daily-life
-  book while the recipe book is withheld, which would read as though the clinician's stop
-  applied only to food. Book 1 runs no engine of its own, so `AssembleBook1` queries the gate
-  directly rather than reading
-  a block reason off an engine result; both assemblers return `ErrBlocked` and the handler
-  routes it to the same 409.
+- **A set is all-or-nothing: both books or an error.** There is no partial run handing over
+  the daily-life book while the recipe book is withheld. Nothing withholds a book for a
+  clinical reason any more (see the 2026-09-05 amendment above), so the only way a set
+  returns nothing is a genuine failure; the all-or-nothing property survives with its other
+  half removed.
 - **Every unit of a book is either rendered or reported.** Block-level and category-level
   omissions carry the `[block] ` and `[meal category] ` markers and are counted against the
   corpus total by the conservation tests. A row left out of a block that did render is

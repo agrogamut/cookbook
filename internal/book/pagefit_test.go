@@ -75,6 +75,21 @@ const underfillThreshold = 0.62
 //	13  The signature page (B1-SIGNOFF-01 / B2-SIGNOFF-01) added to both books: a short form
 //	    of six write-lines on its own sheet, the same legitimate case as the imprint pages
 //	    either side of it.
+// 13, and there is no slack left: the measured count is exactly 13.
+//
+// It was 11 before SP1 removed three printed scope caveats (2026-09-05). Removing the
+// per-domain ai_limit paragraph from thirteen consecutive daily-life domains dropped two
+// pages that had been clearing this line by a hair -- book1 p27 and p37 -- to 61% and 60%.
+// Neither is the failure this guard was written for; that is p53 at 28%. Both are one short
+// paragraph's worth of ink below a threshold they used to clear, caused by deliberately
+// printing less.
+//
+// The budget is deliberately NOT raised to absorb them, per this file's own rule: a
+// regression is fixed by moving where the break falls, not by widening the tolerance. It is
+// left at 13 so the next change that costs a page has to deal with it rather than inherit
+// room. Reclaiming the two pages means re-flowing the daily-life domain layout, which is
+// tuned against trackerRowsByFrequency and the .tracker row height and is out of scope for a
+// gate removal.
 const maxUnderfilledPages = 13
 
 // maxPagesOpeningOnAnOrphan is the same kind of budget for the other half of the problem: a
