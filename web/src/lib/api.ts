@@ -145,15 +145,6 @@ export interface BookPreview {
   omissions: string[];
 }
 
-/** Thrown when the engine stops generation for a clinical reason. Distinct from ApiError
- *  because an operator must never read a clinical stop as a fault. */
-export class BookBlockedError extends Error {
-  constructor(message: string, public reviewer?: string) {
-    super(message);
-    this.name = "BookBlockedError";
-  }
-}
-
 /** Thrown when the print pipeline has no browser. An operational fault, not a clinical one.
  *  Retrying changes nothing until a browser is installed. */
 export class RendererUnavailableError extends Error {
@@ -175,7 +166,7 @@ export class PrintFailedError extends Error {
 
 async function bookError(res: Response): Promise<Error> {
   const body = await res.json().catch(() => ({ error: res.statusText }));
-  if (res.status === 409) return new BookBlockedError(body.error ?? res.statusText, body.reviewer);
+  // No 409 case. It was the clinical stop gate's status and nothing returns it any more.
   if (res.status === 503) return new RendererUnavailableError(body.error ?? res.statusText);
   if (res.status === 500 && typeof body.error === "string" && body.error.startsWith("pdf render failed")) {
     return new PrintFailedError(body.error);

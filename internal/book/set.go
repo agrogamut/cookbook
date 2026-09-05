@@ -38,10 +38,11 @@ type Set struct {
 
 // AssembleSet builds both books for one child.
 //
-// It returns ErrBlocked if either assembler does. The stop gate stops every artifact issued
-// in the child's name, so a set is all-or-nothing: there is no partial run that hands over
-// the daily-life book while the recipe book is withheld, which would read as though the
-// clinician's stop applied only to food.
+// A set is all-or-nothing: both books or an error, never a partial run that hands over the
+// daily-life book while the recipe book is withheld. Nothing withholds a book for a clinical
+// reason any more (SP1: see
+// docs/superpowers/specs/2026-09-05-direct-generation-design.md), so the only way this
+// returns nothing is a genuine failure.
 //
 // Errors name which book failed. The two assemblers read different tables, so an operator
 // chasing a failure needs to know which half of the run produced it.

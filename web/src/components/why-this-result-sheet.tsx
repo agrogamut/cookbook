@@ -24,18 +24,13 @@ export function WhyThisResultSheet({ result }: { result: EngineResult }) {
           <p className="text-xs text-muted-foreground">{result.target_reason}</p>
         </SheetHeader>
         <div className="space-y-3 p-4">
-          {result.blocked && (
-            <div className="rounded border border-destructive p-3 text-sm text-destructive">
-              Blocked: {result.block_reason}
-            </div>
-          )}
-          {/* Keyed on step number, kind AND name. Steps 2 and 4 are each recorded twice as
-              a hard filter plus a ranker half (the suspected-allergen demotion and the diet
-              preference), and step 3 is recorded twice as two hard filters -- the
-              special-care stop gate and the clinical rule filter -- so neither the number
-              nor the number-and-kind pair is unique. Name is what separates the two step-3
-              rows. A colliding key lets React duplicate or omit one of a pair, on the one
-              screen whose job is to account for every step. */}
+          {/* Keyed on step number, kind AND name. Steps 1, 2 and 4 are each recorded twice
+              as a first half plus a ranker half (the age partition, the suspected-allergen
+              demotion, the diet preference), and step 3 is recorded twice as the
+              special-care row and the clinical rule record, so neither the number nor the
+              number-and-kind pair is unique. Name is what separates the two step-3 rows. A
+              colliding key lets React duplicate or omit one of a pair, on the one screen
+              whose job is to account for every step. */}
           {result.steps.map((s) => (
             <div key={`${s.step}-${s.kind}-${s.name}`} className="border-b pb-2 font-mono text-xs">
               <div className="flex items-center justify-between">

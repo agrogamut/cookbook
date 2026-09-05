@@ -428,12 +428,6 @@ export function ChildInputForm({
                 ))}
               </SelectContent>
             </Select>
-            {specialCare && (
-              <p className="text-xs text-muted-foreground">
-                A declared special-care condition is the provider&apos;s stop gate. Generation
-                will halt and no book is produced, for either book.
-              </p>
-            )}
           </div>
         </div>
       </section>

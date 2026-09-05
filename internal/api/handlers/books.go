@@ -47,9 +47,15 @@ func (h *Handlers) loadBookProfile(w http.ResponseWriter, r *http.Request, child
 // serve -- BookDownload feeds htmlDoc straight into book.PrintPDF, unmodified -- so there is
 // exactly one rendering of a book and no way for the preview and the print to disagree.
 //
-// On any failure it writes the response itself and returns ok=false: a blocked engine gets
-// its own 409 via writeBlocked, everything else gets a 500. There is deliberately one
-// failure path shared by both endpoints rather than two that could drift apart.
+// On any failure it writes the response itself and returns ok=false, always a 500. There is
+// deliberately one failure path shared by both endpoints rather than two that could drift
+// apart.
+//
+// There is no 409 here any more. It used to be the clinician stop gate's status, and that
+// gate is gone (SP1: see docs/superpowers/specs/2026-09-05-direct-generation-design.md);
+// nothing about this child's clinical state refuses to produce a document. 503 for an
+// unavailable renderer and 500 for a failed print are untouched and still have to read
+// differently from each other.
 func (h *Handlers) renderBookHTML(w http.ResponseWriter, r *http.Request, s profile.Stored, kind string) (htmlDoc []byte, meta book.Metadata, omissions []string, ok bool) {
 	ctx := r.Context()
 	asOf := time.Now().UTC()
@@ -57,16 +63,9 @@ func (h *Handlers) renderBookHTML(w http.ResponseWriter, r *http.Request, s prof
 	var data any
 	var bookKind book.Kind
 	switch kind {
-	// Both branches route ErrBlocked to the same 409. A stop gate stops every artifact
-	// issued in the child's name, not only the recipe book, so the two books must not
-	// answer a clinician's stop differently.
 	case "book1":
 		b1, dropped, err := book.AssembleBook1(ctx, h.pool, s, asOf, book.WithDrafter(h.drafter))
 		if err != nil {
-			if errors.Is(err, book.ErrBlocked) {
-				h.writeBlocked(w, r, s, asOf, err)
-				return nil, book.Metadata{}, nil, false
-			}
 			writeError(w, http.StatusInternalServerError, "book1 assembly failed: "+err.Error())
 			return nil, book.Metadata{}, nil, false
 		}
@@ -75,10 +74,6 @@ func (h *Handlers) renderBookHTML(w http.ResponseWriter, r *http.Request, s prof
 	case "book2":
 		b2, dropped, err := book.AssembleBook2(ctx, h.pool, s, asOf, book.WithDrafter(h.drafter))
 		if err != nil {
-			if errors.Is(err, book.ErrBlocked) {
-				h.writeBlocked(w, r, s, asOf, err)
-				return nil, book.Metadata{}, nil, false
-			}
 			writeError(w, http.StatusInternalServerError, "book2 assembly failed: "+err.Error())
 			return nil, book.Metadata{}, nil, false
 		}
@@ -95,18 +90,6 @@ func (h *Handlers) renderBookHTML(w http.ResponseWriter, r *http.Request, s prof
 		return nil, book.Metadata{}, nil, false
 	}
 	return buf.Bytes(), meta, omissions, true
-}
-
-// writeBlocked returns 409 for a clinician's stop gate, distinct from the 503 an unavailable
-// PDF renderer gets: an operator who reads a clinical stop as a service fault will retry it,
-// and a stop is not a thing to retry.
-func (h *Handlers) writeBlocked(w http.ResponseWriter, r *http.Request, s profile.Stored, asOf time.Time, err error) {
-	reason, reviewer := book.BlockedDetail(r.Context(), h.pool, s, asOf, err)
-	body := map[string]string{"error": reason}
-	if reviewer != "" {
-		body["reviewer"] = reviewer
-	}
-	writeJSON(w, http.StatusConflict, body)
 }
 
 // BookPreview returns the rendered book as HTML -- the same document BookDownload prints

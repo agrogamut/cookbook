@@ -130,24 +130,22 @@ describe("BookGenerator", () => {
     expect(bookCalls()).toBe(3);
   });
 
-  it("renders a clinical stop, not an error, when the engine blocks the child", async () => {
-    vi.stubGlobal("fetch", mockFetch({
-      generateStatus: 409,
-      generateBody: JSON.stringify({
-        error: "Down syndrome is a STOP-REVIEW condition",
-        reviewer: "Pediatrician + dietitian",
-      }),
-    }));
+  // The clinical stop this used to assert is gone (SP1: see
+  // docs/superpowers/specs/2026-09-05-direct-generation-design.md). Nothing returns 409, so
+  // what is worth pinning now is the negative: the console carries no stop-gate state at all,
+  // and a selected special-care condition produces books like any other profile rather than
+  // an explanation of why it will not.
+  it("shows no clinical stop state, because nothing stops generation", async () => {
+    vi.stubGlobal("fetch", mockFetch());
     await generate();
 
-    expect(await screen.findByText(/STOP-REVIEW/)).toBeInTheDocument();
-    expect(screen.getByText(/Pediatrician \+ dietitian/)).toBeInTheDocument();
-    // A stop is a clinical decision, so the operator is never offered the artifact anyway --
-    // and it withholds both books, so neither download appears.
-    expect(screen.queryByRole("button", { name: /download/i })).toBeNull();
+    expect(await screen.findByTitle("Book 1 preview")).toBeInTheDocument();
+    expect(screen.queryByText(/STOP-REVIEW/)).toBeNull();
+    expect(screen.queryByText(/stopped by a clinical rule/i)).toBeNull();
+    expect(screen.queryByText(/generation will halt/i)).toBeNull();
   });
 
-  it("distinguishes an unavailable renderer from a clinical stop", async () => {
+  it("distinguishes an unavailable renderer from a print failure", async () => {
     vi.stubGlobal("fetch", mockFetch({
       generateStatus: 503,
       generateBody: JSON.stringify({ error: "headless chromium unavailable" }),

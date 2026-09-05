@@ -68,14 +68,7 @@ export default function EngineConsolePage() {
               </div>
             )}
 
-            {!loading && result?.blocked && (
-              <Alert variant="destructive">
-                <AlertTitle>Automated recipe generation blocked</AlertTitle>
-                <AlertDescription>{result.block_reason}</AlertDescription>
-              </Alert>
-            )}
-
-            {!loading && result && !result.blocked && result.recipes.length === 0 && (
+            {!loading && result && result.recipes.length === 0 && (
               <Alert>
                 <AlertTitle>No recipes matched</AlertTitle>
                 <AlertDescription>
@@ -85,7 +78,7 @@ export default function EngineConsolePage() {
               </Alert>
             )}
 
-            {!loading && result && !result.blocked && result.recipes.length > 0 && (
+            {!loading && result && result.recipes.length > 0 && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between border-b pb-2">
                   <span className="font-mono text-xs uppercase tracking-wide text-muted-foreground">

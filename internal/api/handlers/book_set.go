@@ -34,10 +34,10 @@ type bookSetResponse struct {
 
 // renderSet assembles both books and renders both to HTML.
 //
-// On any failure it writes the response itself and returns ok=false, routing ErrBlocked to
-// the same 409 the single-book endpoints use. A set is all-or-nothing: a stop gate withholds
-// both books, and an assembly failure in either one fails the run rather than serving half a
-// deliverable an operator might mistake for the whole thing.
+// On any failure it writes the response itself and returns ok=false, always a 500. A set is
+// all-or-nothing: an assembly failure in either book fails the run rather than serving half
+// a deliverable an operator might mistake for the whole thing. Nothing withholds a book for
+// a clinical reason any more (SP1).
 func (h *Handlers) renderSet(w http.ResponseWriter, r *http.Request, s profile.Stored) (bookSetResponse, book.Set, bool) {
 	return h.renderSetWithPhotos(w, r, s, nil, nil, nil)
 }
@@ -53,10 +53,6 @@ func (h *Handlers) renderSetWithPhotos(w http.ResponseWriter, r *http.Request, s
 
 	set, err := book.AssembleSet(ctx, h.pool, s, asOf, book.WithDrafter(h.drafter))
 	if err != nil {
-		if errors.Is(err, book.ErrBlocked) {
-			h.writeBlocked(w, r, s, asOf, err)
-			return bookSetResponse{}, book.Set{}, false
-		}
 		writeError(w, http.StatusInternalServerError, "book set assembly failed: "+err.Error())
 		return bookSetResponse{}, book.Set{}, false
 	}

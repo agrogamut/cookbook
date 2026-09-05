@@ -18,17 +18,6 @@ import (
 	"github.com/madamgy/recipie/internal/profile"
 )
 
-// ErrBlocked is returned by both assemblers when generation is stopped for this child. A
-// blocked result must never become a book: the special-care stop gate exists because the
-// feeding decision for those children is a clinician's, and a book issued in the child's
-// name is exactly the artifact that would override it.
-//
-// Both books, not only the recipe book. The provider's own wording is "Condition is a STOP
-// GATE, not a simple recipe filter", and a Book 1 carrying general-population milestone
-// tables under the name of a child with a STOP-REVIEW diagnosis is the same override in a
-// different binding.
-var ErrBlocked = errors.New("book: engine blocked generation")
-
 // methodStepPattern splits the provider's numbered preparation text ("1) ... 2) ... 3) ...")
 // into individual steps. Whatever the numbering, the words themselves are the provider's own
 // -- this only breaks one string into several, it never rewrites a syllable of it.
@@ -125,15 +114,14 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		return Book2{}, nil, fmt.Errorf("book: derive engine input: %w", err)
 	}
 
-	// One preliminary run, with no meal type set, purely for the special-care/clinical block
-	// check -- blocking does not depend on meal type, so this is the cheapest way to catch a
-	// blocked child before doing any per-category work below.
+	// One preliminary run with no meal type set. It existed for the special-care and clinical
+	// block checks, which are gone (SP1: see
+	// docs/superpowers/specs/2026-09-05-direct-generation-design.md), and is kept for the
+	// active nutrition target it selects -- that is a property of the child rather than of
+	// any one chapter, and the per-category runs below would each re-derive the same answer.
 	res, err := engine.Run(ctx, pool, cp)
 	if err != nil {
 		return Book2{}, nil, fmt.Errorf("book: run engine: %w", err)
-	}
-	if res.Blocked {
-		return Book2{}, nil, fmt.Errorf("%w: %s", ErrBlocked, res.BlockReason)
 	}
 
 	// Read once, outside the per-category loop: which rules matter is a property of the

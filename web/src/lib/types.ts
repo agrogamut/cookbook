@@ -63,8 +63,6 @@ export interface EngineResult {
   steps: StepResult[];
   active_target: string;
   target_reason: string;
-  blocked: boolean;
-  block_reason?: string;
   /** Declared allergen groups with no tag anywhere in the corpus. They screened nothing.
    *  Rendering a result set without surfacing these implies a screening that did not
    *  happen, which is the one thing this UI must never do. */

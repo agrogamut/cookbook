@@ -53,8 +53,6 @@ type EngineResult struct {
 	Steps        []StepResult   `json:"steps"`
 	ActiveTarget string         `json:"active_target"`
 	TargetReason string         `json:"target_reason"`
-	Blocked      bool           `json:"blocked"`
-	BlockReason  string         `json:"block_reason,omitempty"`
 
 	// UnscreenedAllergens names declared allergen groups that have no tag anywhere in
 	// the recipe corpus (allergen_tag_vocabulary.corpus_tag IS NULL). They excluded zero

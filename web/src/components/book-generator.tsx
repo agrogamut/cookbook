@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   generateBooks, generateBooksZip, generateBookPdf, BookSet, GenerateInput,
-  BookBlockedError, RendererUnavailableError, PrintFailedError,
+  RendererUnavailableError, PrintFailedError,
 } from "@/lib/api";
 import { ChildInputForm } from "@/components/child-input-form";
 import { Button } from "@/components/ui/button";
@@ -11,11 +11,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 
-type Blocked = { kind: "blocked"; message: string; reviewer?: string };
 type Unavailable = { kind: "unavailable"; message: string };
 type PrintFailed = { kind: "print-failed"; message: string };
 type Failed = { kind: "failed"; message: string };
-type Problem = Blocked | Unavailable | PrintFailed | Failed;
+type Problem = Unavailable | PrintFailed | Failed;
 
 type Which = "book1" | "book2";
 
@@ -66,9 +65,6 @@ export function BookGenerator() {
   useEffect(() => () => revokeHeldPdfUrls(), []);
 
   function classify(err: unknown): Problem {
-    if (err instanceof BookBlockedError) {
-      return { kind: "blocked", message: err.message, reviewer: err.reviewer };
-    }
     if (err instanceof RendererUnavailableError) {
       return { kind: "unavailable", message: err.message };
     }
@@ -252,20 +248,6 @@ export function BookGenerator() {
             {set.childID} &middot; generated {set.asOf}
           </span>
         </div>
-      )}
-
-      {problem?.kind === "blocked" && (
-        <Alert className="border-[var(--color-blocked,theme(colors.amber.600))]">
-          <AlertTitle>Generation stopped by a clinical rule</AlertTitle>
-          <AlertDescription className="space-y-1">
-            <p>{problem.message}</p>
-            {problem.reviewer && <p className="font-mono text-xs">Reviewer: {problem.reviewer}</p>}
-            <p className="text-xs text-muted-foreground">
-              This is the provider&apos;s stop gate, not a fault. There is no override, and it
-              withholds both books rather than only the recipe book.
-            </p>
-          </AlertDescription>
-        </Alert>
       )}
 
       {problem?.kind === "unavailable" && (
