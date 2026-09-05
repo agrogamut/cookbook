@@ -13,6 +13,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
+  Accordion, AccordionContent, AccordionItem,
+} from "@/components/ui/accordion";
+import { SectionTrigger, summarise } from "@/components/section-trigger";
+import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -23,6 +27,10 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
  *  upload, not after. The server still enforces it: this is a courtesy, not the control. */
 const maxPhotoBytes = 8 * 1024 * 1024;
 const photoTypes = ["image/png", "image/jpeg", "image/webp"];
+
+const field = "space-y-1";
+
+type Photo = { dataUri: string; name: string } | null;
 
 type GrowthRow = {
   measured_on: string;
@@ -48,6 +56,57 @@ function num(v: string): number | undefined {
   if (t === "") return undefined;
   const n = Number(t);
   return Number.isFinite(n) ? n : undefined;
+}
+
+function countFilled(...values: string[]): number {
+  return values.filter((v) => v.trim() !== "").length;
+}
+
+/** One upload slot. All three photographs take the same file, caption and preview, so they
+ *  are one component rather than three near-identical blocks -- which is also what lets the
+ *  three of them share a single section instead of a third of the form. */
+function PhotoRow({
+  id, label, hint, photo, caption, error, onFile, onCaption, onClear,
+}: {
+  id: string;
+  label: string;
+  hint: string;
+  photo: Photo;
+  caption: string;
+  error: string;
+  onFile: (f: File) => void;
+  onCaption: (v: string) => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="space-y-1 rounded border p-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <Label htmlFor={id} className="text-xs font-medium">{label}</Label>
+        {photo && (
+          <Button type="button" variant="ghost" size="sm" className="h-5 px-1 text-xs"
+                  onClick={onClear}>
+            Remove
+          </Button>
+        )}
+      </div>
+      <p className="text-[11px] leading-snug text-muted-foreground">{hint}</p>
+      <div className="flex items-center gap-2">
+        {photo && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={photo.dataUri} alt={`${label} preview`}
+               className="size-10 shrink-0 rounded border object-cover" />
+        )}
+        <div className="min-w-0 flex-1 space-y-1">
+          <Input id={id} type="file" accept="image/png,image/jpeg,image/webp"
+                 className="h-8 text-xs"
+                 onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
+          <Input value={caption} onChange={(e) => onCaption(e.target.value)}
+                 className="h-8 text-xs" placeholder="Caption (optional)" />
+        </div>
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </div>
+  );
 }
 
 export function ChildInputForm({
@@ -78,19 +137,19 @@ export function ChildInputForm({
   const [suspected, setSuspected] = useState<string[]>([]);
   const [specialCare, setSpecialCare] = useState("");
   const [growth, setGrowth] = useState<GrowthRow[]>([]);
-  const [photo, setPhoto] = useState<{ dataUri: string; name: string } | null>(null);
+  const [photo, setPhoto] = useState<Photo>(null);
   const [caption, setCaption] = useState("");
   const [photoError, setPhotoError] = useState("");
   // Book 1's back cover -- a separate upload from the front cover's child photo above, of
   // whoever the family wants on the closing page. Optional, same as the front cover.
-  const [parentsPhoto, setParentsPhoto] = useState<{ dataUri: string; name: string } | null>(null);
+  const [parentsPhoto, setParentsPhoto] = useState<Photo>(null);
   const [parentsCaption, setParentsCaption] = useState("");
   const [parentsPhotoError, setParentsPhotoError] = useState("");
   // A photograph or scan of a prescription a doctor has already written and signed on paper.
   // Printed on B1-PRESCRIPTION-01 in place of that page's blank form -- see
   // internal/book/templates/book1/prescription.html. Not a diagnosis or dose entered here:
   // this attaches a real document someone already holds.
-  const [prescriptionPhoto, setPrescriptionPhoto] = useState<{ dataUri: string; name: string } | null>(null);
+  const [prescriptionPhoto, setPrescriptionPhoto] = useState<Photo>(null);
   const [prescriptionCaption, setPrescriptionCaption] = useState("");
   const [prescriptionPhotoError, setPrescriptionPhotoError] = useState("");
 
@@ -189,7 +248,7 @@ export function ChildInputForm({
   // same size cap, same failure modes, just a different pair of setters to land in.
   function readPhotoInto(
     file: File,
-    setValue: (p: { dataUri: string; name: string } | null) => void,
+    setValue: (p: Photo) => void,
     setError: (message: string) => void,
   ) {
     setError("");
@@ -253,326 +312,291 @@ export function ChildInputForm({
     onGenerate(input);
   }
 
-  const field = "space-y-1";
-  const legend = "text-xs font-semibold uppercase tracking-wide text-muted-foreground";
+  const childFilled = countFilled(caseId, name, dob, sex, language, motherName);
+  const practiceFilled = countFilled(region, cuisine, diet, budget);
+  const allergySummary = summarise(
+    confirmed.length > 0 && `${confirmed.length} confirmed`,
+    suspected.length > 0 && `${suspected.length} suspected`,
+  );
+  const growthVisits = growth.filter((g) => g.measured_on.trim() !== "").length;
+  const photoCount = [photo, parentsPhoto, prescriptionPhoto].filter(Boolean).length;
+
+  function growthCell(i: number, key: keyof GrowthRow) {
+    return (v: string) => setGrowth(growth.map((r, j) => (j === i ? { ...r, [key]: v } : r)));
+  }
 
   return (
-    <div className="space-y-5">
-      <section className="space-y-2">
-        <p className={legend}>Child</p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
-          <div className={field}>
-            <Label htmlFor="g-case-id">Case ID</Label>
-            <Input id="g-case-id" value={caseId} onChange={(e) => setCaseId(e.target.value)}
-                   placeholder="clinic/case number, if any" className="font-mono" />
-          </div>
-          <div className={field}>
-            <Label htmlFor="g-name">Name</Label>
-            <Input id="g-name" value={name} onChange={(e) => setName(e.target.value)}
-                   placeholder="as it should print" />
-          </div>
-          <div className={field}>
-            {/* The one required field: every book states the child's age, and an age with no
-                birth date behind it would be a number with no source. */}
-            <Label htmlFor="g-dob">Date of birth <span className="text-destructive">*</span></Label>
-            <Input id="g-dob" type="date" className="font-mono" value={dob}
-                   onChange={(e) => setDob(e.target.value)} />
-          </div>
-          <div className={field}>
-            <Label htmlFor="g-sex">Sex</Label>
-            <Select value={sex} onValueChange={setSex}>
-              <SelectTrigger id="g-sex"><SelectValue placeholder="not recorded" /></SelectTrigger>
-              <SelectContent>
-                {["male", "female", "other"].map((v) => (
-                  <SelectItem key={v} value={v}>{v}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className={field}>
-            <Label htmlFor="g-lang">Language</Label>
-            <Input id="g-lang" value={language} onChange={(e) => setLanguage(e.target.value)}
-                   placeholder="e.g. bn" className="font-mono" />
-          </div>
-          <div className={field}>
-            <Label htmlFor="g-mother">Mother&apos;s name</Label>
-            <Input id="g-mother" value={motherName} onChange={(e) => setMotherName(e.target.value)}
-                   placeholder="for matching an existing record" />
-          </div>
-        </div>
-      </section>
-
-      {matches.length > 0 && !dismissedMatch && (
-        <Alert>
-          <AlertTitle>
-            {matches.length === 1 ? "This may already be a saved child" : `${matches.length} possible matches found`}
-          </AlertTitle>
-          <AlertDescription className="space-y-2">
-            {matches.map((m) => (
-              <div key={m.child_id} className="flex items-center justify-between gap-3">
-                <span className="font-mono text-xs">
-                  {m.child_id} {m.case_id && `· case ${m.case_id}`} · {m.display_name} · DOB {m.date_of_birth}
-                </span>
-                <Button type="button" size="sm" variant="outline" onClick={() => loadMatch(m.child_id)}>
-                  Load this record
-                </Button>
-              </div>
-            ))}
-            <Button type="button" size="sm" variant="ghost" onClick={() => setDismissedMatch(true)}>
-              This is a different child
-            </Button>
-            {loadMatchError && <p className="text-xs text-destructive">{loadMatchError}</p>}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      <section className="space-y-2">
-        <p className={legend}>Food practice and place</p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className={field}>
-            <Label htmlFor="g-region">Region</Label>
-            <Select value={region} onValueChange={setRegion}>
-              <SelectTrigger id="g-region"><SelectValue placeholder="West Bengal first" /></SelectTrigger>
-              <SelectContent>
-                {regions.map((r) => (
-                  <SelectItem key={r.region_culture} value={r.region_culture}>{r.region_culture}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className={field}>
-            <Label htmlFor="g-cuisine">Cuisine</Label>
-            <Select value={cuisine} onValueChange={setCuisine}>
-              <SelectTrigger id="g-cuisine"><SelectValue placeholder="No preference" /></SelectTrigger>
-              <SelectContent>
-                {cuisines.map((c) => (
-                  <SelectItem key={c.culture_code} value={c.culture_code}>{c.cuisine_cluster}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className={field}>
-            <Label htmlFor="g-diet">Diet</Label>
-            <Select value={diet} onValueChange={setDiet}>
-              <SelectTrigger id="g-diet"><SelectValue placeholder="Any" /></SelectTrigger>
-              <SelectContent>
-                {(enums.diet_type ?? []).map((v) => (
-                  <SelectItem key={v.value} value={v.value}>{v.value}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className={field}>
-            <Label htmlFor="g-budget">Budget band</Label>
-            <Select value={budget} onValueChange={setBudget}>
-              <SelectTrigger id="g-budget"><SelectValue placeholder="Any" /></SelectTrigger>
-              <SelectContent>
-                {(enums.budget_band ?? []).map((v) => (
-                  <SelectItem key={v.value} value={v.value}>{v.value}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </section>
-
-      <section className="space-y-2">
-        <p className={legend}>Allergies</p>
-        {/* Two lists, not one with a toggle, because the two do different things and an
-            operator has to see which they picked. Confirmed removes recipes outright;
-            suspected ranks them down and prints on the child's profile page (AS-002). */}
-        <div className="grid gap-3 lg:grid-cols-2">
-          <div className="space-y-1">
-            <Label className="text-xs">Confirmed &mdash; excludes recipes</Label>
-            <div className="flex flex-wrap gap-1">
-              {allergens.map((a) => (
-                <button key={a.allergen_group} type="button"
-                        onClick={() => toggle(confirmed, setConfirmed, a.allergen_group)}
-                        className="cursor-pointer">
-                  <Badge variant={confirmed.includes(a.allergen_group) ? "destructive" : "outline"}>
-                    {a.allergen_group}
-                  </Badge>
-                </button>
+    // The form owns its own scroll so the Generate action can sit outside it. An operator
+    // running twenty consultations an hour should never have to scroll past three optional
+    // uploads to reach the button that does the work.
+    <div className="flex h-full flex-col">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-2">
+        {matches.length > 0 && !dismissedMatch && (
+          <Alert>
+            <AlertTitle>
+              {matches.length === 1 ? "This may already be a saved child" : `${matches.length} possible matches found`}
+            </AlertTitle>
+            <AlertDescription className="space-y-2">
+              {matches.map((m) => (
+                <div key={m.child_id} className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-mono text-xs">
+                    {m.child_id} {m.case_id && `· case ${m.case_id}`} · {m.display_name} · DOB {m.date_of_birth}
+                  </span>
+                  <Button type="button" size="sm" variant="outline" onClick={() => loadMatch(m.child_id)}>
+                    Load this record
+                  </Button>
+                </div>
               ))}
-            </div>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">Suspected &mdash; ranks down, never excludes</Label>
-            <div className="flex flex-wrap gap-1">
-              {allergens.map((a) => (
-                <button key={a.allergen_group} type="button"
-                        onClick={() => toggle(suspected, setSuspected, a.allergen_group)}
-                        className="cursor-pointer">
-                  <Badge variant={suspected.includes(a.allergen_group) ? "secondary" : "outline"}>
-                    {a.allergen_group}
-                  </Badge>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="space-y-2">
-        <p className={legend}>Clinical</p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className={field}>
-            <Label htmlFor="g-sc">Special-care condition</Label>
-            <Select value={specialCare} onValueChange={setSpecialCare}>
-              <SelectTrigger id="g-sc"><SelectValue placeholder="none declared" /></SelectTrigger>
-              <SelectContent>
-                {conditions.map((c) => (
-                  <SelectItem key={c.condition_id} value={c.condition_id}>
-                    {c.condition}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-      </section>
-
-      <section className="space-y-2">
-        <div className="flex items-center gap-3">
-          <p className={legend}>Growth measurements</p>
-          <Button type="button" variant="outline" size="sm"
-                  onClick={() => setGrowth([...growth, { ...emptyGrowth }])}>
-            Add a visit
-          </Button>
-        </div>
-        {growth.length === 0 && (
-          <p className="text-xs text-muted-foreground">
-            None recorded. The growth page prints only if there is at least one measurement.
-          </p>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setDismissedMatch(true)}>
+                This is a different child
+              </Button>
+              {loadMatchError && <p className="text-xs text-destructive">{loadMatchError}</p>}
+            </AlertDescription>
+          </Alert>
         )}
-        {growth.map((g, i) => (
-          <div key={i} className="grid gap-2 rounded border p-2 sm:grid-cols-3 lg:grid-cols-7">
-            <Input type="date" className="font-mono" value={g.measured_on} placeholder="date"
-                   onChange={(e) => setGrowth(growth.map((r, j) => j === i ? { ...r, measured_on: e.target.value } : r))} />
-            <Input className="font-mono" value={g.weight_kg} placeholder="weight kg"
-                   onChange={(e) => setGrowth(growth.map((r, j) => j === i ? { ...r, weight_kg: e.target.value } : r))} />
-            <Input className="font-mono" value={g.height_cm} placeholder="height cm"
-                   onChange={(e) => setGrowth(growth.map((r, j) => j === i ? { ...r, height_cm: e.target.value } : r))} />
-            <Input className="font-mono" value={g.head_circumference_cm} placeholder="head cm"
-                   onChange={(e) => setGrowth(growth.map((r, j) => j === i ? { ...r, head_circumference_cm: e.target.value } : r))} />
-            <Input className="font-mono" value={g.weight_for_age_z} placeholder="wt-for-age z"
-                   onChange={(e) => setGrowth(growth.map((r, j) => j === i ? { ...r, weight_for_age_z: e.target.value } : r))} />
-            <Input value={g.interpretation} placeholder="clinician note"
-                   onChange={(e) => setGrowth(growth.map((r, j) => j === i ? { ...r, interpretation: e.target.value } : r))} />
-            <div className="flex gap-1">
-              <Input value={g.measured_by} placeholder="measured by"
-                     onChange={(e) => setGrowth(growth.map((r, j) => j === i ? { ...r, measured_by: e.target.value } : r))} />
-              <Button type="button" variant="ghost" size="sm"
-                      onClick={() => setGrowth(growth.filter((_, j) => j !== i))}>&times;</Button>
-            </div>
-          </div>
-        ))}
-      </section>
 
-      <section className="space-y-2">
-        <p className={legend}>Cover photograph</p>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className={field}>
-            <Label htmlFor="g-photo">Image</Label>
-            <Input id="g-photo" type="file" accept="image/png,image/jpeg,image/webp"
-                   onChange={(e) => { const f = e.target.files?.[0]; if (f) readPhotoInto(f, setPhoto, setPhotoError); }} />
-          </div>
-          <div className={field}>
-            <Label htmlFor="g-caption">Caption</Label>
-            <Input id="g-caption" value={caption} onChange={(e) => setCaption(e.target.value)}
-                   placeholder="e.g. Aarav with his mother, July 2026" />
-          </div>
-          {photo && (
-            <div className="space-y-1">
-              <Label className="text-xs">Preview</Label>
-              <div className="flex items-center gap-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photo.dataUri} alt="Cover preview"
-                     className="h-16 w-16 rounded border object-cover" />
-                <Button type="button" variant="ghost" size="sm"
-                        onClick={() => { setPhoto(null); setPhotoError(""); }}>Remove</Button>
+        {/* Open by default: the three sections every consultation fills. The rest start shut
+            with their counts showing, because most children have no special-care condition,
+            no measurement taken today and no photograph to attach. */}
+        <Accordion type="multiple" defaultValue={["child", "practice", "allergies"]}>
+          <AccordionItem value="child">
+            <SectionTrigger label="Child"
+                            summary={childFilled > 0 ? `${childFilled} of 6` : undefined} />
+            <AccordionContent className="grid gap-3 sm:grid-cols-2">
+              <div className={field}>
+                <Label htmlFor="g-case-id">Case ID</Label>
+                <Input id="g-case-id" value={caseId} onChange={(e) => setCaseId(e.target.value)}
+                       placeholder="clinic/case number, if any" className="font-mono" />
               </div>
-            </div>
-          )}
-        </div>
-        {photoError && <p className="text-xs text-destructive">{photoError}</p>}
-      </section>
-
-      <section className="space-y-2">
-        <p className={legend}>Back cover photograph</p>
-        <p className="text-xs text-muted-foreground">
-          Optional. Prints full-bleed on Book 1&apos;s closing page &mdash; typically the
-          parents, separately from the child&apos;s photo on the front cover above.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className={field}>
-            <Label htmlFor="g-parents-photo">Image</Label>
-            <Input id="g-parents-photo" type="file" accept="image/png,image/jpeg,image/webp"
-                   onChange={(e) => { const f = e.target.files?.[0]; if (f) readPhotoInto(f, setParentsPhoto, setParentsPhotoError); }} />
-          </div>
-          <div className={field}>
-            <Label htmlFor="g-parents-caption">Caption</Label>
-            <Input id="g-parents-caption" value={parentsCaption} onChange={(e) => setParentsCaption(e.target.value)}
-                   placeholder="e.g. Aarav's parents, July 2026" />
-          </div>
-          {parentsPhoto && (
-            <div className="space-y-1">
-              <Label className="text-xs">Preview</Label>
-              <div className="flex items-center gap-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={parentsPhoto.dataUri} alt="Back cover preview"
-                     className="h-16 w-16 rounded border object-cover" />
-                <Button type="button" variant="ghost" size="sm"
-                        onClick={() => { setParentsPhoto(null); setParentsPhotoError(""); }}>Remove</Button>
+              <div className={field}>
+                <Label htmlFor="g-name">Name</Label>
+                <Input id="g-name" value={name} onChange={(e) => setName(e.target.value)}
+                       placeholder="as it should print" />
               </div>
-            </div>
-          )}
-        </div>
-        {parentsPhotoError && <p className="text-xs text-destructive">{parentsPhotoError}</p>}
-      </section>
-
-      <section className="space-y-2">
-        <p className={legend}>Prescription photograph</p>
-        <p className="text-xs text-muted-foreground">
-          Optional. A photo or scan of a prescription the doctor has already written and
-          signed on paper. Prints on the Prescription &amp; Recommendation page in place of
-          the blank form &mdash; this attaches a real document, it does not generate one.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className={field}>
-            <Label htmlFor="g-rx-photo">Image</Label>
-            <Input id="g-rx-photo" type="file" accept="image/png,image/jpeg,image/webp"
-                   onChange={(e) => { const f = e.target.files?.[0]; if (f) readPhotoInto(f, setPrescriptionPhoto, setPrescriptionPhotoError); }} />
-          </div>
-          <div className={field}>
-            <Label htmlFor="g-rx-caption">Caption</Label>
-            <Input id="g-rx-caption" value={prescriptionCaption} onChange={(e) => setPrescriptionCaption(e.target.value)}
-                   placeholder="e.g. Dr Sen, follow-up visit" />
-          </div>
-          {prescriptionPhoto && (
-            <div className="space-y-1">
-              <Label className="text-xs">Preview</Label>
-              <div className="flex items-center gap-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={prescriptionPhoto.dataUri} alt="Prescription preview"
-                     className="h-16 w-16 rounded border object-cover" />
-                <Button type="button" variant="ghost" size="sm"
-                        onClick={() => { setPrescriptionPhoto(null); setPrescriptionPhotoError(""); }}>Remove</Button>
+              <div className={field}>
+                {/* The one required field: every book states the child's age, and an age with no
+                    birth date behind it would be a number with no source. */}
+                <Label htmlFor="g-dob">Date of birth <span className="text-destructive">*</span></Label>
+                <Input id="g-dob" type="date" className="font-mono" value={dob}
+                       onChange={(e) => setDob(e.target.value)} />
               </div>
-            </div>
-          )}
-        </div>
-        {prescriptionPhotoError && <p className="text-xs text-destructive">{prescriptionPhotoError}</p>}
-      </section>
+              <div className={field}>
+                <Label htmlFor="g-sex">Sex</Label>
+                <Select value={sex} onValueChange={setSex}>
+                  <SelectTrigger id="g-sex" className="w-full"><SelectValue placeholder="not recorded" /></SelectTrigger>
+                  <SelectContent>
+                    {["male", "female", "other"].map((v) => (
+                      <SelectItem key={v} value={v}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className={field}>
+                <Label htmlFor="g-lang">Language</Label>
+                <Input id="g-lang" value={language} onChange={(e) => setLanguage(e.target.value)}
+                       placeholder="e.g. bn" className="font-mono" />
+              </div>
+              <div className={field}>
+                <Label htmlFor="g-mother">Mother&apos;s name</Label>
+                <Input id="g-mother" value={motherName} onChange={(e) => setMotherName(e.target.value)}
+                       placeholder="for matching an existing record" />
+              </div>
+            </AccordionContent>
+          </AccordionItem>
 
-      <div className="flex items-center gap-3 border-t pt-4">
-        <Button onClick={submit} disabled={!dob || busy} size="lg">
+          <AccordionItem value="practice">
+            <SectionTrigger label="Food practice and place"
+                            summary={practiceFilled > 0 ? `${practiceFilled} of 4` : undefined} />
+            <AccordionContent className="grid gap-3 sm:grid-cols-2">
+              <div className={field}>
+                <Label htmlFor="g-region">Region</Label>
+                <Select value={region} onValueChange={setRegion}>
+                  <SelectTrigger id="g-region" className="w-full"><SelectValue placeholder="West Bengal first" /></SelectTrigger>
+                  <SelectContent>
+                    {regions.map((r) => (
+                      <SelectItem key={r.region_culture} value={r.region_culture}>{r.region_culture}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className={field}>
+                <Label htmlFor="g-cuisine">Cuisine</Label>
+                <Select value={cuisine} onValueChange={setCuisine}>
+                  <SelectTrigger id="g-cuisine" className="w-full"><SelectValue placeholder="No preference" /></SelectTrigger>
+                  <SelectContent>
+                    {cuisines.map((c) => (
+                      <SelectItem key={c.culture_code} value={c.culture_code}>{c.cuisine_cluster}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className={field}>
+                <Label htmlFor="g-diet">Diet</Label>
+                <Select value={diet} onValueChange={setDiet}>
+                  <SelectTrigger id="g-diet" className="w-full"><SelectValue placeholder="Any" /></SelectTrigger>
+                  <SelectContent>
+                    {(enums.diet_type ?? []).map((v) => (
+                      <SelectItem key={v.value} value={v.value}>{v.value}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className={field}>
+                <Label htmlFor="g-budget">Budget band</Label>
+                <Select value={budget} onValueChange={setBudget}>
+                  <SelectTrigger id="g-budget" className="w-full"><SelectValue placeholder="Any" /></SelectTrigger>
+                  <SelectContent>
+                    {(enums.budget_band ?? []).map((v) => (
+                      <SelectItem key={v.value} value={v.value}>{v.value}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="allergies">
+            <SectionTrigger label="Allergies" summary={allergySummary} />
+            {/* Two lists, not one with a toggle, because the two do different things and an
+                operator has to see which they picked. Confirmed removes recipes outright;
+                suspected ranks them down and prints on the child's profile page (AS-002). */}
+            <AccordionContent className="space-y-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Confirmed &mdash; excludes recipes</Label>
+                <div className="flex flex-wrap gap-1">
+                  {allergens.map((a) => (
+                    <button key={a.allergen_group} type="button"
+                            onClick={() => toggle(confirmed, setConfirmed, a.allergen_group)}
+                            className="cursor-pointer">
+                      <Badge variant={confirmed.includes(a.allergen_group) ? "destructive" : "outline"}>
+                        {a.allergen_group}
+                      </Badge>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Suspected &mdash; ranks down, never excludes</Label>
+                <div className="flex flex-wrap gap-1">
+                  {allergens.map((a) => (
+                    <button key={a.allergen_group} type="button"
+                            onClick={() => toggle(suspected, setSuspected, a.allergen_group)}
+                            className="cursor-pointer">
+                      <Badge variant={suspected.includes(a.allergen_group) ? "secondary" : "outline"}>
+                        {a.allergen_group}
+                      </Badge>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="clinical">
+            <SectionTrigger label="Clinical" summary={specialCare ? "1 declared" : undefined} />
+            <AccordionContent>
+              <div className={field}>
+                <Label htmlFor="g-sc">Special-care condition</Label>
+                <Select value={specialCare} onValueChange={setSpecialCare}>
+                  <SelectTrigger id="g-sc" className="w-full"><SelectValue placeholder="none declared" /></SelectTrigger>
+                  <SelectContent>
+                    {conditions.map((c) => (
+                      <SelectItem key={c.condition_id} value={c.condition_id}>
+                        {c.condition}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value="growth">
+            <SectionTrigger
+              label="Growth measurements"
+              summary={growthVisits > 0 ? `${growthVisits} visit${growthVisits === 1 ? "" : "s"}` : undefined}
+            />
+            <AccordionContent className="space-y-2">
+              {growth.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  None recorded. The growth page prints only if there is at least one measurement.
+                </p>
+              )}
+              {growth.map((g, i) => (
+                <div key={i} className="grid gap-2 rounded border p-2 sm:grid-cols-2">
+                  <Input type="date" className="font-mono" value={g.measured_on} placeholder="date"
+                         onChange={(e) => growthCell(i, "measured_on")(e.target.value)} />
+                  <Input className="font-mono" value={g.weight_kg} placeholder="weight kg"
+                         onChange={(e) => growthCell(i, "weight_kg")(e.target.value)} />
+                  <Input className="font-mono" value={g.height_cm} placeholder="height cm"
+                         onChange={(e) => growthCell(i, "height_cm")(e.target.value)} />
+                  <Input className="font-mono" value={g.head_circumference_cm} placeholder="head cm"
+                         onChange={(e) => growthCell(i, "head_circumference_cm")(e.target.value)} />
+                  <Input className="font-mono" value={g.weight_for_age_z} placeholder="wt-for-age z"
+                         onChange={(e) => growthCell(i, "weight_for_age_z")(e.target.value)} />
+                  <Input value={g.measured_by} placeholder="measured by"
+                         onChange={(e) => growthCell(i, "measured_by")(e.target.value)} />
+                  <div className="flex gap-1 sm:col-span-2">
+                    <Input value={g.interpretation} placeholder="clinician note"
+                           onChange={(e) => growthCell(i, "interpretation")(e.target.value)} />
+                    <Button type="button" variant="ghost" size="sm"
+                            onClick={() => setGrowth(growth.filter((_, j) => j !== i))}>&times;</Button>
+                  </div>
+                </div>
+              ))}
+              <Button type="button" variant="outline" size="sm"
+                      onClick={() => setGrowth([...growth, { ...emptyGrowth }])}>
+                Add a visit
+              </Button>
+            </AccordionContent>
+          </AccordionItem>
+
+          {/* One section for all three uploads. They were three, each with its own heading,
+              file input, caption and preview, and together they ran a third of the form's
+              height for content that is optional on every book. */}
+          <AccordionItem value="photographs">
+            <SectionTrigger
+              label="Photographs"
+              summary={photoCount > 0 ? `${photoCount} of 3` : undefined}
+            />
+            <AccordionContent className="space-y-2">
+              <PhotoRow
+                id="g-photo" label="Front cover"
+                hint="The child. Prints full-bleed on Book 1's cover."
+                photo={photo} caption={caption} error={photoError}
+                onFile={(f) => readPhotoInto(f, setPhoto, setPhotoError)}
+                onCaption={setCaption}
+                onClear={() => { setPhoto(null); setPhotoError(""); }}
+              />
+              <PhotoRow
+                id="g-parents-photo" label="Back cover"
+                hint="Typically the parents. Prints full-bleed on Book 1's closing page."
+                photo={parentsPhoto} caption={parentsCaption} error={parentsPhotoError}
+                onFile={(f) => readPhotoInto(f, setParentsPhoto, setParentsPhotoError)}
+                onCaption={setParentsCaption}
+                onClear={() => { setParentsPhoto(null); setParentsPhotoError(""); }}
+              />
+              <PhotoRow
+                id="g-rx-photo" label="Prescription"
+                hint="A prescription already written and signed on paper. Replaces the blank form on the Prescription page: this attaches a real document, it does not generate one."
+                photo={prescriptionPhoto} caption={prescriptionCaption} error={prescriptionPhotoError}
+                onFile={(f) => readPhotoInto(f, setPrescriptionPhoto, setPrescriptionPhotoError)}
+                onCaption={setPrescriptionCaption}
+                onClear={() => { setPrescriptionPhoto(null); setPrescriptionPhotoError(""); }}
+              />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </div>
+
+      <div className="shrink-0 space-y-1 border-t pt-3">
+        <Button onClick={submit} disabled={!dob || busy} className="w-full">
           {busy ? "Generating…" : "Generate both books"}
         </Button>
         {!dob && (
-          <span className="text-xs text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             A date of birth is needed: every book states the child&apos;s age.
-          </span>
+          </p>
         )}
       </div>
     </div>

@@ -8,8 +8,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Accordion, AccordionContent, AccordionItem, AccordionTrigger,
+  Accordion, AccordionContent, AccordionItem,
 } from "@/components/ui/accordion";
+import { SectionTrigger, summarise } from "@/components/section-trigger";
 import { SuspectedAllergenFieldset } from "./suspected-allergen-fieldset";
 import {
   getAllergens, getClinicalMarkers, getEnums, getRegions, getCuisines, getProfileEngineInput,
@@ -247,7 +248,13 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
 
   const enumValues = (key: string) => enums[key] ?? [];
   const label = "text-xs uppercase text-muted-foreground";
-  const section = "font-mono text-xs uppercase tracking-wide py-2";
+
+  // What each collapsed section is holding. Counted from the same state the submit handler
+  // reads, so a badge can never disagree with the query that gets sent.
+  const clinicalSet =
+    (clinicalMarker ? 1 : 0) + (specialCare ? 1 : 0) + Object.keys(clinicalFlags).length;
+  const logisticsSet =
+    [mealType, budgetBand, maxPrep, maxCook, limit].filter((v) => v !== "").length;
 
   return (
     <form onSubmit={handleSubmit} className="flex h-full flex-col font-mono text-sm">
@@ -264,7 +271,8 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
             a ranker or a stop gate an operator opens when the case calls for it. */}
         <Accordion type="multiple" defaultValue={["basics", "allergens"]}>
           <AccordionItem value="stored">
-            <AccordionTrigger className={section}>Load stored profile</AccordionTrigger>
+            <SectionTrigger label="Load stored profile"
+                            summary={loadedAsOf ? `as of ${loadedAsOf}` : undefined} />
             <AccordionContent className="space-y-1">
               {/* Names the input rather than repeating the section heading above it. It is
                   the field's only accessible name, so it stays a real label. */}
@@ -295,7 +303,9 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
           </AccordionItem>
 
           <AccordionItem value="basics">
-            <AccordionTrigger className={section}>Basics</AccordionTrigger>
+            <SectionTrigger label="Basics" summary={summarise(
+              ageMonths !== "" && `${ageMonths} mo`, dietType, vegan && "vegan",
+            )} />
             <AccordionContent className="space-y-3">
               <div className="space-y-1">
                 <label htmlFor="age" className={label}>Age (months) *</label>
@@ -327,7 +337,10 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
           </AccordionItem>
 
           <AccordionItem value="allergens">
-            <AccordionTrigger className={section}>Allergens</AccordionTrigger>
+            <SectionTrigger label="Allergens" summary={summarise(
+              allergens.length > 0 && `${allergens.length} declared`,
+              suspectedAllergens.length > 0 && `${suspectedAllergens.length} suspected`,
+            )} />
             <AccordionContent className="space-y-3">
               <fieldset className="space-y-1">
                 <legend className={label}>Declared allergens</legend>
@@ -370,7 +383,8 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
           </AccordionItem>
 
           <AccordionItem value="clinical">
-            <AccordionTrigger className={section}>Clinical</AccordionTrigger>
+            <SectionTrigger label="Clinical"
+                            summary={clinicalSet > 0 ? `${clinicalSet} set` : undefined} />
             <AccordionContent className="space-y-3">
               <div className="space-y-1">
                 <span className={label}>Nutrition target marker</span>
@@ -386,8 +400,11 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
               </div>
 
               {/* Built from special_care_condition_gate, never a hardcoded list, so the picker
-                  cannot offer a condition the engine does not block on. Selecting one is not a
-                  filter or a ranker: the engine stops and returns no recipes at all. */}
+                  cannot offer a condition the engine has no row for -- an unknown id is the one
+                  thing specialCareGate still rejects, as invalid input rather than as a block.
+                  Selecting one neither filters nor ranks: it records the provider's own action,
+                  reviewer and stop text in the step list, and the child is ranked like any
+                  other. */}
               <div className="space-y-1">
                 <span className={label}>Special-care condition</span>
                 <Select value={specialCare || NONE} onValueChange={(v) => setSpecialCare(v === NONE ? "" : v)}>
@@ -401,14 +418,20 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
                     ))}
                   </SelectContent>
                 </Select>
+                {/* The reviewer the provider names for this condition, printed verbatim. It is
+                    the provider's own requirement, not this console's: nothing here withholds a
+                    result waiting for that reviewer, so it reads as muted information rather
+                    than as a destructive warning about something that was refused. */}
                 {specialCare ? (
-                  <p className="text-xs text-destructive">
+                  <p className="text-xs text-muted-foreground">
+                    Provider&apos;s named reviewer:{" "}
                     {specialCareOptions.find((c) => c.condition_id === specialCare)?.mandatory_reviewer}
                   </p>
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    All six are STOP-REVIEW in the provider&apos;s master. Selecting one stops
-                    generation and names the required reviewer - it does not filter or rank.
+                    All six are STOP-REVIEW in the provider&apos;s master. Selecting one records
+                    that row and names the reviewer the provider requires - it does not filter,
+                    rank, or hold the result.
                   </p>
                 )}
               </div>
@@ -457,13 +480,11 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
                       );
                     }
 
-                    // select: several offerable values. Only values that are both loadable AND
-                    // escalating are listed. Two kinds of value are left off: one the engine's query
-                    // never loads, and one it loads but cannot classify -- the latter would make
-                    // generation refuse rather than filter, so offering it would promise a screen
-                    // that cannot happen.
+                    // select: several offerable values. Every loadable value is listed. The only
+                    // ones left off are those the engine's rule query never loads at all -- the
+                    // Age/Feeding and Data Quality domains -- and those are surfaced as the
+                    // "+N recorded, not offered" note rather than silently dropped.
                     const current = clinicalFlags[m.trigger_field] ?? NONE;
-                    const selected = control.values.find((v) => v.value === current);
 
                     return (
                       <div key={m.trigger_field} className="flex items-center gap-2" title={title}>
@@ -497,16 +518,16 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Two states appear here. A live control (toggle badge or dropdown) sends a value
-                  the engine's rule query actually loads: the rule is recorded in the step list with
-                  the provider's own reason and specialist text, and it feeds nutrition-target
+                  the engine&apos;s rule query actually loads: the rule is recorded in the step list with
+                  the provider&apos;s own reason and specialist text, and it feeds nutrition-target
                   selection and the drafted per-recipe modification notes. Setting one no longer
                   stops generation -- nothing does. A dashed, unclickable marker has nothing this
-                  console can usefully send: either its operator has no case in the engine's switch
+                  console can usefully send: either its operator has no case in the engine&apos;s switch
                   (the one substring-matching allergy flag, which belongs in Declared allergens
                   instead), or its rules sit in Age/Feeding or Data Quality, the two domains
-                  clinicalFilter excludes because recipe_master's age bounds already enforce the
+                  clinicalFilter excludes because recipe_master&apos;s age bounds already enforce the
                   first and the second describes the dataset rather than the child. A dropdown may
-                  still show a "+N recorded, not offered" note: the value is left off the list
+                  still show a &quot;+N recorded, not offered&quot; note: the value is left off the list
                   rather than hidden entirely, because the provider did record it.
                 </p>
               </fieldset>
@@ -514,7 +535,8 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
           </AccordionItem>
 
           <AccordionItem value="culture">
-            <AccordionTrigger className={section}>Culture &amp; region</AccordionTrigger>
+            <SectionTrigger label="Culture &amp; region"
+                            summary={summarise(regionCulture, cuisineCode)} />
             <AccordionContent className="space-y-3">
               <div className="space-y-1">
                 <span className={label}>Region</span>
@@ -549,7 +571,8 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
           </AccordionItem>
 
           <AccordionItem value="logistics">
-            <AccordionTrigger className={section}>Logistics</AccordionTrigger>
+            <SectionTrigger label="Logistics"
+                            summary={logisticsSet > 0 ? `${logisticsSet} of 5` : undefined} />
             <AccordionContent className="space-y-3">
               <div className="space-y-1">
                 <span className={label}>Meal type</span>

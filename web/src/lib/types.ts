@@ -347,8 +347,10 @@ export interface EngineInputResult {
   as_of: string;
 }
 
-/** One of the six special-care conditions. All are STOP-REVIEW: selecting one stops
- *  generation and names the reviewer, rather than filtering or ranking anything. */
+/** One of the six special-care conditions. All are STOP-REVIEW in the provider's master, and
+ *  the engine used to stop on them. Since the 2026-09-05 gate removal it records the row --
+ *  the provider's automatic_action, mandatory_reviewer and stop_if, verbatim -- in the step
+ *  list, and ranks the child like any other. Nothing here filters or ranks. */
 export interface SpecialCareCondition {
   condition_id: string;
   condition: string;

@@ -10,6 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import {
+  ResizableHandle, ResizablePanel, ResizablePanelGroup,
+} from "@/components/ui/resizable";
 
 type Unavailable = { kind: "unavailable"; message: string };
 type PrintFailed = { kind: "print-failed"; message: string };
@@ -201,20 +204,33 @@ export function BookGenerator() {
   const profileOmissions = set?.profileOmissions ?? [];
 
   return (
-    <div className="space-y-4">
-      <ChildInputForm busy={busy} onGenerate={generate} />
-
+    // Form on the left, the document it produced on the right -- the same split the engine
+    // console uses, for the same reason: an operator adjusting one input wants to see what it
+    // changed without scrolling a page's worth of controls out of the way first.
+    <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
+      <ResizablePanel defaultSize="38%" minSize="26%" maxSize="60%">
+        <div className="h-full pr-4">
+          <ChildInputForm busy={busy} onGenerate={generate} />
+        </div>
+      </ResizablePanel>
+      <ResizableHandle withHandle />
+      <ResizablePanel defaultSize="62%">
+        <section className="flex h-full min-h-0 flex-col gap-3 pl-4">
       {set !== null && (
-        <div className="flex flex-wrap items-center gap-3 border-t pt-4">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Print
-          </span>
+        <div className="flex flex-wrap items-center gap-2 border-b pb-3">
+          <Tabs value={shown} onValueChange={(v) => setShown(v as Which)}>
+            <TabsList>
+              <TabsTrigger value="book1">Book 1 &middot; daily life</TabsTrigger>
+              <TabsTrigger value="book2">Book 2 &middot; recipes</TabsTrigger>
+            </TabsList>
+          </Tabs>
           {/* Both books are always offered, not only the one whose tab happens to be open:
               the run produced both, so reaching one should not require switching tabs first.
-              These open the PDF; the zip below downloads, because an archive has nothing to
-              view. Disabled while its own PDF is not yet on screen, which also covers the
+              These open the PDF; the zip downloads, because an archive has nothing to view.
+              Disabled while its own PDF is not yet on screen, which also covers the
               renderer-unavailable case -- there is nothing for the button to open. */}
           <Button
+            size="sm"
             variant="outline"
             onClick={() => openInTab("book1")}
             disabled={busy || !pdfUrls.book1}
@@ -222,36 +238,29 @@ export function BookGenerator() {
             Open Book 1 PDF
           </Button>
           <Button
+            size="sm"
             variant="outline"
             onClick={() => openInTab("book2")}
             disabled={busy || !pdfUrls.book2}
           >
             Open Book 2 PDF
           </Button>
-          <Button variant="outline" onClick={downloadBoth} disabled={busy}>
-            Download both (.zip)
+          <Button size="sm" variant="outline" onClick={downloadBoth} disabled={busy}>
+            Download .zip
           </Button>
-        </div>
-      )}
-
-      {set !== null && (
-        <div className="flex flex-wrap items-center gap-3">
-          <Tabs value={shown} onValueChange={(v) => setShown(v as Which)}>
-            <TabsList>
-              <TabsTrigger value="book1">Book 1 &middot; daily life</TabsTrigger>
-              <TabsTrigger value="book2">Book 2 &middot; recipes</TabsTrigger>
-            </TabsList>
-          </Tabs>
           {/* The run's identity, so an operator comparing two printed books can tell whether
-              they came from the same generation. */}
-          <span className="font-mono text-xs text-muted-foreground">
-            {set.childID} &middot; generated {set.asOf}
+              they came from the same generation. A book generated inline stores no child, so
+              childID is empty and only the instant identifies the run -- printed without a
+              leading separator, and labelled, rather than as a bare timestamp behind a dot
+              with nothing on the other side of it. */}
+          <span className="ml-auto font-mono text-xs text-muted-foreground">
+            {set.childID && <>{set.childID} &middot; </>}run {set.asOf}
           </span>
         </div>
       )}
 
       {problem?.kind === "unavailable" && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="shrink-0">
           <AlertTitle>Renderer unavailable</AlertTitle>
           <AlertDescription>
             <p>{problem.message}</p>
@@ -263,7 +272,7 @@ export function BookGenerator() {
       )}
 
       {problem?.kind === "print-failed" && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="shrink-0">
           <AlertTitle>Print failed</AlertTitle>
           <AlertDescription>
             <p>{problem.message}</p>
@@ -276,7 +285,7 @@ export function BookGenerator() {
       )}
 
       {problem?.kind === "failed" && (
-        <Alert variant="destructive">
+        <Alert variant="destructive" className="shrink-0">
           <AlertTitle>Request failed</AlertTitle>
           <AlertDescription>{problem.message}</AlertDescription>
         </Alert>
@@ -284,34 +293,41 @@ export function BookGenerator() {
 
       {/* Profile omissions hold for both books, so they stay on screen as the tab changes.
           Book omissions are that book's own coverage and follow the tab. Keeping them apart
-          is the whole reason the API splits them. */}
-      {profileOmissions.length > 0 && (
-        <div className="rounded border p-3">
-          <div className="mb-2 flex items-center gap-2">
-            <Badge variant="outline">{profileOmissions.length} profile</Badge>
-            <span className="text-xs text-muted-foreground">
-              Facts about this child that apply to both books.
-            </span>
-          </div>
-          <ul className="space-y-1 font-mono text-xs">
-            {profileOmissions.map((o) => <li key={o}>{o}</li>)}
-          </ul>
-        </div>
-      )}
+          is the whole reason the API splits them.
 
-      {bookOmissions.length > 0 && (
-        <div className="rounded border p-3">
-          <div className="mb-2 flex items-center gap-2">
-            <Badge variant="outline">
-              {bookOmissions.length} omitted from {shown === "book1" ? "Book 1" : "Book 2"}
-            </Badge>
-            <span className="text-xs text-muted-foreground">
-              Facts this book does not contain, reported by the assembler.
-            </span>
-          </div>
-          <ul className="space-y-1 font-mono text-xs">
-            {bookOmissions.map((o) => <li key={o}>{o}</li>)}
-          </ul>
+          Bounded and scrolled as one region: a child with a long omission list would otherwise
+          push the document itself off the panel, and the document is what the operator came to
+          read. Capped, both lists stay visible without ever costing the preview its space. */}
+      {(profileOmissions.length > 0 || bookOmissions.length > 0) && (
+        <div className="max-h-40 shrink-0 space-y-2 overflow-y-auto rounded border p-2">
+          {profileOmissions.length > 0 && (
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">{profileOmissions.length} profile</Badge>
+                <span className="text-xs text-muted-foreground">
+                  Facts about this child that apply to both books.
+                </span>
+              </div>
+              <ul className="space-y-1 font-mono text-xs">
+                {profileOmissions.map((o) => <li key={o}>{o}</li>)}
+              </ul>
+            </div>
+          )}
+          {bookOmissions.length > 0 && (
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">
+                  {bookOmissions.length} omitted from {shown === "book1" ? "Book 1" : "Book 2"}
+                </Badge>
+                <span className="text-xs text-muted-foreground">
+                  Facts this book does not contain, reported by the assembler.
+                </span>
+              </div>
+              <ul className="space-y-1 font-mono text-xs">
+                {bookOmissions.map((o) => <li key={o}>{o}</li>)}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
@@ -324,7 +340,7 @@ export function BookGenerator() {
         <iframe
           title={shown === "book1" ? "Book 1 preview" : "Book 2 preview"}
           src={pdfUrl}
-          className="h-[80vh] w-full rounded border bg-white"
+          className="min-h-0 w-full flex-1 rounded border bg-white"
         />
       )}
 
@@ -334,7 +350,7 @@ export function BookGenerator() {
       {pdfUrl === null && html !== null && (
         <>
           {pdfFallbackNote && (
-            <p className="text-xs text-muted-foreground">
+            <p className="shrink-0 text-xs text-muted-foreground">
               Showing the HTML preview, not the printed PDF ({pdfFallbackNote}). It lays out at
               the printed page width with the real margins, but it cannot paginate: a section
               that will run onto two sheets appears here as one long sheet.
@@ -344,10 +360,26 @@ export function BookGenerator() {
             title={shown === "book1" ? "Book 1 preview" : "Book 2 preview"}
             sandbox=""
             srcDoc={html}
-            className="h-[80vh] w-full rounded border bg-white"
+            className="min-h-0 w-full flex-1 rounded border bg-white"
           />
         </>
       )}
-    </div>
+
+      {set === null && problem === null && (
+        <div className="flex min-h-0 flex-1 items-center justify-center rounded border border-dashed p-6 text-sm text-muted-foreground">
+          <div>
+            <p>{busy ? "Generating both books…" : "No books generated yet."}</p>
+            {!busy && (
+              <p className="mt-1 text-xs">
+                Enter a date of birth and press Generate. Every other field changes what the
+                books contain; none of them is required.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+        </section>
+      </ResizablePanel>
+    </ResizablePanelGroup>
   );
 }
