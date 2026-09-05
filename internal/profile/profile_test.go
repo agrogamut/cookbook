@@ -273,3 +273,123 @@ func TestToChildProfileFlagsAnAcuteConditionWithNoWindow(t *testing.T) {
 		t.Fatalf("an acute condition with no window must be reported as possibly stale; notes = %v", notes)
 	}
 }
+
+func TestFindMatchesByExactCaseID(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM child_profile WHERE child_id IN ('MATCH-A', 'MATCH-B')`)
+	})
+
+	if err := Save(ctx, pool, Stored{
+		ChildID: "MATCH-A", CaseID: "CASE-100", DisplayName: "Aarav Sen",
+		DateOfBirth: date("2023-01-01"), CreatedBy: "test",
+	}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if err := Save(ctx, pool, Stored{
+		ChildID: "MATCH-B", CaseID: "CASE-200", DisplayName: "Someone Else",
+		DateOfBirth: date("2020-01-01"), CreatedBy: "test",
+	}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	got, err := FindMatches(ctx, pool, "CASE-100", "", "", time.Time{})
+	if err != nil {
+		t.Fatalf("FindMatches: %v", err)
+	}
+	if len(got) != 1 || got[0].ChildID != "MATCH-A" {
+		t.Fatalf("want exactly MATCH-A, got %+v", got)
+	}
+}
+
+func TestFindMatchesByNameDateOfBirthAndMotherNameIsCaseAndWhitespaceInsensitive(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM child_profile WHERE child_id = 'MATCH-C'`)
+	})
+
+	if err := Save(ctx, pool, Stored{
+		ChildID: "MATCH-C", DisplayName: "  Priya Das  ", MotherName: "  Ananya Das  ",
+		DateOfBirth: date("2022-06-15"), CreatedBy: "test",
+	}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	got, err := FindMatches(ctx, pool, "", "priya das", "ananya das", date("2022-06-15"))
+	if err != nil {
+		t.Fatalf("FindMatches: %v", err)
+	}
+	if len(got) != 1 || got[0].ChildID != "MATCH-C" {
+		t.Fatalf("want exactly MATCH-C on a case/whitespace-insensitive match, got %+v", got)
+	}
+}
+
+func TestFindMatchesRequiresMotherNameTooNotJustNameAndDateOfBirth(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM child_profile WHERE child_id = 'MATCH-E'`)
+	})
+
+	if err := Save(ctx, pool, Stored{
+		ChildID: "MATCH-E", DisplayName: "Common Name", MotherName: "Real Mother",
+		DateOfBirth: date("2022-01-01"), CreatedBy: "test",
+	}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	// Same name and date of birth, but a mismatched mother's name -- this is exactly the
+	// coincidence mother_name exists to rule out (see the plan's "Decisions made and why" #2).
+	got, err := FindMatches(ctx, pool, "", "Common Name", "A Different Mother", date("2022-01-01"))
+	if err != nil {
+		t.Fatalf("FindMatches: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("a mismatched mother's name must prevent the match even with name+dob agreeing, got %+v", got)
+	}
+
+	// No mother's name supplied at all -- must not match on name+dob alone.
+	got, err = FindMatches(ctx, pool, "", "Common Name", "", date("2022-01-01"))
+	if err != nil {
+		t.Fatalf("FindMatches: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("name+dob alone, with no mother's name, must not match, got %+v", got)
+	}
+}
+
+func TestFindMatchesReturnsNothingOnADifferentDateOfBirth(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	t.Cleanup(func() {
+		_, _ = pool.Exec(ctx, `DELETE FROM child_profile WHERE child_id = 'MATCH-D'`)
+	})
+
+	if err := Save(ctx, pool, Stored{
+		ChildID: "MATCH-D", DisplayName: "Ravi Kumar", MotherName: "Sita Kumar",
+		DateOfBirth: date("2021-03-10"), CreatedBy: "test",
+	}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	got, err := FindMatches(ctx, pool, "", "Ravi Kumar", "Sita Kumar", date("2021-03-11"))
+	if err != nil {
+		t.Fatalf("FindMatches: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("a one-day-off date of birth must not match, got %+v", got)
+	}
+}
+
+func TestFindMatchesReturnsNothingWithNoUsableInput(t *testing.T) {
+	pool := testPool(t)
+	got, err := FindMatches(context.Background(), pool, "", "", "", time.Time{})
+	if err != nil {
+		t.Fatalf("FindMatches: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("no case_id and no complete name+dob+mother triple must return nothing, got %+v", got)
+	}
+}

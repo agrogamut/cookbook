@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -78,6 +79,7 @@ type ClinicalCondition struct {
 type Stored struct {
 	ChildID              string
 	CaseID               string
+	MotherName           string
 	DisplayName          string
 	DateOfBirth          time.Time
 	Sex                  string
@@ -244,13 +246,15 @@ func Save(ctx context.Context, pool *pgxpool.Pool, s Stored) error {
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	_, err = tx.Exec(ctx, `
-		INSERT INTO child_profile (child_id, case_id, display_name, date_of_birth, sex,
-			language_id, region_culture, cuisine_code, diet_type, vegan,
+		INSERT INTO child_profile (child_id, case_id, mother_name, display_name, date_of_birth,
+			sex, language_id, region_culture, cuisine_code, diet_type, vegan,
 			religious_restriction, budget_band, max_prep_time_min, max_cook_time_min, created_by)
-		VALUES ($1,$2,nullif($3,''),$4,nullif($5,''),nullif($6,''),nullif($7,''),nullif($8,''),
-			nullif($9,''),$10,nullif($11,''),nullif($12,''),nullif($13,0),nullif($14,0),$15)
+		VALUES ($1,$2,nullif($3,''),nullif($4,''),$5,nullif($6,''),nullif($7,''),nullif($8,''),
+			nullif($9,''),nullif($10,''),$11,nullif($12,''),nullif($13,''),nullif($14,0),
+			nullif($15,0),$16)
 		ON CONFLICT (child_id) DO UPDATE SET
 			case_id = excluded.case_id,
+			mother_name = excluded.mother_name,
 			display_name = excluded.display_name,
 			date_of_birth = excluded.date_of_birth,
 			sex = excluded.sex,
@@ -265,7 +269,7 @@ func Save(ctx context.Context, pool *pgxpool.Pool, s Stored) error {
 			max_cook_time_min = excluded.max_cook_time_min,
 			updated_by = excluded.created_by,
 			updated_at = now()`,
-		s.ChildID, nullString(s.CaseID), s.DisplayName, s.DateOfBirth, s.Sex,
+		s.ChildID, nullString(s.CaseID), s.MotherName, s.DisplayName, s.DateOfBirth, s.Sex,
 		s.LanguageID, s.RegionCulture, s.CuisineCode, s.DietType, s.Vegan,
 		s.ReligiousRestriction, s.BudgetBand, s.MaxPrepTimeMin, s.MaxCookTimeMin, s.CreatedBy)
 	if err != nil {
@@ -340,15 +344,17 @@ func Save(ctx context.Context, pool *pgxpool.Pool, s Stored) error {
 func Load(ctx context.Context, pool *pgxpool.Pool, childID string) (Stored, error) {
 	var s Stored
 	err := pool.QueryRow(ctx, `
-		SELECT child_id, coalesce(case_id,''), coalesce(display_name,''), date_of_birth,
+		SELECT child_id, coalesce(case_id,''), coalesce(mother_name,''),
+		       coalesce(display_name,''), date_of_birth,
 		       coalesce(sex,''), coalesce(language_id,''), coalesce(region_culture,''),
 		       coalesce(cuisine_code,''), coalesce(diet_type,''), vegan,
 		       coalesce(religious_restriction,''), coalesce(budget_band,''),
 		       coalesce(max_prep_time_min,0), coalesce(max_cook_time_min,0), created_by
 		FROM child_profile WHERE child_id = $1`, childID).
-		Scan(&s.ChildID, &s.CaseID, &s.DisplayName, &s.DateOfBirth, &s.Sex, &s.LanguageID,
-			&s.RegionCulture, &s.CuisineCode, &s.DietType, &s.Vegan, &s.ReligiousRestriction,
-			&s.BudgetBand, &s.MaxPrepTimeMin, &s.MaxCookTimeMin, &s.CreatedBy)
+		Scan(&s.ChildID, &s.CaseID, &s.MotherName, &s.DisplayName, &s.DateOfBirth, &s.Sex,
+			&s.LanguageID, &s.RegionCulture, &s.CuisineCode, &s.DietType, &s.Vegan,
+			&s.ReligiousRestriction, &s.BudgetBand, &s.MaxPrepTimeMin, &s.MaxCookTimeMin,
+			&s.CreatedBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Stored{}, fmt.Errorf("profile %s: %w", childID, ErrNotFound)
 	}
@@ -435,6 +441,80 @@ func Load(ctx context.Context, pool *pgxpool.Pool, childID string) (Stored, erro
 	}
 
 	return s, nil
+}
+
+// MatchCandidate is one possible existing profile surfaced to an operator, never applied
+// automatically. Deliberately narrower than Stored -- a candidate is something to look at
+// and decide about, not a profile ready to use as-is.
+type MatchCandidate struct {
+	ChildID     string
+	CaseID      string
+	DisplayName string
+	DateOfBirth time.Time
+	LastTouched time.Time
+}
+
+// FindMatches looks for an existing child_profile row that might be the same child as the
+// one described by caseID/displayName/motherName/dateOfBirth, matched on exact identity
+// only -- never a similarity score. A wrong match in a pediatric feeding-safety context
+// (attaching one child's allergy or growth history to another) is a worse failure than
+// finding nothing, so this deliberately returns zero rows rather than a "close enough" one.
+//
+// Two independent match conditions, either of which surfaces a row:
+//   - an exact, non-empty case_id match -- the strongest signal when the operator has one
+//   - an exact date_of_birth match together with a case-insensitive, whitespace-trimmed
+//     match on BOTH display_name and mother_name -- name+dob alone is a real coincidence
+//     (twins, common names), and mother_name is what makes this fallback trustworthy
+//     without depending on case_id, which nothing prompts an operator for today
+//
+// Called with no case_id and no complete display_name+motherName+dateOfBirth triple, this
+// returns no rows rather than every profile in the table.
+func FindMatches(ctx context.Context, pool *pgxpool.Pool, caseID, displayName, motherName string, dateOfBirth time.Time) ([]MatchCandidate, error) {
+	caseID = strings.TrimSpace(caseID)
+	displayName = strings.TrimSpace(displayName)
+	motherName = strings.TrimSpace(motherName)
+	if caseID == "" && (displayName == "" || motherName == "" || dateOfBirth.IsZero()) {
+		return nil, nil
+	}
+
+	rows, err := pool.Query(ctx, `
+		SELECT child_id, coalesce(case_id,''), coalesce(display_name,''), date_of_birth,
+		       coalesce(updated_at, created_at)
+		FROM child_profile
+		WHERE (nullif($1,'') IS NOT NULL AND case_id = $1)
+		   OR (nullif($2,'') IS NOT NULL AND nullif($3,'') IS NOT NULL AND $4::date IS NOT NULL
+		       AND lower(trim(display_name)) = lower(trim($2))
+		       AND lower(trim(mother_name)) = lower(trim($3))
+		       AND date_of_birth = $4)
+		ORDER BY coalesce(updated_at, created_at) DESC`,
+		caseID, displayName, motherName, nullDate(dateOfBirth))
+	if err != nil {
+		return nil, fmt.Errorf("profile: find matches: %w", err)
+	}
+	defer rows.Close()
+
+	var out []MatchCandidate
+	for rows.Next() {
+		var m MatchCandidate
+		if err := rows.Scan(&m.ChildID, &m.CaseID, &m.DisplayName, &m.DateOfBirth, &m.LastTouched); err != nil {
+			return nil, fmt.Errorf("profile: scan match: %w", err)
+		}
+		out = append(out, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("profile: match rows: %w", err)
+	}
+	return out, nil
+}
+
+// nullDate returns nil for a zero time.Time so an absent date of birth reaches Postgres as
+// SQL NULL rather than as 0001-01-01, which would otherwise be a real (wrong) date to
+// compare against instead of "no date supplied".
+func nullDate(t time.Time) any {
+	if t.IsZero() {
+		return nil
+	}
+	return t
 }
 
 func nullString(s string) any {
