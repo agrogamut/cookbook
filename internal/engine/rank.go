@@ -40,8 +40,9 @@ func applyMealFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProf
 	return filtered, models.StepResult{Step: 6, Name: "Meal category", Kind: "ranker", CandidatesIn: stepIn, CandidatesOut: len(filtered)}, nil
 }
 
-// sortWithinAgeBand orders by score without ever crossing the age partition applyAgeRank
-// set: no later adjustment can lift an out-of-band recipe above an in-band one.
+// sortWithinPartitions orders by score without ever crossing either partition: no later
+// adjustment can lift an out-of-band recipe above an in-band one, or an AI recipe above a
+// provider one at the same age-band standing.
 //
 // Every ranker after applyAgeRank sorts with this rather than by score alone. Without it,
 // a matching region (+0.05) or a liked ingredient would be enough to put a teenage power
@@ -49,16 +50,36 @@ func applyMealFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProf
 // their own band, which is exactly the comparison recipe_target_score's per-band
 // normalisation makes meaningless.
 //
-// Before applyAgeRank has run, every AgeInBand is false and this degrades to a plain score
-// sort, which is what rankByTarget wants anyway.
-func sortWithinAgeBand(out []models.RankedRecipe) {
+// The two partitions are ordered, age first and source second. An in-band AI recipe beats
+// an out-of-band provider one: printing an age-inappropriate recipe is a fact about the
+// child, while preferring provider data is a preference about provenance. That ordering is
+// also the entire value of the AI corpus -- reversed, a short chapter would still reach for
+// a teenage provider recipe before an age-appropriate AI one.
+//
+// Source is a partition rather than a penalty for the same reason age is: the provider half
+// of engine_ranked normalises against recipe_master's placeholder values and the AI half
+// against nutrition computed from real ingredient quantities, so their scores are not the
+// same measurement and no constant reconciles them.
+//
+// Before applyAgeRank has run, every AgeInBand is false and this degrades to a source
+// partition over a plain score sort.
+func sortWithinPartitions(out []models.RankedRecipe) {
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].AgeInBand != out[j].AgeInBand {
 			return out[i].AgeInBand
 		}
+		iProvider, jProvider := out[i].Source != aiSource, out[j].Source != aiSource
+		if iProvider != jProvider {
+			return iProvider
+		}
 		return out[i].RankedScore > out[j].RankedScore
 	})
 }
+
+// aiSource is engine_candidate.source's value for the AI corpus. Compared against rather
+// than "provider" so that a row whose source somehow arrives empty is treated as provider
+// and ranks normally, instead of a scan bug silently demoting the whole real corpus.
+const aiSource = "ai"
 
 // applyAgeRank is step 1's ranker half. It stably partitions the ranked list: every recipe
 // whose age band contains the child's age first, in the score order rankByTarget produced,
@@ -104,9 +125,10 @@ func applyAgeRank(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile
 			n++
 		}
 	}
-	// Only the partition is compared. SliceStable preserves the incoming score order inside
-	// each half, so nothing needs to re-sort by score here.
-	sort.SliceStable(out, func(i, j int) bool { return out[i].AgeInBand && !out[j].AgeInBand })
+	// Establishes both partitions at once. The incoming order is already by score, and
+	// sortWithinPartitions re-applies score as its last key, so this is stable in the same
+	// way the age-only partition was.
+	sortWithinPartitions(out)
 
 	return out, models.StepResult{
 		Step: 1, Name: "Age / feeding stage, ranker", Kind: "ranker",
@@ -156,7 +178,7 @@ func applyCultureRank(ctx context.Context, pool *pgxpool.Pool, p models.ChildPro
 			out[i].RankedScore += boost
 		}
 	}
-	sortWithinAgeBand(out)
+	sortWithinPartitions(out)
 
 	return out, models.StepResult{
 		Step: 7, Name: "Culture and location", Kind: "ranker",
@@ -188,7 +210,7 @@ func applyAvailabilityRank(ctx context.Context, pool *pgxpool.Pool, p models.Chi
 		SELECT m.recipe_id,
 		       count(*) FILTER (WHERE i.region_availability ILIKE '%' || $2 || '%')::numeric
 		         / NULLIF(count(*), 0) AS local_share
-		FROM recipe_ingredient_mapping m
+		FROM engine_candidate_ingredient m
 		JOIN ingredient_master i ON i.ingredient_id = m.ingredient_id
 		WHERE m.recipe_id = ANY($1)
 		GROUP BY m.recipe_id`,
@@ -223,7 +245,7 @@ func applyAvailabilityRank(ctx context.Context, pool *pgxpool.Pool, p models.Chi
 	for i := range out {
 		out[i].RankedScore += weight * share[out[i].RecipeID]
 	}
-	sortWithinAgeBand(out)
+	sortWithinPartitions(out)
 
 	return out, models.StepResult{
 		Step: 9, Name: "Ingredient availability", Kind: "ranker",
@@ -266,7 +288,7 @@ func applyDietRank(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfil
 			matched++
 		}
 	}
-	sortWithinAgeBand(out)
+	sortWithinPartitions(out)
 
 	note := fmt.Sprintf("%d of %d candidates match the declared practice %q exactly and were ranked up by %.2f",
 		matched, stepIn, p.DietType, boost)
@@ -314,7 +336,7 @@ func applyBudgetRank(ctx context.Context, pool *pgxpool.Pool, p models.ChildProf
 	for i, r := range recipes {
 		ids[i] = r.RecipeID
 	}
-	rows, err := pool.Query(ctx, `SELECT recipe_id FROM recipe_master WHERE recipe_id = ANY($1) AND budget_band = $2`, ids, p.BudgetBand)
+	rows, err := pool.Query(ctx, `SELECT recipe_id FROM engine_candidate WHERE recipe_id = ANY($1) AND budget_band = $2`, ids, p.BudgetBand)
 	if err != nil {
 		return nil, models.StepResult{}, fmt.Errorf("engine: budget rank: %w", err)
 	}
@@ -346,7 +368,7 @@ func applyBudgetRank(ctx context.Context, pool *pgxpool.Pool, p models.ChildProf
 			out[i].RankedScore += boost
 		}
 	}
-	sortWithinAgeBand(out)
+	sortWithinPartitions(out)
 
 	return out, models.StepResult{Step: 10, Name: "Budget", Kind: "ranker", CandidatesIn: stepIn, CandidatesOut: stepIn}, nil
 }
@@ -369,7 +391,7 @@ func applyTimeFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProf
 	}
 
 	rows, err := pool.Query(ctx, `
-		SELECT recipe_id FROM recipe_master
+		SELECT recipe_id FROM engine_candidate
 		WHERE recipe_id = ANY($1)
 		  AND ($2 = 0 OR prep_time_min <= $2)
 		  AND ($3 = 0 OR cook_time_min <= $3)`,
@@ -472,7 +494,7 @@ func dedupeNearDuplicates(ctx context.Context, pool *pgxpool.Pool, recipes []mod
 	for i, r := range recipes {
 		ids[i] = r.RecipeID
 	}
-	rows, err := pool.Query(ctx, `SELECT recipe_id, ingredient_id FROM recipe_ingredient_mapping WHERE recipe_id = ANY($1)`, ids)
+	rows, err := pool.Query(ctx, `SELECT recipe_id, ingredient_id FROM engine_candidate_ingredient WHERE recipe_id = ANY($1)`, ids)
 	if err != nil {
 		return nil, models.StepResult{}, fmt.Errorf("engine: dedupe ingredient load: %w", err)
 	}
@@ -523,7 +545,7 @@ func dedupeNearDuplicates(ctx context.Context, pool *pgxpool.Pool, recipes []mod
 			keptRice = append(keptRice, rice)
 		}
 	}
-	sortWithinAgeBand(out)
+	sortWithinPartitions(out)
 
 	return out, models.StepResult{
 		Step: 12, Name: "Diversity / duplication", Kind: "ranker",
@@ -565,18 +587,18 @@ func applySuspectedAllergenRank(ctx context.Context, pool *pgxpool.Pool, p model
 
 	rows, err := pool.Query(ctx, `
 		SELECT DISTINCT r.recipe_id
-		FROM recipe_master r
+		FROM engine_candidate r
 		WHERE r.recipe_id = ANY($1)
 		  AND (EXISTS (
 		           SELECT 1 FROM allergen_tag_vocabulary v
 		           WHERE v.allergen_group = ANY($2) AND v.corpus_tag IS NOT NULL
 		             AND (r.allergen_tags ILIKE '%' || v.corpus_tag || '%'
 		                  OR EXISTS (
-		                      SELECT 1 FROM recipe_ingredient_mapping m
+		                      SELECT 1 FROM engine_candidate_ingredient m
 		                      WHERE m.recipe_id = r.recipe_id
 		                        AND m.ingredient_allergen_tag ILIKE '%' || v.corpus_tag || '%')))
 		       OR EXISTS (
-		           SELECT 1 FROM recipe_ingredient_mapping m
+		           SELECT 1 FROM engine_candidate_ingredient m
 		           JOIN ingredient_allergen_override o ON o.ingredient_id = m.ingredient_id
 		           WHERE m.recipe_id = r.recipe_id
 		             AND o.allergen_group = ANY($2)))`,
@@ -612,7 +634,7 @@ func applySuspectedAllergenRank(ctx context.Context, pool *pgxpool.Pool, p model
 			out[i].RankedScore -= penalty
 		}
 	}
-	sortWithinAgeBand(out)
+	sortWithinPartitions(out)
 
 	unscreened, err := unscreenedGroups(ctx, pool, p.SuspectedAllergens)
 	if err != nil {

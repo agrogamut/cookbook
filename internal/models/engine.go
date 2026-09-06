@@ -42,6 +42,26 @@ type RankedRecipe struct {
 	// sorts above every out-of-band one, and an out-of-band recipe is reachable only once
 	// the in-band pool is exhausted. See engine.applyAgeRank.
 	AgeInBand bool `json:"age_in_band"`
+
+	// Source is "provider" for a recipe from the provider's corpus and "ai" for one from
+	// the verified AI corpus (ai_recipe). It is the second partition key, applied after
+	// AgeInBand: every provider recipe sorts above every AI one at the same age-band
+	// standing, and an AI recipe is reached only once the provider pool at that standing is
+	// exhausted.
+	//
+	// Partition rather than a score penalty, for the same reason AgeInBand is one:
+	// recipe_target_score normalises within a band built from recipe_master's provider
+	// placeholder values, while ai_recipe_target_score normalises over nutrition computed
+	// from real ingredient quantities. The two scores are not the same measurement, so no
+	// constant could make them comparable.
+	//
+	// Age deliberately outranks source. An in-band AI recipe beats an out-of-band provider
+	// one, because printing an age-inappropriate recipe is a fact about the child while
+	// preferring provider data is a preference about provenance.
+	//
+	// Like AgeInBand, this is the operator's signal and appears on no printed page.
+	Source string `json:"source"`
+
 	NutritionScore float64 `json:"nutrition_score"`
 	RankedScore    float64 `json:"ranked_score"`
 	ScoredAxes     string  `json:"scored_axes"`

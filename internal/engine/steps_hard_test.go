@@ -30,9 +30,20 @@ func TestAgeStepReturnsTheWholeCorpus(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 
-	var total int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM recipe_master`).Scan(&total); err != nil {
+	// engine_candidate, not recipe_master: since migration 0039 the pool is both corpora, and
+	// counting recipe_master here would have quietly passed while step 1 dropped every AI
+	// recipe. Asserted as two counts rather than one so a union that silently contributes
+	// nothing fails loudly instead of matching a smaller expectation.
+	var total, provider, ai int
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*),
+		       count(*) FILTER (WHERE source = 'provider'),
+		       count(*) FILTER (WHERE source = 'ai')
+		FROM engine_candidate`).Scan(&total, &provider, &ai); err != nil {
 		t.Fatalf("count: %v", err)
+	}
+	if provider == 0 || ai == 0 {
+		t.Fatalf("engine_candidate must carry both corpora: %d provider, %d ai", provider, ai)
 	}
 
 	ids, step, err := ageStep(ctx, pool)
@@ -219,4 +230,115 @@ func contains(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// The safety property the union rests on: an AI recipe is screened by the same step 2 that
+// screens a provider one, not by a second implementation beside it.
+//
+// Asserted against AI rows specifically rather than inferred from the real corpus passing,
+// because the failure mode is invisible from the provider side. Step 2 is a keep-list
+// (`FROM engine_candidate r WHERE r.recipe_id = ANY($1) AND NOT EXISTS ...`), so a query left
+// pointing at recipe_master returns every provider recipe correctly and simply omits every AI
+// id handed to it. Every provider-only assertion still passes while the AI corpus vanishes.
+//
+// Two allergens, because they exercise different arms of the filter:
+//
+//   - Milk travels on the corpus allergen tag, the ordinary path.
+//   - Peanut on an AI recipe travels only through ingredient_allergen_override (migration
+//     0024), which records that ingredient_master left Groundnut oil untagged. 17 AI recipes
+//     reach it that way and no tag would catch them.
+//
+// The exact-survivor count is the assertion that matters, and it replaced a "removed at least
+// one" check that was worthless: pointing the keep-list back at recipe_master makes zero AI
+// recipes survive, and zero survivors also carry no allergen, so the weak form passed the very
+// mutation it existed to catch. Verified by running both mutations against the exact form.
+//
+// One known redundancy, recorded so it is not mistaken for a gap: reverting the ingredient
+// subquery to recipe_ingredient_mapping does NOT fail this test, and should not.
+// ai_recipe_derived.allergen_tags is computed from ai_recipe_ingredient rather than shipped
+// alongside it, so an AI recipe's own tag cannot disagree with its ingredients -- measured at
+// zero rows where the ingredient tag exceeds the recipe tag. That arm exists for the provider
+// corpus, whose denormalised copy can drift.
+func TestAllergyFilterScreensAIRecipesLikeProviderOnes(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+
+	all, _, err := ageStep(ctx, pool)
+	if err != nil {
+		t.Fatalf("ageStep: %v", err)
+	}
+
+	countAI := func(ids []string) int {
+		var n int
+		if err := pool.QueryRow(ctx,
+			`SELECT count(*) FROM engine_candidate WHERE recipe_id = ANY($1) AND source = 'ai'`,
+			ids).Scan(&n); err != nil {
+			t.Fatalf("count ai: %v", err)
+		}
+		return n
+	}
+
+	// Baseline: with nothing declared, AI recipes survive. Without this the assertions below
+	// would pass against a filter that discarded the AI corpus wholesale.
+	kept, _, _, err := allergyFilter(ctx, pool, models.ChildProfile{AgeMonths: 36}, all)
+	if err != nil {
+		t.Fatalf("allergyFilter with no allergens: %v", err)
+	}
+	if countAI(kept) == 0 {
+		t.Fatal("no AI recipe survives a profile declaring no allergens; the union is not reaching step 2")
+	}
+
+	for _, group := range []string{"Milk", "Peanut"} {
+		t.Run(group, func(t *testing.T) {
+			// AI recipes that genuinely carry this allergen, by either route.
+			var carriers int
+			if err := pool.QueryRow(ctx, `
+				SELECT count(DISTINCT c.recipe_id) FROM engine_candidate c
+				WHERE c.source = 'ai' AND (
+				    EXISTS (SELECT 1 FROM engine_candidate_ingredient m
+				            JOIN allergen_tag_vocabulary v
+				              ON v.allergen_group = $1 AND v.corpus_tag IS NOT NULL
+				            WHERE m.recipe_id = c.recipe_id
+				              AND (m.ingredient_allergen_tag ILIKE '%' || v.corpus_tag || '%'
+				                   OR c.allergen_tags ILIKE '%' || v.corpus_tag || '%'))
+				 OR EXISTS (SELECT 1 FROM engine_candidate_ingredient m
+				            JOIN ingredient_allergen_override o ON o.ingredient_id = m.ingredient_id
+				            WHERE m.recipe_id = c.recipe_id AND o.allergen_group = $1))`,
+				group).Scan(&carriers); err != nil {
+				t.Fatalf("count carriers: %v", err)
+			}
+			if carriers == 0 {
+				t.Skipf("no AI recipe carries %s; nothing for this case to screen", group)
+			}
+
+			kept, _, _, err := allergyFilter(ctx, pool,
+				models.ChildProfile{AgeMonths: 36, Allergens: []string{group}}, all)
+			if err != nil {
+				t.Fatalf("allergyFilter: %v", err)
+			}
+
+			var wantAI int
+			if err := pool.QueryRow(ctx, `
+				SELECT count(*) FROM engine_candidate c
+				WHERE c.source = 'ai'
+				  AND NOT EXISTS (SELECT 1 FROM engine_candidate_ingredient m
+				                  JOIN allergen_tag_vocabulary v
+				                    ON v.allergen_group = $1 AND v.corpus_tag IS NOT NULL
+				                  WHERE m.recipe_id = c.recipe_id
+				                    AND (m.ingredient_allergen_tag ILIKE '%' || v.corpus_tag || '%'
+				                         OR c.allergen_tags ILIKE '%' || v.corpus_tag || '%'))
+				  AND NOT EXISTS (SELECT 1 FROM engine_candidate_ingredient m
+				                  JOIN ingredient_allergen_override o ON o.ingredient_id = m.ingredient_id
+				                  WHERE m.recipe_id = c.recipe_id AND o.allergen_group = $1)`,
+				group).Scan(&wantAI); err != nil {
+				t.Fatalf("count expected survivors: %v", err)
+			}
+
+			if got := countAI(kept); got != wantAI {
+				t.Fatalf("declaring %s left %d AI recipes; exactly %d do not carry it. Zero here "+
+					"means step 2 is still reading recipe_master and the AI corpus never reaches "+
+					"the filter at all", group, got, wantAI)
+			}
+		})
+	}
 }

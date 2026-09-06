@@ -314,6 +314,15 @@ func TestApplyDietRankLiftsTheDeclaredPracticeWithoutReSorting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("rankByTarget: %v", err)
 	}
+	// applyAgeRank first, exactly as pipeline.go runs it (step 5 rank, then step 1's ranker
+	// half, then step 4's). It is what establishes the age and source partitions, and every
+	// later ranker sorts through them. Feeding rankByTarget's output straight to a later
+	// ranker would test a state the pipeline never produces: source-mixed, unpartitioned, so
+	// the first sortWithinPartitions call legitimately reorders it.
+	ranked, _, err = applyAgeRank(ctx, pool, models.ChildProfile{AgeMonths: 36}, ranked)
+	if err != nil {
+		t.Fatalf("applyAgeRank: %v", err)
+	}
 
 	posBefore := make(map[string]int, len(ranked))
 	for i, r := range ranked {
@@ -376,6 +385,15 @@ func TestApplyDietRankLeavesAVegetarianProfileUntouched(t *testing.T) {
 	ranked, _, err := rankByTarget(ctx, pool, "NT00", ids)
 	if err != nil {
 		t.Fatalf("rankByTarget: %v", err)
+	}
+	// applyAgeRank first, exactly as pipeline.go runs it (step 5 rank, then step 1's ranker
+	// half, then step 4's). It is what establishes the age and source partitions, and every
+	// later ranker sorts through them. Feeding rankByTarget's output straight to a later
+	// ranker would test a state the pipeline never produces: source-mixed, unpartitioned, so
+	// the first sortWithinPartitions call legitimately reorders it.
+	ranked, _, err = applyAgeRank(ctx, pool, models.ChildProfile{AgeMonths: 36}, ranked)
+	if err != nil {
+		t.Fatalf("applyAgeRank: %v", err)
 	}
 	// A vegetarian declaration permits only Vegetarian recipes, so step 4 has already
 	// narrowed the pool to rows that all match. Boosting every row equally changes no

@@ -91,11 +91,21 @@ func rankByTarget(ctx context.Context, pool *pgxpool.Pool, targetCode string, ca
 		return nil, models.StepResult{Step: 5, Name: "Nutrition target", Kind: "ranker", CandidatesIn: 0, CandidatesOut: 0}, nil
 	}
 
+	// engine_ranked rather than recipe_ranked, and engine_candidate rather than recipe_master:
+	// both corpora, one query. clinical_tag is NULL on every AI row, so it is coalesced to an
+	// empty string rather than scanned into a *string -- the field is a display badge and an
+	// absent one reads correctly as no badge.
+	//
+	// ORDER BY here is not the final order and never was: rank.go re-sorts on every ranker
+	// after this, and the age and source partitions are applied there. Ordering by
+	// ranked_score across sources would be meaningless anyway -- the two halves normalise
+	// against different bases -- which is exactly why the partition exists.
 	rows, err := pool.Query(ctx, `
-		SELECT rr.recipe_id, rm.recipe_name, rr.region_culture, rm.meal_type, rm.diet_type, rm.clinical_tag,
-		       rm.age_group, rr.nutrition_score, rr.ranked_score, rr.scored_axes, rr.value_kind
-		FROM recipe_ranked rr
-		JOIN recipe_master rm ON rm.recipe_id = rr.recipe_id
+		SELECT rr.recipe_id, c.recipe_name, rr.region_culture, c.meal_type, c.diet_type,
+		       coalesce(c.clinical_tag, ''), c.age_group,
+		       rr.nutrition_score, rr.ranked_score, rr.scored_axes, rr.value_kind, rr.source
+		FROM engine_ranked rr
+		JOIN engine_candidate c ON c.recipe_id = rr.recipe_id AND c.source = rr.source
 		WHERE rr.recipe_id = ANY($1) AND rr.target_code = $2
 		ORDER BY rr.ranked_score DESC`,
 		candidateIDs, targetCode)
@@ -108,7 +118,8 @@ func rankByTarget(ctx context.Context, pool *pgxpool.Pool, targetCode string, ca
 	for rows.Next() {
 		var r models.RankedRecipe
 		if err := rows.Scan(&r.RecipeID, &r.RecipeName, &r.RegionCulture, &r.MealType, &r.DietType, &r.ClinicalTag,
-			&r.AgeGroup, &r.NutritionScore, &r.RankedScore, &r.ScoredAxes, &r.ValueKind); err != nil {
+			&r.AgeGroup, &r.NutritionScore, &r.RankedScore, &r.ScoredAxes, &r.ValueKind,
+			&r.Source); err != nil {
 			return nil, models.StepResult{}, fmt.Errorf("engine: rank by target scan: %w", err)
 		}
 		out = append(out, r)

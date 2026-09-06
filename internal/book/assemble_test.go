@@ -533,6 +533,41 @@ func TestLoadRecipeCardsReportsAJoinMiss(t *testing.T) {
 	}
 }
 
+// The union's headline result, pinned so a regression that quietly stops AI recipes reaching
+// the pool is visible as a failing test rather than as a book nobody notices got worse.
+//
+// An ordinary three-year-old's Book 2 needed an out-of-band fill before migration 0039 and
+// must not need one after it. The corpus holds 17 in-band Breakfast recipes for the 2-5 band
+// against a 25 target, so the chapter used to reach for a teenage recipe; the AI corpus adds
+// 10 more in-band, and it no longer has to.
+//
+// This asserts the outcome, not the mechanism: it does not care how many AI recipes are
+// printed or whether any are, only that no chapter had to go outside the child's age band to
+// fill itself. If the provider ever ships enough real 2-5y Breakfast recipes, this keeps
+// passing for the better reason.
+func TestTheUnionRemovesTheOrdinaryOutOfBandFill(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	asOf := time.Date(2026, 9, 5, 0, 0, 0, 0, time.UTC)
+
+	s := profile.Stored{
+		ChildID:     "BOOK-TEST-UNION",
+		DisplayName: "Union Child",
+		DateOfBirth: asOf.AddDate(-3, 0, 0),
+	}
+
+	_, omissions, err := AssembleBook2(ctx, pool, s, asOf)
+	if err != nil {
+		t.Fatalf("AssembleBook2: %v", err)
+	}
+	for _, o := range omissions {
+		if strings.Contains(o, "outside this child's age band") {
+			t.Fatalf("an ordinary three-year-old should no longer need an out-of-band fill "+
+				"now that the AI corpus is in the candidate pool, but a chapter reported one: %s", o)
+		}
+	}
+}
+
 func TestBook1EndsOnItsOwnBackPage(t *testing.T) {
 	pool := testPool(t)
 	for _, months := range []int{7, 51, 200} {
@@ -864,17 +899,28 @@ func TestDoctorApproachNoteNeverReachesGatedBlocks(t *testing.T) {
 // Without this the 2026-09-05 age change is a silent regression: a chapter short of in-band
 // candidates used to fall through to topUpInvented and report a shortfall, and now fills
 // with real out-of-band recipes and reports nothing at all.
+//
+// The profile is narrow on purpose. A plain three-year-old used to trigger this -- 17 in-band
+// Breakfast recipes against a 25 target -- and no longer does, because migration 0039's union
+// brought the AI corpus into the pool and 2-5y Breakfast now has 27 in-band candidates. That
+// is the union working, and TestTheUnionRemovesTheOrdinaryOutOfBandFill below pins it. This
+// test still needs a chapter that genuinely runs short, so it declares vegan plus three
+// confirmed allergens: measured at three out-of-band chapters, where vegan alone is at zero.
 func TestAnOutOfBandChapterIsReportedToTheOperatorAndNotToTheReader(t *testing.T) {
 	pool := testPool(t)
 	ctx := context.Background()
 	asOf := time.Date(2026, 9, 5, 0, 0, 0, 0, time.UTC)
 
-	// Three years old: the largest cohort in the corpus and the one where the shortfall is
-	// structural rather than incidental (17 in-band Breakfast recipes against a 25 target).
 	s := profile.Stored{
 		ChildID:     "BOOK-TEST-AGEBAND",
 		DisplayName: "Age Band Child",
 		DateOfBirth: asOf.AddDate(-3, 0, 0),
+		Vegan:       true,
+		Allergens: []profile.DeclaredAllergen{
+			{Group: "Peanut", Status: "confirmed"},
+			{Group: "Milk", Status: "confirmed"},
+			{Group: "Wheat", Status: "confirmed"},
+		},
 	}
 
 	b2, omissions, err := AssembleBook2(ctx, pool, s, asOf)

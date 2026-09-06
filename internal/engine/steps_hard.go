@@ -26,7 +26,7 @@ import (
 // It has no "candidate IDs in" parameter because it is always the first step in the
 // pipeline, and no profile parameter because it no longer looks at the child at all.
 func ageStep(ctx context.Context, pool *pgxpool.Pool) ([]string, models.StepResult, error) {
-	rows, err := pool.Query(ctx, `SELECT recipe_id FROM recipe_master`)
+	rows, err := pool.Query(ctx, `SELECT recipe_id FROM engine_candidate`)
 	if err != nil {
 		return nil, models.StepResult{}, fmt.Errorf("engine: age step: %w", err)
 	}
@@ -56,7 +56,7 @@ func ageStep(ctx context.Context, pool *pgxpool.Pool) ([]string, models.StepResu
 // decide which half of the partition a recipe belongs in.
 func inBandIDs(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) ([]string, error) {
 	rows, err := pool.Query(ctx,
-		`SELECT recipe_id FROM recipe_master WHERE min_age_months <= $1 AND max_age_months >= $1`,
+		`SELECT recipe_id FROM engine_candidate WHERE min_age_months <= $1 AND max_age_months >= $1`,
 		p.AgeMonths)
 	if err != nil {
 		return nil, fmt.Errorf("engine: in-band recipes: %w", err)
@@ -138,7 +138,7 @@ func allergyFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfil
 	// that correction without touching ingredient_master itself.
 	rows, err := pool.Query(ctx, `
 		SELECT r.recipe_id
-		FROM recipe_master r
+		FROM engine_candidate r
 		WHERE r.recipe_id = ANY($1)
 		  AND NOT EXISTS (
 		      SELECT 1 FROM allergen_tag_vocabulary v
@@ -146,12 +146,12 @@ func allergyFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfil
 		        AND v.corpus_tag IS NOT NULL
 		        AND (r.allergen_tags ILIKE '%' || v.corpus_tag || '%'
 		             OR EXISTS (
-		                 SELECT 1 FROM recipe_ingredient_mapping m
+		                 SELECT 1 FROM engine_candidate_ingredient m
 		                 WHERE m.recipe_id = r.recipe_id
 		                   AND m.ingredient_allergen_tag ILIKE '%' || v.corpus_tag || '%'))
 		  )
 		  AND NOT EXISTS (
-		      SELECT 1 FROM recipe_ingredient_mapping m
+		      SELECT 1 FROM engine_candidate_ingredient m
 		      JOIN ingredient_allergen_override o ON o.ingredient_id = m.ingredient_id
 		      WHERE m.recipe_id = r.recipe_id
 		        AND o.allergen_group = ANY($2)

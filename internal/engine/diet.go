@@ -50,7 +50,7 @@ func dietFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile, 
 		return nil, models.StepResult{}, fmt.Errorf("engine: diet filter: unrecognized diet_type %q: %w", p.DietType, ErrInvalidProfile)
 	}
 
-	query := `SELECT recipe_id FROM recipe_master WHERE recipe_id = ANY($1) AND diet_type = ANY($2)`
+	query := `SELECT recipe_id FROM engine_candidate WHERE recipe_id = ANY($1) AND diet_type = ANY($2)`
 	args := []any{candidateIDs, permitted}
 	if p.Vegan {
 		// food_group alone misses ghee (ING0060): it is bucketed under "Fat", not
@@ -61,10 +61,10 @@ func dietFilter(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile, 
 		// (and anything else tagged as a milk allergen but bucketed outside Dairy)
 		// without touching the vegetarian path, which still allows dairy.
 		query = `
-			SELECT r.recipe_id FROM recipe_master r
+			SELECT r.recipe_id FROM engine_candidate r
 			WHERE r.recipe_id = ANY($1) AND r.diet_type = ANY($2)
 			  AND NOT EXISTS (
-			      SELECT 1 FROM recipe_ingredient_mapping m
+			      SELECT 1 FROM engine_candidate_ingredient m
 			      WHERE m.recipe_id = r.recipe_id
 			        AND (m.food_group = ANY($3) OR m.ingredient_allergen_tag ILIKE '%Milk%'))`
 		args = append(args, animalFoodGroups)
