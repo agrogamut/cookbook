@@ -42,6 +42,32 @@ var correctedViolations = []violation{
 		        WHERE value_source = 'provider' AND verified`,
 	},
 	{
+		// IFCT 2017's oils-and-fats group (T001-T014) states energy = 0 against a correct
+		// fat = 100, and coalesce could not catch it because 0 is not NULL. Four aliased oils
+		// reached 406 real recipes as verified, coverage 1.000, energy 0 -- an average of
+		// 38.9 kcal missing per recipe on a printed page. Migration 0034 derives energy from
+		// the same row's own macros by the 4/4/9 rule instead. This is the guard that keeps
+		// any future zero-energy source row from silently doing it again.
+		name: "no verified row states zero energy while stating real macros",
+		why:  "a food with mass in protein, fat or carbohydrate has energy; a zero there is a source defect, not a measurement",
+		query: `SELECT ingredient_id FROM ingredient_nutrition_corrected
+		        WHERE value_source = 'ifct' AND energy_kcal_100g = 0
+		          AND (coalesce(protein_g_100g,0) + coalesce(fat_g_100g,0)
+		               + coalesce(carb_g_100g,0)) > 0`,
+	},
+	{
+		// The basis is what stops a derived figure being read as a measured one, so it has to
+		// agree with the number beside it rather than being set independently.
+		name: "every energy figure agrees with the basis it declares",
+		why:  "a derived energy labelled as IFCT's own measurement is exactly the confusion the basis column exists to prevent",
+		query: `SELECT ingredient_id FROM ingredient_nutrition_corrected
+		        WHERE energy_basis NOT IN ('ifct', 'ifct-atwater', 'provider')
+		           OR (energy_basis = 'provider' AND value_source <> 'provider')
+		           OR (energy_basis = 'ifct-atwater' AND round(energy_kcal_100g::numeric, 4)
+		               <> round((4*coalesce(protein_g_100g,0) + 9*coalesce(fat_g_100g,0)
+		                         + 4*coalesce(carb_g_100g,0))::numeric, 4))`,
+	},
+	{
 		name: "recomputed coverage is a fraction",
 		why:  "coverage outside 0 to 1 means the mass accounting is wrong",
 		query: `SELECT recipe_id FROM recipe_nutrition_recomputed

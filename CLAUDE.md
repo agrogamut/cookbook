@@ -729,6 +729,40 @@ pointed gourd (parwal), foxtail and barnyard millet, buckwheat, and most named f
 (bhetki, pabda, punti, mola, tengra, koi, shing). Those keep the provider placeholder and
 are reported unverified.
 
+**IFCT's oils ship zero energy, and the fix is a derivation, not a substitution.** All 14 rows
+of IFCT 2017's oils-and-fats group (`T001`-`T014`) state `energy = 0` against a correct
+`fat = 100`. Verified in the raw file, so not an import artefact, and no other row in the table
+does it - the column was simply never populated for that group. `coalesce` could not catch it,
+because 0 is not NULL, so IFCT's zero won: four aliased oils (Ghee, Mustard, Groundnut, Sesame)
+reached **406 real recipes** as `verified = true`, `ingredient_coverage = 1.000`, energy 0,
+losing an average of 38.9 kcal per recipe. Soybean oil, which has no alias, kept the provider's
+correct 884 - the alias was making the data worse. It reached a printed page, because Book 2's
+recipe nutrition panel prints the recomputed figure.
+
+Migration `0034` derives energy from **IFCT's own macros on the same row**, by the Atwater
+factors, and only where IFCT itself states zero against real macros:
+
+```
+energy_kcal_100g = 4 * protein_g + 9 * fat_g + 4 * carb_g      (a pure fat gives 900)
+```
+
+This is the identical 4/4/9 rule the integrity suite already applies to `recipe_master`, and it
+is a documented computation over a verified source rather than a swap for someone else's number.
+`ingredient_nutrition_corrected.energy_basis` records which of `ifct` (IFCT's own stated value),
+`ifct-atwater` (derived as above) or `provider` (unverified placeholder, no IFCT counterpart)
+each row's figure came from, so a derived value is never read as a measured one. Four rows are
+`ifct-atwater`, 144 `ifct`, 258 `provider`. `ingredient_master` is still untouched.
+
+**The ranker was checked and is unaffected**: `recipe_nutrition_normalised` bands on
+`recipe_master`'s own per-serving columns, not on `recipe_nutrition_recomputed`, so nothing was
+mis-ranked. The harm was confined to what an operator and a family read, which was enough.
+
+Found by running that same 4/4/9 consistency check against derived recipe totals rather than
+against `recipe_master`. It is a good general smell test for external-data defects, not just an
+integrity-suite formality. The same pass found IFCT's `N001` (chicken leg) internally
+inconsistent - its stated 1605 kJ is almost exactly twice what its own protein and fat imply,
+while `N002` and `N003` check out - so nothing should alias to `N001`.
+
 `recipe_nutrition_recomputed` rebuilds recipe nutrition from ingredient quantities:
 
 ```
