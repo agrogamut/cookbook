@@ -1,15 +1,11 @@
 package book
 
 import (
-	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"html/template"
 	"strings"
-
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ErrBadPhoto means the uploaded image was rejected. Reported to the operator rather than
@@ -117,53 +113,5 @@ func ParsePhoto(dataURI, caption string) (*ChildPhoto, error) {
 	return &ChildPhoto{
 		DataURI: template.URL("data:" + mediaType + ";base64," + base64.StdEncoding.EncodeToString(decoded)),
 		Caption: strings.TrimSpace(caption),
-	}, nil
-}
-
-// RecipePhoto is a real, stored dish-format photograph, ready to embed.
-//
-// It carries a data: URI for the same reason ChildPhoto does -- the print browser never
-// fetches, so the image has to travel inside the document. See ChildPhoto.DataURI's own
-// comment for why template.URL specifically, not string.
-type RecipePhoto struct {
-	DataURI     template.URL `json:"data_uri"`
-	SourceLabel string       `json:"source_label,omitempty"`
-}
-
-// RepresentativePhoto returns the stored photo for a dish-format archetype, or nil if
-// none has been matched yet.
-//
-// nil, not a placeholder image, for the same reason Mark returns nil when this
-// repository carries no artwork for an id: a recipe whose archetype has no photo prints
-// its drawn mark instead, and a missing photo is an ordinary, expected absence -- most
-// archetypes won't have full coverage from a bounded fetch, by design (see the plan's
-// Task 3 per-label caps).
-//
-// The lowest photo_id is picked deterministically rather than randomly: two renders of
-// the same book should show the same photo, not a different one each time a chapter is
-// regenerated.
-func RepresentativePhoto(ctx context.Context, pool *pgxpool.Pool, markID string) (*RecipePhoto, error) {
-	if markID == "" {
-		return nil, nil
-	}
-	var (
-		mediaType, label string
-		imgBytes         []byte
-	)
-	err := pool.QueryRow(ctx, `
-		SELECT media_type, bytes, source_label
-		FROM dish_format_photo
-		WHERE mark_id = $1
-		ORDER BY photo_id
-		LIMIT 1`, markID).Scan(&mediaType, &imgBytes, &label)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("book: representative photo for %s: %w", markID, err)
-	}
-	return &RecipePhoto{
-		DataURI:     template.URL("data:" + mediaType + ";base64," + base64.StdEncoding.EncodeToString(imgBytes)),
-		SourceLabel: label,
 	}, nil
 }

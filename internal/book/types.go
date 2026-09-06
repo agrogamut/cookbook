@@ -549,14 +549,6 @@ type RecipeCard struct {
 	// column is not a source, is in marks.go.
 	Mark *DishMark `json:"mark,omitempty"`
 
-	// Photo is the representative photograph for this recipe's dish-format archetype, or
-	// nil. Real photography, but of the archetype, not necessarily this exact recipe --
-	// see docs/superpowers/specs/2026-08-24-recipe-photo-pipeline-design.md. When present,
-	// the template shows it instead of Mark; when nil, Mark's drawn artwork prints as
-	// before. Both are always resolved together from the same mark_id, so a recipe is
-	// never left with neither.
-	Photo *RecipePhoto `json:"photo,omitempty"`
-
 	// RegionCulture is the recipe's own Region_Culture, printed as the card's kicker. It is
 	// the provider's value, not the family's stated region -- the two agree on most cards in
 	// a region-matched book and a reader is entitled to see which recipe came from where.

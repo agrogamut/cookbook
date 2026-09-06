@@ -352,16 +352,18 @@ func TestGapRegisterCountMatchesTheDocumentedCount(t *testing.T) {
 	if err := pool.QueryRow(context.Background(), `SELECT count(*) FROM gap_register`).Scan(&n); err != nil {
 		t.Fatalf("count: %v", err)
 	}
-	// Twenty-nine after migration 0026. The build-up: twelve seeded in migration 0002, four
+	// Twenty-eight after migration 0031. The build-up: twelve seeded in migration 0002, four
 	// that internal/enrich/gaps.go upserts on every enrichment run, four added by 0012, two
 	// by 0015, one by 0016, one by 0017, three by 0018, one by 0022 (GAP-028, the food-safety
-	// SOP citations that do not resolve), one by 0026 (GAP-029, format-level stock photography
-	// vs. GAP-025's still-open per-recipe commissioned photo). The enrich four are easy to miss
-	// because no migration writes them, which is exactly why this count is asserted rather than
-	// left in prose. If a gap is added or retired, change this number and the documents that
-	// quote it in the same commit.
-	if n != 29 {
-		t.Fatalf("gap_register holds %d rows, want 29", n)
+	// SOP citations that do not resolve). 0026 added a twenty-ninth, GAP-029, for the
+	// format-level stock photography pipeline; 0031 removed both the pipeline and the gap,
+	// because a recipe page prints no picture and had not for some time -- GAP-025, the
+	// still-open per-recipe commissioned photograph, was always the separate one and stays.
+	// The enrich four are easy to miss because no migration writes them, which is exactly why
+	// this count is asserted rather than left in prose. If a gap is added or retired, change
+	// this number and the documents that quote it in the same commit.
+	if n != 28 {
+		t.Fatalf("gap_register holds %d rows, want 28", n)
 	}
 }
 

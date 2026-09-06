@@ -10,16 +10,22 @@
 
      No picture prints on this page -- neither a per-recipe photograph (still nonexistent,
      GAP-025) nor the drawn dish-format mark. Removed by decision: the pictures were not
-     needed. RecipeCard.Mark/.Photo stay on the struct (loadRecipeCards/RepresentativePhoto
-     still resolve them for the API), only the template stopped printing them.
+     needed. RecipeCard.Mark stays on the struct (loadRecipeCards still resolves it for the
+     API), only the template stopped printing it.
 
      The dish-format mark printed again from 2026-09-04 to 2026-09-04, reversing the removal
      decision above -- and is removed a second time the same day, by the same kind of call:
      the per-card icon read as a repeated template tell rather than a useful picture, on a
      book that now carries scattered decorative watermark art on every page instead (see
-     tokens.css's .watermark note). RecipeCard.Mark/.Photo stay on the struct
-     (loadRecipeCards/RepresentativePhoto still resolve them for the API), only the template
-     stopped printing them, exactly as the original 2026-08-xx removal did. */}}
+     tokens.css's .watermark note).
+
+     RecipeCard.Photo used to be named here too: a real photograph of the dish FORMAT, matched
+     from two cleanly-licensed datasets by cmd/photomatch. It is gone as of migration 0031,
+     along with dish_format_photo and the pipeline behind it. Both removals above had left it
+     resolving on every card -- a query and a base64 encode per recipe, into a JSON field the
+     console never read, for a picture this page had twice decided not to print. Keeping a
+     struct field the API serialises is a fair price for something a template might print
+     tomorrow; it is not a fair price for something two decisions say it will not. */}}
 <div class="recipe">
   <div class="recipe-head">
     <span class="recipe-num">{{ printf "%02d" .Number }}</span>

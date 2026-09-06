@@ -741,13 +741,6 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 			// never routed through here.
 			Source: "provider",
 		}
-		if markID != "" {
-			photo, err := RepresentativePhoto(ctx, pool, markID)
-			if err != nil {
-				return nil, nil, fmt.Errorf("recipe %s: %w", recipeID, err)
-			}
-			card.Photo = photo
-		}
 		if req, ok := modificationRequestFor(cp, clinicalActions, recipeName, clinicalTag); ok {
 			pendingMods = append(pendingMods, pendingMod{recipeID: recipeID, req: req})
 		}

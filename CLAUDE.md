@@ -91,9 +91,15 @@ What's now allowed:
 
 What's unchanged:
 
-- No AI-generated images, anywhere. Food photography comes from a real, licensed
+- No AI-generated images, anywhere. This is the part that has never moved. The
+  clause that used to follow it - "food photography comes from a real, licensed
   photo dataset, matched by dish format then re-ranked by name/ingredient
-  similarity - never generated.
+  similarity" - described the sanctioned *alternative*, and that pipeline was
+  deleted on 2026-09-06 (migration `0031`, see "Book 2 has no pictures on a recipe
+  page" below). Nothing replaces it, because a recipe page prints no picture at
+  all. If food photography is ever wanted again, this is still the only acceptable
+  way to get it: a real, licensed dataset, matched at format level. Generating one
+  remains forbidden whether or not any pipeline exists.
 - The `ai_can_draft = 'N'` gate on the five Book 1 blocks (vaccination schedule,
   milestone surveillance, developmental red flags, development-by-age,
   reference/disclaimer) is untouched. This decision applies to Book 2 recipe
@@ -1666,12 +1672,33 @@ waste. Only the tail was ever the problem: a break inside the body of a form lea
 continuation with its header repeated, while a break four rows from the end leaves a stub on a
 sheet nobody wanted to print.
 
-### Book 2 has pictures, and they are drawings
+### Book 2 has no pictures on a recipe page
 
-The recipe page carries line art of the dish **format**, captioned with that format. Twenty-eight
-provider formats cover all 940 in-scope recipes, they collapse to eleven drawn archetypes
-(`recipe_format_mark`, migration `0019`), and the artwork is eleven embedded SVGs in
-`internal/book/marks/`.
+**A recipe page prints no image of any kind.** Not a photograph, and not the drawn dish-format
+mark. The mark printed originally, was removed, printed again briefly on 2026-09-04, and was
+removed the same day: a per-card icon read as a repeated template tell rather than a useful
+picture, on a book that carries scattered decorative watermark art on every page instead. The
+artwork itself is unchanged and still used - eleven embedded SVGs in `internal/book/marks/`,
+covering all 940 in-scope recipes through twenty-eight provider formats mapped to eleven
+archetypes (`recipe_format_mark`, migration `0019`). `RecipeCard.Mark` still resolves for the
+JSON API. Only the recipe template stopped printing it.
+
+**The dish-format photography pipeline is deleted** (migration `0031`, 2026-09-06). Migration
+`0026` had built one: two cleanly-licensed image datasets (CC0 and CC BY 4.0), a hand-written
+41-row label-to-archetype map, `dish_format_photo` holding matched bytes, and `cmd/photomatch`
+to fetch and match - the point being a photograph of the dish **format**, never of the specific
+recipe, exactly the order of claim the drawn marks already made. Nothing ever printed it. Both
+mark removals above left `RepresentativePhoto` resolving on every card anyway: a query and a
+base64 encode per recipe, into `RecipeCard.Photo` (`json:"photo"`) that the console never read
+and the template never rendered.
+
+So this is not a reversal of the photography policy - it is deleting machinery for a picture the
+book had twice decided not to show. `GAP-029`, which measured that pipeline's coverage, is
+deleted with it; its `ui_behaviour` had already gone false ("then prints the photo instead"),
+which is its own evidence that the gap outlived the feature. The gap register returns to 28.
+`GAP-025` and `recipe_photo` are untouched and still open - they were always the separate,
+per-recipe commissioned-photograph question. If a recipe page ever wants a picture again, `0026`
+is in git history with its schema and every seed row, and `0031`'s own down restores them.
 
 **Photographs are still refused, and the refusal is now on the record rather than an omission.**
 `data/external/indian_food_dataset.csv` does carry an `image-url` column across the 3,970 rows

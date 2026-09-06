@@ -403,19 +403,20 @@ func renderOneSection(t *testing.T, sec Section) string {
 	return buf.String()
 }
 
-// Pictures were removed from the recipe page a second time on 2026-09-04 -- neither the
-// drawn dish-format mark nor a stored photograph prints, regardless of whether
-// RecipeCard.Mark/.Photo are set. The struct fields stay (the API still resolves them),
-// only the template stopped printing. Replaces
-// TestARecipePagePrefersThePhotoOverTheMarkWhenBothAreSet and
-// TestARecipePagePrintsTheMarkWhenThereIsNoPhoto, which pinned the brief Photo-else-Mark
-// interval between the two removals.
-func TestARecipePagePrintsNoPictureEvenWhenMarkAndPhotoAreSet(t *testing.T) {
+// Pictures were removed from the recipe page a second time on 2026-09-04 -- the drawn
+// dish-format mark does not print however it is set. RecipeCard.Mark stays on the struct
+// (loadRecipeCards still resolves it for the API), only the template stopped printing it.
+//
+// This once also set RecipeCard.Photo, which held a stored dish-format photograph. That
+// field and the whole pipeline behind it are gone (migration 0031): nothing printed the
+// photo either, so resolving one per card was a query and a base64 encode feeding a JSON
+// field no reader had. The mark half of the assertion is what survives, and it is the half
+// that still has a struct field to be wrong about.
+func TestARecipePagePrintsNoPictureEvenWhenTheMarkIsSet(t *testing.T) {
 	card := RecipeCard{
 		Number: 1,
 		Title:  "Test Recipe",
 		Mark:   &DishMark{FormatLabel: "Test format", SVG: template.HTML("<svg></svg>")},
-		Photo:  &RecipePhoto{DataURI: template.URL("data:image/jpeg;base64,/9k="), SourceLabel: "test archetype"},
 	}
 	var buf bytes.Buffer
 	if err := RenderHTML(&buf, Kind2, Metadata{Language: "en"}, Book2{
@@ -423,11 +424,7 @@ func TestARecipePagePrintsNoPictureEvenWhenMarkAndPhotoAreSet(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("render: %v", err)
 	}
-	out := buf.String()
-	if strings.Contains(out, string(card.Photo.DataURI)) {
-		t.Fatal("the photo must not print")
-	}
-	if strings.Contains(out, "<svg></svg>") {
+	if strings.Contains(buf.String(), "<svg></svg>") {
 		t.Fatal("the mark's SVG must not print")
 	}
 }

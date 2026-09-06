@@ -7,8 +7,10 @@
 # them and verifies them against data/external/SHA256SUMS, which IS tracked.
 data/external/*.csv
 
-# Recipe photo candidates are fetched, not authored here. cmd/photomatch -fetch pulls
-# them; SHA256SUMS covers the CSVs above but not these binaries directly.
+# Recipe photo candidates, fetched by the dish-format photography pipeline that migration
+# 0031 deleted. Kept ignored rather than dropped: any working tree that ran the old
+# cmd/photomatch -fetch still has this directory, and untracking it would turn a few hundred
+# stale image files into untracked noise in every git status.
 data/external/photos/
 
 # Sample books generated locally for a look-at-the-pages check, not source material.

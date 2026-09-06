@@ -47,10 +47,33 @@ var externalViolations = []violation{
 		        WHERE preparation_method_full IS NULL OR preparation_method_full = ''`,
 	},
 	{
-		name: "every external dataset records its provenance",
-		why:  "a dataset without a URL, licence and checksum cannot be attributed or re-fetched",
+		name: "every external dataset records where it came from",
+		why:  "a dataset without a URL and a licence cannot be attributed, whether or not it has been fetched",
 		query: `SELECT source_key FROM external_source
-		        WHERE url = '' OR licence = '' OR sha256 = '' OR retrieved_on IS NULL`,
+		        WHERE url = '' OR licence = '' OR retrieved_on IS NULL`,
+	},
+	{
+		// Split from the row above, which demanded a checksum of every source unconditionally.
+		// That was wrong about one of the two things external_source holds. A row is a
+		// *registration* -- the dataset's identity, url, licence and scope, known the moment it
+		// is named in a migration. A checksum is a fact about a file on disk, and there is no
+		// file until a fetch runs.
+		//
+		// So the invariant that actually matters is narrower and still catches everything the
+		// old one existed for: nothing may be LOADED from a source that cannot be re-fetched
+		// and verified. rows_loaded is the exact signal, because a fetch writes it in the same
+		// statement as the checksum -- a source with loaded rows and no checksum would mean a
+		// fetch that recorded its output and not its input.
+		//
+		// The two rows that exposed this were migration 0026's photography datasets, registered
+		// with sha256 = '' because their fetch had never been run here. Migration 0031 deleted
+		// them with the rest of that pipeline, so the old wording would pass again today -- the
+		// split stays because it was the correct reading either way, and because the next
+		// registered-before-fetched dataset should not re-break a suite to rediscover it.
+		name: "every external dataset that loaded rows records a checksum",
+		why:  "rows loaded from a file whose checksum was never recorded cannot be re-fetched or verified",
+		query: `SELECT source_key FROM external_source
+		        WHERE rows_loaded IS NOT NULL AND sha256 = ''`,
 	},
 	{
 		name: "every audited ingredient with a match records how sure that match is",
