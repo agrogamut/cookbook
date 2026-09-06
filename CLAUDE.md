@@ -1054,6 +1054,60 @@ verified doctors" is enforced by deployment - the service reachable only on a pr
 service is ever exposed publicly, this amendment's entire justification lapses and these
 gates are the wrong thing to have removed.**
 
+### Amendment - the AI corpus is a candidate, partitioned below the provider's (2026-09-06)
+
+Step 1 built its pool from `SELECT recipe_id FROM recipe_master`, so the rows in `ai_recipe`
+reached no book. Migration `0039` unions them in. Design:
+`docs/superpowers/specs/2026-09-06-ai-recipe-union-design.md`.
+
+Four views. `engine_candidate` is `recipe_master` plus `ai_recipe_derived` with a `source`
+column; `engine_candidate_ingredient` is the mapping plus `ai_recipe_ingredient`, recovering
+the allergen tag and food group for AI rows by joining `ingredient_master` on `ingredient_id`;
+`ai_recipe_nutrition_normalised` and `ai_recipe_target_score` are the AI half of the ranker;
+`engine_ranked` joins the halves. Every `recipe_master` read in `steps_hard.go`, `diet.go`,
+`rank.go` and `target.go` is repointed at them.
+
+**AI recipes partition below provider ones and never interleave by score.**
+`recipe_target_score` normalises within a band built from `recipe_master`'s group-level
+placeholder values; `ai_recipe_target_score` normalises over nutrition computed from real
+ingredient quantities. Those are not the same measurement, and min-max makes it worse rather
+than better, since one extreme value sets the scale everything else is measured against. Same
+argument the 2026-09-05 amendment made for age bands, same answer: partition, never a constant.
+
+**Age outranks source**, so an in-band AI recipe beats an out-of-band provider one. Printing an
+age-inappropriate recipe is a fact about the child; preferring provider data is a preference
+about provenance. `sortWithinAgeBand` is now `sortWithinPartitions` and compares age band, then
+source, then score - every ranker after `applyAgeRank` sorts through it or silently undoes both
+partitions.
+
+The measured result: **a three-year-old's Book 2 no longer needs an out-of-band fill in any
+chapter.** It did before, structurally - 17 in-band Breakfast recipes against a 25 target, now
+27. `TestTheUnionRemovesTheOrdinaryOutOfBandFill` pins the outcome rather than the mechanism, so
+it keeps passing for the better reason if the provider ever ships more real recipes.
+
+`budget_band`, `prep_time_min`, `cook_time_min` and `clinical_tag` are NULL on every AI row and
+deliberately not derived. The rankers that read them lift a matching subset and fall back to the
+full ranking when it is empty, so a NULL costs an AI recipe a lift it has not earned and never
+removes it. A budget band would need boundaries no table states; a prep time for a dish nobody
+has cooked is a number with no source.
+
+**`ai_recipe` holds two provenances and `model` is what separates them.** The corpus-fill rows
+were written into reviewed migrations. `internal/book/invented.go`'s `generateInventedCard`
+also persists every live-invented recipe into `ai_recipe`/`ai_recipe_ingredient` on the same
+call that generates it, so since `0039` a recipe invented for one child is a candidate for the
+next. That is the "saved for reuse" behaviour the function always intended, and it is now
+safer rather than less safe: those rows pass step 2 and step 4 like any other candidate instead
+of resting on the allow-list alone.
+
+**Correction to the union commit's own message**, recorded because it would mislead someone
+into deleting a real check: it said `invented.go` carries "a parallel allergen re-check" that
+the union makes redundant. It does not. `validateInventedRecipe` checks that every returned
+ingredient id is in `engine.SafeIngredients`'s allow-list, and that allow-list already excludes
+every ingredient carrying a declared or suspected allergen and, for a vegetarian/eggetarian/
+vegan diet, every animal-derived food group. It *replaces* a second allergen query rather than
+duplicating one, and it guards a recipe that does not exist yet at generation time, so nothing
+about the union makes it redundant. It stays.
+
 ### Deviation from the spec, and why
 
 The spec makes steps 1, 2, 3, 4 and 6 hard filters. With the current data that guarantees

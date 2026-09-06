@@ -66,6 +66,19 @@ export interface RankedRecipe {
    *  family no indication which half of the partition a recipe came from, by decision, so the
    *  console is the only place the distinction is visible before a book is signed. */
   age_in_band: boolean;
+  /** "provider" for a recipe from the provider's corpus, "ai" for one from the verified AI
+   *  corpus. The second partition key after age_in_band: every provider recipe sorts above
+   *  every AI one at the same age-band standing.
+   *
+   *  A partition rather than a score adjustment because the two are scored against different
+   *  bases -- the provider half normalises within a band built from recipe_master's group-level
+   *  placeholder values, the AI half over nutrition computed from real ingredient quantities --
+   *  so their scores are not comparable numbers.
+   *
+   *  Like age_in_band, this is the operator's signal and appears on no printed page. A family
+   *  is given no indication which corpus a recipe came from, so the console is the only place
+   *  the distinction is visible before a book is signed. */
+  source: "provider" | "ai";
   nutrition_score: number;
   ranked_score: number;
   scored_axes: string;

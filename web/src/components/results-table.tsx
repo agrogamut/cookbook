@@ -18,6 +18,7 @@ export function ResultsTable({ recipes }: { recipes: RankedRecipe[] }) {
           <TableHead>Region</TableHead>
           <TableHead>Meal</TableHead>
           <TableHead>Clinical tag</TableHead>
+          <TableHead>Source</TableHead>
           <TableHead className="text-right">Nutrition</TableHead>
           <TableHead className="text-right">Ranked</TableHead>
         </TableRow>
@@ -49,6 +50,18 @@ export function ResultsTable({ recipes }: { recipes: RankedRecipe[] }) {
             <TableCell className="text-xs">{r.region_culture}</TableCell>
             <TableCell className="text-xs">{r.meal_type}</TableCell>
             <TableCell className="text-xs">{r.clinical_tag}</TableCell>
+            {/* Which corpus this row came from. Like the age band, it is a fact the printed
+                page deliberately withholds from a family, which makes this the only place a
+                signing clinician can see it. Provider rows read as plain text and AI rows as a
+                badge, for the same reason "outside" does above: the badge marks the row that
+                warrants a look, not the ordinary case. */}
+            <TableCell className="text-xs">
+              {r.source === "ai" ? (
+                <Badge variant="secondary" className="font-mono text-[10px]">ai corpus</Badge>
+              ) : (
+                <span className="text-muted-foreground">provider</span>
+              )}
+            </TableCell>
             <TableCell className="text-right">
               <div className="flex items-center justify-end gap-2">
                 <span className="font-mono text-xs">{r.nutrition_score.toFixed(3)}</span>
