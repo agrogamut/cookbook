@@ -29,11 +29,11 @@ COMMENT ON COLUMN ai_recipe.meal_type IS
 
 -- Backfill batch1's 34 rows: their meal_category_id was chosen directly rather than derived
 -- from a meal_type, so this recovers the meal_type each one was actually written for.
-UPDATE ai_recipe SET meal_type = 'Breakfast'     WHERE meal_category_id = 'MC-01' AND model = 'claude-authored';
-UPDATE ai_recipe SET meal_type = 'Lunch'         WHERE meal_category_id = 'MC-03' AND model = 'claude-authored';
-UPDATE ai_recipe SET meal_type = 'School Tiffin' WHERE meal_category_id = 'MC-04' AND model = 'claude-authored';
-UPDATE ai_recipe SET meal_type = 'Snack'         WHERE meal_category_id = 'MC-05' AND model = 'claude-authored';
-UPDATE ai_recipe SET meal_type = 'Dinner'        WHERE meal_category_id = 'MC-06' AND model = 'claude-authored';
+UPDATE ai_recipe SET meal_type = 'Breakfast'     WHERE meal_category_id = 'MC-01' AND model = 'hand-authored';
+UPDATE ai_recipe SET meal_type = 'Lunch'         WHERE meal_category_id = 'MC-03' AND model = 'hand-authored';
+UPDATE ai_recipe SET meal_type = 'School Tiffin' WHERE meal_category_id = 'MC-04' AND model = 'hand-authored';
+UPDATE ai_recipe SET meal_type = 'Snack'         WHERE meal_category_id = 'MC-05' AND model = 'hand-authored';
+UPDATE ai_recipe SET meal_type = 'Dinner'        WHERE meal_category_id = 'MC-06' AND model = 'hand-authored';
 
 DROP VIEW ai_recipe_derived;
 

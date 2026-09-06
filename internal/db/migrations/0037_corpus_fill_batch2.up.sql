@@ -25,7 +25,7 @@
 
 WITH new_recipe AS (
   INSERT INTO ai_recipe (title, meal_category_id, meal_type, dish_format_id, diet_type, min_age_months, max_age_months, age_group, region_culture, texture, method_steps, model, prompt_version)
-  VALUES ('Vegetable Poha', 'MC-01', 'Breakfast', 'bowl-grain', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Rinse flattened rice briefly and drain.','Saute onion, carrot and green peas in groundnut oil with turmeric and cumin.','Add the flattened rice and toss gently until warmed through.'], 'claude-authored', 'corpus-fill-2026-09-06-batch2')
+  VALUES ('Vegetable Poha', 'MC-01', 'Breakfast', 'bowl-grain', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Rinse flattened rice briefly and drain.','Saute onion, carrot and green peas in groundnut oil with turmeric and cumin.','Add the flattened rice and toss gently until warmed through.'], 'hand-authored', 'corpus-fill-2026-09-06-batch2')
   RETURNING recipe_id
 )
 INSERT INTO ai_recipe_ingredient (recipe_id, ingredient_id, quantity_g)
@@ -33,7 +33,7 @@ SELECT recipe_id, v.ingredient_id, v.quantity_g FROM new_recipe, (VALUES ('ING00
 
 WITH new_recipe AS (
   INSERT INTO ai_recipe (title, meal_category_id, meal_type, dish_format_id, diet_type, min_age_months, max_age_months, age_group, region_culture, texture, method_steps, model, prompt_version)
-  VALUES ('Suji Halwa (Semolina Breakfast Pudding)', 'MC-01', 'Breakfast', 'bowl-porridge', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Roast semolina lightly in ghee until fragrant.','Add milk and cook, stirring, until it thickens to a soft pudding.','Stir in raisins and serve warm.'], 'claude-authored', 'corpus-fill-2026-09-06-batch2')
+  VALUES ('Suji Halwa (Semolina Breakfast Pudding)', 'MC-01', 'Breakfast', 'bowl-porridge', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Roast semolina lightly in ghee until fragrant.','Add milk and cook, stirring, until it thickens to a soft pudding.','Stir in raisins and serve warm.'], 'hand-authored', 'corpus-fill-2026-09-06-batch2')
   RETURNING recipe_id
 )
 INSERT INTO ai_recipe_ingredient (recipe_id, ingredient_id, quantity_g)
@@ -41,7 +41,7 @@ SELECT recipe_id, v.ingredient_id, v.quantity_g FROM new_recipe, (VALUES ('ING00
 
 WITH new_recipe AS (
   INSERT INTO ai_recipe (title, meal_category_id, meal_type, dish_format_id, diet_type, min_age_months, max_age_months, age_group, region_culture, texture, method_steps, model, prompt_version)
-  VALUES ('Egg Bhurji with Roti', 'MC-01', 'Breakfast', 'flatbread', 'Eggetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Make a soft wheat flour dough and roll into small flatbreads; cook on a griddle.','Scramble egg with onion and tomato in a little mustard oil and turmeric.','Serve the egg alongside the flatbread.'], 'claude-authored', 'corpus-fill-2026-09-06-batch2')
+  VALUES ('Egg Bhurji with Roti', 'MC-01', 'Breakfast', 'flatbread', 'Eggetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Make a soft wheat flour dough and roll into small flatbreads; cook on a griddle.','Scramble egg with onion and tomato in a little mustard oil and turmeric.','Serve the egg alongside the flatbread.'], 'hand-authored', 'corpus-fill-2026-09-06-batch2')
   RETURNING recipe_id
 )
 INSERT INTO ai_recipe_ingredient (recipe_id, ingredient_id, quantity_g)
@@ -49,7 +49,7 @@ SELECT recipe_id, v.ingredient_id, v.quantity_g FROM new_recipe, (VALUES ('ING00
 
 WITH new_recipe AS (
   INSERT INTO ai_recipe (title, meal_category_id, meal_type, dish_format_id, diet_type, min_age_months, max_age_months, age_group, region_culture, texture, method_steps, model, prompt_version)
-  VALUES ('Moong Dal Chilla (Savoury Lentil Pancake)', 'MC-01', 'Breakfast', 'pancake', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Soak and blend moong dal to a thick batter with a little water.','Stir in finely chopped onion and coriander leaves.','Cook spoonfuls on a lightly oiled griddle until set on both sides.'], 'claude-authored', 'corpus-fill-2026-09-06-batch2')
+  VALUES ('Moong Dal Chilla (Savoury Lentil Pancake)', 'MC-01', 'Breakfast', 'pancake', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Soak and blend moong dal to a thick batter with a little water.','Stir in finely chopped onion and coriander leaves.','Cook spoonfuls on a lightly oiled griddle until set on both sides.'], 'hand-authored', 'corpus-fill-2026-09-06-batch2')
   RETURNING recipe_id
 )
 INSERT INTO ai_recipe_ingredient (recipe_id, ingredient_id, quantity_g)
@@ -57,7 +57,7 @@ SELECT recipe_id, v.ingredient_id, v.quantity_g FROM new_recipe, (VALUES ('ING00
 
 WITH new_recipe AS (
   INSERT INTO ai_recipe (title, meal_category_id, meal_type, dish_format_id, diet_type, min_age_months, max_age_months, age_group, region_culture, texture, method_steps, model, prompt_version)
-  VALUES ('Banana and Milk Suji Porridge', 'MC-01', 'Breakfast', 'bowl-porridge', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Roast semolina lightly in ghee.','Add milk and cook to a soft porridge.','Stir in mashed banana just before serving.'], 'claude-authored', 'corpus-fill-2026-09-06-batch2')
+  VALUES ('Banana and Milk Suji Porridge', 'MC-01', 'Breakfast', 'bowl-porridge', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Roast semolina lightly in ghee.','Add milk and cook to a soft porridge.','Stir in mashed banana just before serving.'], 'hand-authored', 'corpus-fill-2026-09-06-batch2')
   RETURNING recipe_id
 )
 INSERT INTO ai_recipe_ingredient (recipe_id, ingredient_id, quantity_g)
@@ -65,7 +65,7 @@ SELECT recipe_id, v.ingredient_id, v.quantity_g FROM new_recipe, (VALUES ('ING00
 
 WITH new_recipe AS (
   INSERT INTO ai_recipe (title, meal_category_id, meal_type, dish_format_id, diet_type, min_age_months, max_age_months, age_group, region_culture, texture, method_steps, model, prompt_version)
-  VALUES ('Paneer Stuffed Paratha with Curd', 'MC-01', 'Breakfast', 'flatbread', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Mix crumbled paneer with coriander leaves and a pinch of cumin.','Stuff into wheat flour dough and roll into a soft flatbread.','Cook on a griddle with a little ghee and serve with plain curd.'], 'claude-authored', 'corpus-fill-2026-09-06-batch2')
+  VALUES ('Paneer Stuffed Paratha with Curd', 'MC-01', 'Breakfast', 'flatbread', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Mix crumbled paneer with coriander leaves and a pinch of cumin.','Stuff into wheat flour dough and roll into a soft flatbread.','Cook on a griddle with a little ghee and serve with plain curd.'], 'hand-authored', 'corpus-fill-2026-09-06-batch2')
   RETURNING recipe_id
 )
 INSERT INTO ai_recipe_ingredient (recipe_id, ingredient_id, quantity_g)
@@ -73,7 +73,7 @@ SELECT recipe_id, v.ingredient_id, v.quantity_g FROM new_recipe, (VALUES ('ING00
 
 WITH new_recipe AS (
   INSERT INTO ai_recipe (title, meal_category_id, meal_type, dish_format_id, diet_type, min_age_months, max_age_months, age_group, region_culture, texture, method_steps, model, prompt_version)
-  VALUES ('Vegetable Upma', 'MC-01', 'Breakfast', 'plate-upma', 'Vegetarian', 24, 59, '2–5 years', 'South India', 'Family texture', ARRAY['Dry-roast semolina lightly.','Saute onion, carrot and green peas in groundnut oil with cumin.','Add water and the semolina, stirring until it thickens to a soft mass.'], 'claude-authored', 'corpus-fill-2026-09-06-batch2')
+  VALUES ('Vegetable Upma', 'MC-01', 'Breakfast', 'plate-upma', 'Vegetarian', 24, 59, '2–5 years', 'South India', 'Family texture', ARRAY['Dry-roast semolina lightly.','Saute onion, carrot and green peas in groundnut oil with cumin.','Add water and the semolina, stirring until it thickens to a soft mass.'], 'hand-authored', 'corpus-fill-2026-09-06-batch2')
   RETURNING recipe_id
 )
 INSERT INTO ai_recipe_ingredient (recipe_id, ingredient_id, quantity_g)
@@ -81,7 +81,7 @@ SELECT recipe_id, v.ingredient_id, v.quantity_g FROM new_recipe, (VALUES ('ING00
 
 WITH new_recipe AS (
   INSERT INTO ai_recipe (title, meal_category_id, meal_type, dish_format_id, diet_type, min_age_months, max_age_months, age_group, region_culture, texture, method_steps, model, prompt_version)
-  VALUES ('Soft Boiled Egg with Mashed Potato', 'MC-01', 'Breakfast', 'dish-mash', 'Eggetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Boil an egg and potato until soft.','Mash the potato with a little ghee.','Halve the egg and serve on top of the mashed potato.'], 'claude-authored', 'corpus-fill-2026-09-06-batch2')
+  VALUES ('Soft Boiled Egg with Mashed Potato', 'MC-01', 'Breakfast', 'dish-mash', 'Eggetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Boil an egg and potato until soft.','Mash the potato with a little ghee.','Halve the egg and serve on top of the mashed potato.'], 'hand-authored', 'corpus-fill-2026-09-06-batch2')
   RETURNING recipe_id
 )
 INSERT INTO ai_recipe_ingredient (recipe_id, ingredient_id, quantity_g)
@@ -89,7 +89,7 @@ SELECT recipe_id, v.ingredient_id, v.quantity_g FROM new_recipe, (VALUES ('ING00
 
 WITH new_recipe AS (
   INSERT INTO ai_recipe (title, meal_category_id, meal_type, dish_format_id, diet_type, min_age_months, max_age_months, age_group, region_culture, texture, method_steps, model, prompt_version)
-  VALUES ('Muri and Banana Bowl (Puffed Rice with Fruit)', 'MC-01', 'Breakfast', 'snack', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Lightly warm puffed rice with a little ghee.','Top with sliced banana and serve.'], 'claude-authored', 'corpus-fill-2026-09-06-batch2')
+  VALUES ('Muri and Banana Bowl (Puffed Rice with Fruit)', 'MC-01', 'Breakfast', 'snack', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Lightly warm puffed rice with a little ghee.','Top with sliced banana and serve.'], 'hand-authored', 'corpus-fill-2026-09-06-batch2')
   RETURNING recipe_id
 )
 INSERT INTO ai_recipe_ingredient (recipe_id, ingredient_id, quantity_g)
@@ -97,7 +97,7 @@ SELECT recipe_id, v.ingredient_id, v.quantity_g FROM new_recipe, (VALUES ('ING00
 
 WITH new_recipe AS (
   INSERT INTO ai_recipe (title, meal_category_id, meal_type, dish_format_id, diet_type, min_age_months, max_age_months, age_group, region_culture, texture, method_steps, model, prompt_version)
-  VALUES ('Chicken and Vegetable Semolina Upma', 'MC-01', 'Breakfast', 'plate-upma', 'Non-vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Cook finely diced chicken through in groundnut oil with turmeric.','Add onion and carrot and cook until soft.','Stir in roasted semolina and water, cooking until it thickens.'], 'claude-authored', 'corpus-fill-2026-09-06-batch2')
+  VALUES ('Chicken and Vegetable Semolina Upma', 'MC-01', 'Breakfast', 'plate-upma', 'Non-vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Cook finely diced chicken through in groundnut oil with turmeric.','Add onion and carrot and cook until soft.','Stir in roasted semolina and water, cooking until it thickens.'], 'hand-authored', 'corpus-fill-2026-09-06-batch2')
   RETURNING recipe_id
 )
 INSERT INTO ai_recipe_ingredient (recipe_id, ingredient_id, quantity_g)
@@ -105,7 +105,7 @@ SELECT recipe_id, v.ingredient_id, v.quantity_g FROM new_recipe, (VALUES ('ING00
 
 WITH new_recipe AS (
   INSERT INTO ai_recipe (title, meal_category_id, meal_type, dish_format_id, diet_type, min_age_months, max_age_months, age_group, region_culture, texture, method_steps, model, prompt_version)
-  VALUES ('Plain Rice and Moong Dal Khichdi (Recovery)', NULL, 'Recovery Meal', 'pot-khichdi', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Cook rice and moong dal together with plenty of water until very soft.','Stir in a little ghee and a pinch of turmeric.','Serve warm and soft, without strong spice.'], 'claude-authored', 'corpus-fill-2026-09-06-batch2')
+  VALUES ('Plain Rice and Moong Dal Khichdi (Recovery)', NULL, 'Recovery Meal', 'pot-khichdi', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Cook rice and moong dal together with plenty of water until very soft.','Stir in a little ghee and a pinch of turmeric.','Serve warm and soft, without strong spice.'], 'hand-authored', 'corpus-fill-2026-09-06-batch2')
   RETURNING recipe_id
 )
 INSERT INTO ai_recipe_ingredient (recipe_id, ingredient_id, quantity_g)
@@ -113,7 +113,7 @@ SELECT recipe_id, v.ingredient_id, v.quantity_g FROM new_recipe, (VALUES ('ING00
 
 WITH new_recipe AS (
   INSERT INTO ai_recipe (title, meal_category_id, meal_type, dish_format_id, diet_type, min_age_months, max_age_months, age_group, region_culture, texture, method_steps, model, prompt_version)
-  VALUES ('Curd Rice (Recovery)', NULL, 'Recovery Meal', 'bowl-grain', 'Vegetarian', 24, 59, '2–5 years', 'South India', 'Family texture', ARRAY['Cook rice until very soft.','Mash lightly and mix with plain curd.','Serve at room temperature.'], 'claude-authored', 'corpus-fill-2026-09-06-batch2')
+  VALUES ('Curd Rice (Recovery)', NULL, 'Recovery Meal', 'bowl-grain', 'Vegetarian', 24, 59, '2–5 years', 'South India', 'Family texture', ARRAY['Cook rice until very soft.','Mash lightly and mix with plain curd.','Serve at room temperature.'], 'hand-authored', 'corpus-fill-2026-09-06-batch2')
   RETURNING recipe_id
 )
 INSERT INTO ai_recipe_ingredient (recipe_id, ingredient_id, quantity_g)
@@ -121,7 +121,7 @@ SELECT recipe_id, v.ingredient_id, v.quantity_g FROM new_recipe, (VALUES ('ING00
 
 WITH new_recipe AS (
   INSERT INTO ai_recipe (title, meal_category_id, meal_type, dish_format_id, diet_type, min_age_months, max_age_months, age_group, region_culture, texture, method_steps, model, prompt_version)
-  VALUES ('Mashed Banana and Rice (Recovery)', NULL, 'Recovery Meal', 'dish-mash', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Cook rice until very soft.','Mash together with ripe banana until smooth.','Serve warm.'], 'claude-authored', 'corpus-fill-2026-09-06-batch2')
+  VALUES ('Mashed Banana and Rice (Recovery)', NULL, 'Recovery Meal', 'dish-mash', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Cook rice until very soft.','Mash together with ripe banana until smooth.','Serve warm.'], 'hand-authored', 'corpus-fill-2026-09-06-batch2')
   RETURNING recipe_id
 )
 INSERT INTO ai_recipe_ingredient (recipe_id, ingredient_id, quantity_g)
@@ -129,7 +129,7 @@ SELECT recipe_id, v.ingredient_id, v.quantity_g FROM new_recipe, (VALUES ('ING00
 
 WITH new_recipe AS (
   INSERT INTO ai_recipe (title, meal_category_id, meal_type, dish_format_id, diet_type, min_age_months, max_age_months, age_group, region_culture, texture, method_steps, model, prompt_version)
-  VALUES ('Light Chicken and Rice Soup (Recovery)', NULL, 'Recovery Meal', 'bowl-grain', 'Non-vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Simmer chicken pieces with ginger in plenty of water until very tender.','Add rice and cook until soft, in a thin, mostly-liquid consistency.','Season lightly and serve warm.'], 'claude-authored', 'corpus-fill-2026-09-06-batch2')
+  VALUES ('Light Chicken and Rice Soup (Recovery)', NULL, 'Recovery Meal', 'bowl-grain', 'Non-vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Simmer chicken pieces with ginger in plenty of water until very tender.','Add rice and cook until soft, in a thin, mostly-liquid consistency.','Season lightly and serve warm.'], 'hand-authored', 'corpus-fill-2026-09-06-batch2')
   RETURNING recipe_id
 )
 INSERT INTO ai_recipe_ingredient (recipe_id, ingredient_id, quantity_g)
@@ -137,7 +137,7 @@ SELECT recipe_id, v.ingredient_id, v.quantity_g FROM new_recipe, (VALUES ('ING00
 
 WITH new_recipe AS (
   INSERT INTO ai_recipe (title, meal_category_id, meal_type, dish_format_id, diet_type, min_age_months, max_age_months, age_group, region_culture, texture, method_steps, model, prompt_version)
-  VALUES ('Soft Egg and Mashed Potato (Recovery)', NULL, 'Recovery Meal', 'dish-mash', 'Eggetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Boil an egg and potato until very soft.','Mash together with a little ghee to a smooth consistency.','Serve warm.'], 'claude-authored', 'corpus-fill-2026-09-06-batch2')
+  VALUES ('Soft Egg and Mashed Potato (Recovery)', NULL, 'Recovery Meal', 'dish-mash', 'Eggetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Boil an egg and potato until very soft.','Mash together with a little ghee to a smooth consistency.','Serve warm.'], 'hand-authored', 'corpus-fill-2026-09-06-batch2')
   RETURNING recipe_id
 )
 INSERT INTO ai_recipe_ingredient (recipe_id, ingredient_id, quantity_g)
@@ -145,7 +145,7 @@ SELECT recipe_id, v.ingredient_id, v.quantity_g FROM new_recipe, (VALUES ('ING00
 
 WITH new_recipe AS (
   INSERT INTO ai_recipe (title, meal_category_id, meal_type, dish_format_id, diet_type, min_age_months, max_age_months, age_group, region_culture, texture, method_steps, model, prompt_version)
-  VALUES ('Paneer and Rice Porridge (Recovery)', NULL, 'Recovery Meal', 'bowl-porridge', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Cook rice with extra water until it breaks down to a soft porridge.','Stir in finely crumbled paneer and a little ghee.','Serve warm and soft.'], 'claude-authored', 'corpus-fill-2026-09-06-batch2')
+  VALUES ('Paneer and Rice Porridge (Recovery)', NULL, 'Recovery Meal', 'bowl-porridge', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Cook rice with extra water until it breaks down to a soft porridge.','Stir in finely crumbled paneer and a little ghee.','Serve warm and soft.'], 'hand-authored', 'corpus-fill-2026-09-06-batch2')
   RETURNING recipe_id
 )
 INSERT INTO ai_recipe_ingredient (recipe_id, ingredient_id, quantity_g)
@@ -153,7 +153,7 @@ SELECT recipe_id, v.ingredient_id, v.quantity_g FROM new_recipe, (VALUES ('ING00
 
 WITH new_recipe AS (
   INSERT INTO ai_recipe (title, meal_category_id, meal_type, dish_format_id, diet_type, min_age_months, max_age_months, age_group, region_culture, texture, method_steps, model, prompt_version)
-  VALUES ('Light Rohu Fish and Rice Congee (Recovery)', NULL, 'Recovery Meal', 'bowl-porridge', 'Non-vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Simmer rohu fish pieces gently until cooked through and flaking.','Cook rice with extra water to a soft, thin consistency and fold in the flaked fish.','Serve warm, lightly seasoned.'], 'claude-authored', 'corpus-fill-2026-09-06-batch2')
+  VALUES ('Light Rohu Fish and Rice Congee (Recovery)', NULL, 'Recovery Meal', 'bowl-porridge', 'Non-vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Simmer rohu fish pieces gently until cooked through and flaking.','Cook rice with extra water to a soft, thin consistency and fold in the flaked fish.','Serve warm, lightly seasoned.'], 'hand-authored', 'corpus-fill-2026-09-06-batch2')
   RETURNING recipe_id
 )
 INSERT INTO ai_recipe_ingredient (recipe_id, ingredient_id, quantity_g)
@@ -161,7 +161,7 @@ SELECT recipe_id, v.ingredient_id, v.quantity_g FROM new_recipe, (VALUES ('ING00
 
 WITH new_recipe AS (
   INSERT INTO ai_recipe (title, meal_category_id, meal_type, dish_format_id, diet_type, min_age_months, max_age_months, age_group, region_culture, texture, method_steps, model, prompt_version)
-  VALUES ('Ginger-Cumin Rice Water Khichdi (Recovery)', NULL, 'Recovery Meal', 'pot-khichdi', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Cook rice and moong dal with plenty of water and a little ginger until very soft and thin.','Add a pinch of roasted cumin.','Serve warm; this is meant to be light and easy on the stomach.'], 'claude-authored', 'corpus-fill-2026-09-06-batch2')
+  VALUES ('Ginger-Cumin Rice Water Khichdi (Recovery)', NULL, 'Recovery Meal', 'pot-khichdi', 'Vegetarian', 24, 59, '2–5 years', 'West Bengal / East India', 'Family texture', ARRAY['Cook rice and moong dal with plenty of water and a little ginger until very soft and thin.','Add a pinch of roasted cumin.','Serve warm; this is meant to be light and easy on the stomach.'], 'hand-authored', 'corpus-fill-2026-09-06-batch2')
   RETURNING recipe_id
 )
 INSERT INTO ai_recipe_ingredient (recipe_id, ingredient_id, quantity_g)
