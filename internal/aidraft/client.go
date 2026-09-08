@@ -20,6 +20,22 @@ import (
 // which is the API's own recommended replacement.
 const modelName = "gemini-3.1-pro-preview"
 
+// translateModelName is deliberately a different, cheaper-quota model than modelName, used
+// only by TranslateTexts. Measured on a live Tier 1 key (2026-09-08): Gemini 3.1 Pro sits at
+// 243/250 of its daily request quota after generating one Bengali book, while Gemini 3.6 Flash
+// on the same project sat at 51/10,000 -- a whole-book Bengali translation alone makes dozens
+// of calls (one per translateBatchSize text nodes, internal/book/translate.go), which is a
+// request-count shape none of this package's other methods share (at most a dozen or so per
+// book). Tier 1 does not raise a preview model's own daily ceiling the way it raises a GA
+// model's, so Pro's 250/day is a platform floor here, not something a paid tier lifts.
+//
+// The tradeoff this const's sibling doc comment above warns about (Flash spending real
+// thinking tokens regardless of prompt simplicity, no speed win over Pro) is accepted here on
+// purpose: translation is exactly the "simple restatement" shape that tradeoff describes, and
+// 40x the daily request headroom matters more for this specific caller than shaving seconds
+// off any one call does.
+const translateModelName = "gemini-3.6-flash"
+
 // perCallTimeout bounds a single Gemini request independently of whatever deadline the caller's
 // ctx already carries. Measured directly against the real API: every drafting call this package
 // makes -- including DraftInventedRecipe's large-schema request, the slowest -- completes well
@@ -76,6 +92,10 @@ func (disabledClient) DraftDoctorApproachNote(context.Context, DoctorApproachReq
 
 func (disabledClient) DraftFoodGroupPriorities(context.Context, FoodGroupPriorityRequest) (FoodGroupPriorities, error) {
 	return FoodGroupPriorities{}, ErrDraftingUnavailable
+}
+
+func (disabledClient) TranslateTexts(context.Context, TranslateRequest) (TranslatedTexts, error) {
+	return TranslatedTexts{}, ErrDraftingUnavailable
 }
 
 // geminiClient is the real implementation, defined in draft.go.

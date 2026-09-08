@@ -89,7 +89,17 @@ func (h *Handlers) renderBookHTML(w http.ResponseWriter, r *http.Request, s prof
 		writeError(w, http.StatusInternalServerError, "render failed: "+err.Error())
 		return nil, book.Metadata{}, nil, false
 	}
-	return buf.Bytes(), meta, omissions, true
+
+	htmlDoc = buf.Bytes()
+	if meta.Language == "bn" {
+		translated, err := book.TranslateHTML(ctx, htmlDoc, h.drafter, "bn")
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "translation failed: "+err.Error())
+			return nil, book.Metadata{}, nil, false
+		}
+		htmlDoc = translated
+	}
+	return htmlDoc, meta, omissions, true
 }
 
 // BookPreview returns the rendered book as HTML -- the same document BookDownload prints

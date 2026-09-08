@@ -141,3 +141,54 @@ func (g *geminiClient) DraftInventedRecipe(ctx context.Context, req InventedReci
 		GeneratedAt:  time.Now(),
 	}, nil
 }
+
+// TranslateTexts asks Gemini to carry one page's batch of already-rendered text nodes into
+// req.TargetLanguage, preserving order and count. See buildTranslatePrompt for the numbering
+// discipline that keeps the response aligned to the request.
+//
+// Retries once on failure, unlike every other method in this file. A full book's translation
+// makes dozens of these calls (one per translateBatchSize text nodes, internal/book/
+// translate.go), where the other Drafter methods make at most a handful per book -- so a
+// transient upstream failure that would be rare enough to ignore once in a while compounds
+// into a near-certain whole-book failure at this call volume. Observed directly: a real run
+// against the live API hit "Error 504 ... DEADLINE_EXCEEDED" from Gemini's own backend on one
+// batch out of several dozen, with every other batch succeeding -- a transient fault on
+// Gemini's side, not a persistent one, since the identical request succeeded on the retry. Two
+// attempts total, each under its own fresh perCallTimeout rather than sharing one deadline, so
+// a slow-but-real second attempt is not punished for the first attempt's time.
+func (g *geminiClient) TranslateTexts(ctx context.Context, req TranslateRequest) (TranslatedTexts, error) {
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		out, err := g.translateOnce(ctx, req)
+		if err == nil {
+			return out, nil
+		}
+		lastErr = err
+	}
+	return TranslatedTexts{}, lastErr
+}
+
+func (g *geminiClient) translateOnce(ctx context.Context, req TranslateRequest) (TranslatedTexts, error) {
+	ctx, cancel := context.WithTimeout(ctx, perCallTimeout)
+	defer cancel()
+	resp, err := g.client.Models.GenerateContent(ctx, translateModelName, genai.Text(buildTranslatePrompt(req)),
+		&genai.GenerateContentConfig{
+			ResponseMIMEType: "application/json",
+			ResponseSchema:   translateSchema(),
+		})
+	if err != nil {
+		return TranslatedTexts{}, fmt.Errorf("%w: gemini translate request: %v", ErrDraftingUnavailable, err)
+	}
+
+	var out translateResponse
+	if err := json.Unmarshal([]byte(resp.Text()), &out); err != nil {
+		return TranslatedTexts{}, fmt.Errorf("%w: decode translate response: %v", ErrDraftingUnavailable, err)
+	}
+
+	return TranslatedTexts{
+		Texts:       out.Texts,
+		Source:      "gemini",
+		Model:       translateModelName,
+		GeneratedAt: time.Now(),
+	}, nil
+}

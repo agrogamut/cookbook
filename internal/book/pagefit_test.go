@@ -299,7 +299,15 @@ func buildPrintedSet(url string) (printedSet, error) {
 		DisplayName:   "Ananya Roy",
 		DateOfBirth:   time.Date(2022, 3, 14, 0, 0, 0, 0, time.UTC),
 		Sex:           "female",
-		LanguageID:    "bn",
+		// English, deliberately: this suite measures page-fit budgets tuned against English
+		// glyph widths (see colwidth.go and tokens.css's own notes). "bn" was harmless filler
+		// here before Metadata.Language actually drove anything -- now that bookLanguage
+		// wires it to the real font-family swap (tokens.css's html[lang="bn"] block), setting
+		// it here would render this suite's still-English fixture prose in the Bengali face,
+		// which is not a real scenario (production always translates before that font swap
+		// takes effect) and changes pagination for a reason unrelated to what this suite
+		// tests.
+		LanguageID:    "English",
 		RegionCulture: "West Bengal / East India",
 		DietType:      "Vegetarian",
 		BudgetBand:    "Moderate",

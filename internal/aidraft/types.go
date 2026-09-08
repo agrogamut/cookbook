@@ -28,6 +28,27 @@ type Drafter interface {
 	DraftInventedRecipe(ctx context.Context, req InventedRecipeRequest) (InventedRecipe, error)
 	DraftDoctorApproachNote(ctx context.Context, req DoctorApproachRequest) (DraftedText, error)
 	DraftFoodGroupPriorities(ctx context.Context, req FoodGroupPriorityRequest) (FoodGroupPriorities, error)
+	TranslateTexts(ctx context.Context, req TranslateRequest) (TranslatedTexts, error)
+}
+
+// TranslateRequest is one batch of already-rendered page text to carry into another language.
+// Nothing here is a clinical claim being drafted from scratch -- every string in Texts was
+// already composed from a verified source (a template label, a provider row, an already-drafted
+// note) by the time it reaches this package. Translation restates the same fact in another
+// script; it does not add one.
+type TranslateRequest struct {
+	TargetLanguage string   // "Bengali", the only target this project currently prints
+	Texts          []string // one page's batch of visible text nodes, in document order
+}
+
+// TranslatedTexts is the same-length, same-order translation of a TranslateRequest's Texts.
+// The caller (internal/book) rejects any response whose length does not match the request --
+// translation must never silently drop or merge a text node.
+type TranslatedTexts struct {
+	Texts       []string
+	Source      string
+	Model       string
+	GeneratedAt time.Time
 }
 
 // DraftedText is one piece of AI-drafted prose plus a provenance record -- the same "every

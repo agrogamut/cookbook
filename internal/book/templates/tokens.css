@@ -104,6 +104,23 @@
           var(--page-margin-bottom) var(--page-margin-side);
 }
 
+/* Bengali toggle. base.html always sets <html lang="{{ .Metadata.Language }}">, so this is
+   the one place a Bengali page diverges: it repoints the two body-voice tokens (serif prose,
+   sans labels) at the Indic stacks already declared above, and every element keyed to
+   var(--font-serif)/var(--font-sans) -- which is nearly everything on the page -- picks up
+   conjunct-forming glyphs with no further per-element change. --font-mono is deliberately
+   left alone: ids, dates and quantities stay in the same numeral font regardless of language.
+   Letter-spacing on .label is zeroed for the same page -- the kicker/label spacing was tuned
+   for an uppercase Latin word, and the same tracking pulls a Bengali conjunct apart into
+   glyphs that no longer form the ligature a reader expects. */
+html[lang="bn"] {
+  --font-serif: var(--font-indic);
+  --font-sans: var(--font-indic-sans);
+}
+html[lang="bn"] .label {
+  letter-spacing: normal;
+}
+
 body {
   font-family: var(--font-serif);
   font-size: var(--body-size);

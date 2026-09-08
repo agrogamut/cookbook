@@ -46,6 +46,10 @@ func (f fakeDrafter) DraftFoodGroupPriorities(ctx context.Context, req aidraft.F
 	return f.foodGroupFn(ctx, req)
 }
 
+func (f fakeDrafter) TranslateTexts(context.Context, aidraft.TranslateRequest) (aidraft.TranslatedTexts, error) {
+	return aidraft.TranslatedTexts{}, aidraft.ErrDraftingUnavailable
+}
+
 // TestInventedRecipeTopUpFillsACategoryWithNoRealCandidates pins the case the fallback exists
 // for: a meal category real recipes have nothing at all for is still filled, entirely by
 // AI-invented recipes drawn from the child's own safe-ingredient allow-list.

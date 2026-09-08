@@ -79,11 +79,32 @@ func (h *Handlers) renderSetWithPhotos(w http.ResponseWriter, r *http.Request, s
 		return bookSetResponse{}, book.Set{}, false
 	}
 
+	// Both books share one Metadata.Language (bookLanguage derives it from the same
+	// s.LanguageID for both), so this either translates both or neither -- a set that showed
+	// one book in Bengali and the other in English would read as broken, not bilingual.
+	book1HTML, book2HTML := buf1.Bytes(), buf2.Bytes()
+	if set.Book1.Metadata.Language == "bn" {
+		translated, err := book.TranslateHTML(ctx, book1HTML, h.drafter, "bn")
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "book1 translation failed: "+err.Error())
+			return bookSetResponse{}, book.Set{}, false
+		}
+		book1HTML = translated
+	}
+	if set.Book2.Metadata.Language == "bn" {
+		translated, err := book.TranslateHTML(ctx, book2HTML, h.drafter, "bn")
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "book2 translation failed: "+err.Error())
+			return bookSetResponse{}, book.Set{}, false
+		}
+		book2HTML = translated
+	}
+
 	return bookSetResponse{
 		ChildID:          set.ChildID,
 		AsOf:             set.AsOf,
-		Book1:            buf1.String(),
-		Book2:            buf2.String(),
+		Book1:            string(book1HTML),
+		Book2:            string(book2HTML),
 		ProfileOmissions: set.ProfileOmissions,
 		Book1Omissions:   set.Book1Omissions,
 		Book2Omissions:   set.Book2Omissions,

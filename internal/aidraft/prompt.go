@@ -235,3 +235,53 @@ func buildInventedRecipePrompt(req InventedRecipeRequest) string {
 	fmt.Fprintf(&b, "\nAllowed dish formats: %s\n", strings.Join(req.DishFormatArchetypes, ", "))
 	return b.String()
 }
+
+// translateResponse is the JSON shape the model is constrained to for a translation batch: one
+// string per input fragment, same order.
+type translateResponse struct {
+	Texts []string `json:"texts"`
+}
+
+// translateSchema constrains the response to a single array of strings. It cannot, by itself,
+// force the array to be the same length as the request -- that is checked by the caller
+// (internal/book's TranslateHTML), the same "schema narrows, the caller still verifies" split
+// every other Drafter method in this package already uses.
+func translateSchema() *genai.Schema {
+	return &genai.Schema{
+		Type:     genai.TypeObject,
+		Required: []string{"texts"},
+		Properties: map[string]*genai.Schema{
+			"texts": {
+				Type:  genai.TypeArray,
+				Items: &genai.Schema{Type: genai.TypeString},
+			},
+		},
+	}
+}
+
+// buildTranslatePrompt numbers every fragment so the model can be told, explicitly, that the
+// count and order of its output must match the input exactly -- the failure mode this batch
+// call is most exposed to (a merged or dropped fragment) is invisible to the schema itself,
+// since an array of strings is valid JSON at any length.
+func buildTranslatePrompt(req TranslateRequest) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Translate each of the following %d numbered text fragments from a printed "+
+		"children's health and recipe book into natural, warm, parent-readable %s. These "+
+		"fragments were pulled from a real, already-finished page -- you are restating the same "+
+		"words in another language, not writing new content.\n\n"+
+		"Rules:\n"+
+		"- Return exactly %d strings, in the same order, one output per input fragment. Never "+
+		"merge two fragments into one output and never split one fragment into two.\n"+
+		"- Leave numbers, units (kg, cm, ml, mg, g), dates, and any identifier that looks like "+
+		"a code (e.g. MG-R-00042, ING0001) exactly as written -- translate only the surrounding "+
+		"words.\n"+
+		"- If a fragment is already just a number, a code, or punctuation with no words in it, "+
+		"return it completely unchanged.\n"+
+		"- Keep each translation close in length to its original -- this text prints inside a "+
+		"fixed-size box on a page, and a much longer sentence will overflow it.\n\n",
+		len(req.Texts), req.TargetLanguage, len(req.Texts))
+	for i, t := range req.Texts {
+		fmt.Fprintf(&b, "%d: %s\n", i+1, t)
+	}
+	return b.String()
+}

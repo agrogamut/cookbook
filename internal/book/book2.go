@@ -340,7 +340,7 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 			Title:          "My Child's Personalized Recipe Book",
 			BookVersion:    "V1",
 			GenerationDate: asOf,
-			Language:       "en",
+			Language:       bookLanguage(s.LanguageID),
 			Logo:           logoDataURI,
 		},
 		Child: ChildSummary{
