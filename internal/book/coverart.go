@@ -6,14 +6,22 @@ import (
 	"html/template"
 )
 
-// The twelve supplied decorative illustrations, background-removed (see the plan's Task 2
-// step 1 -- border-connected flood fill, not a global threshold, so interior white details
-// like eyes and apron straps survive). These are decoration only: they carry no dish-format
-// claim, unlike the SVG marks in marks.go, and they never appear on a recipe page for exactly
-// that reason -- see the design spec's section 2.3. They appear only on the pages named
-// there: both covers, Book 1's back cover, and Book 2's chapter openers -- every one a
+// Eleven of the twelve supplied decorative illustrations, background-removed (see the plan's
+// Task 2 step 1 -- border-connected flood fill, not a global threshold, so interior white
+// details like eyes and apron straps survive). These are decoration only: they carry no
+// dish-format claim, unlike the SVG marks in marks.go, and they never appear on a recipe page
+// for exactly that reason -- see the design spec's section 2.3. They appear only on the pages
+// named there: both covers, Book 1's back cover, and Book 2's chapter openers -- every one a
 // guaranteed single, non-fragmenting print page, so their placement is a paint concern only
 // and never interacts with pagefit_test.go's break-rule budgets.
+//
+// The twelfth, "banana-leaf-rice", was dropped entirely (2026-09-08): unlike every other
+// asset here it is drawn as a tall, off-centre wedge rather than a roughly round, top-down
+// dish, and at every size and rotation this project actually used it at -- the 50mm Book 2
+// chapter-art slot, the full-opacity 62mm Book 1 cover corner -- it read as an unrecognisable
+// sideways blob rather than a dish. The asset file (assets/cover/banana-leaf-rice.png) is
+// deleted along with its map entry, not just unreferenced, so nothing can reintroduce it by
+// copying an old call site.
 //
 //go:embed assets/cover/*.png
 var coverArtFS embed.FS
@@ -25,7 +33,6 @@ var coverArtFiles = map[string]string{
 	"tteokbokki":       "tteokbokki.png",
 	"bibimbap":         "bibimbap.png",
 	"coconut":          "coconut.png",
-	"banana-leaf-rice": "banana-leaf-rice.png",
 	"herb-sauce":       "herb-sauce.png",
 	"wrapped-dumpling": "wrapped-dumpling.png",
 	"egg-noodle-bowl":  "egg-noodle-bowl.png",

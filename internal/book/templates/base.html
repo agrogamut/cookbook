@@ -10,10 +10,13 @@
 
 {{ if eq .BookClass "book2" }}
 {{/* Book 2 only: scattered food illustrations, not the brand mark -- see tokens.css's
-     .food-scatter note. Book 1 keeps the single centered brand watermark below. */}}
+     .food-scatter note. Book 1 keeps the single centered brand watermark below.
+     fs-c was "banana-leaf-rice" -- dropped project-wide, see coverart.go's comment;
+     "tteokbokki" is a round bowl like its three siblings here, so it crops and rotates
+     the same way they already do. */}}
 <img class="food-scatter fs-a" src="{{ coverArt "dimsum" }}" alt="">
 <img class="food-scatter fs-b" src="{{ coverArt "noodle-roll" }}" alt="">
-<img class="food-scatter fs-c" src="{{ coverArt "banana-leaf-rice" }}" alt="">
+<img class="food-scatter fs-c" src="{{ coverArt "tteokbokki" }}" alt="">
 <img class="food-scatter fs-d" src="{{ coverArt "coconut" }}" alt="">
 {{ else }}
 <img class="watermark" src="{{ .Watermark }}" alt="">

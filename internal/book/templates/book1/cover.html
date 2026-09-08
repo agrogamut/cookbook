@@ -40,7 +40,13 @@
   <div class="cover-bg-illustrated">
     <img class="corner-art corner-tl" src="{{ coverArt "dimsum" }}" alt="">
     <img class="corner-art corner-tr" src="{{ coverArt "coconut" }}" alt="">
-    <img class="corner-art corner-bl" src="{{ coverArt "banana-leaf-rice" }}" alt="">
+    {{/* Was "banana-leaf-rice" -- dropped project-wide, see coverart.go's comment. Full
+         opacity and 62mm made its tall off-centre wedge shape read as an unrecognisable
+         cropped blob here worse than anywhere else it was used. "tteokbokki" is a round
+         bowl like this corner's three siblings, so it crops and rotates the same way they
+         already do; it's Book 2's food-scatter now too, the same cross-book reuse "dimsum"
+         and "coconut" already have on this page. */}}
+    <img class="corner-art corner-bl" src="{{ coverArt "tteokbokki" }}" alt="">
     <img class="corner-art corner-br" src="{{ coverArt "wrapped-dumpling" }}" alt="">
   </div>
   {{ end }}

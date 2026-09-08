@@ -12,7 +12,7 @@ import (
 func TestCoverArtHasRealTransparencyForEveryKey(t *testing.T) {
 	wantKeys := []string{
 		"mooncake", "dimsum", "noodle-roll", "tteokbokki", "bibimbap", "coconut",
-		"banana-leaf-rice", "herb-sauce", "wrapped-dumpling", "egg-noodle-bowl",
+		"herb-sauce", "wrapped-dumpling", "egg-noodle-bowl",
 		"hotpot", "kids-cooking",
 	}
 	for _, key := range wantKeys {
