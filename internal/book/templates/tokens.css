@@ -120,6 +120,24 @@ html[lang="bn"] {
 html[lang="bn"] .label {
   letter-spacing: normal;
 }
+/* Bengali underfill was investigated and NOT fixed here, on purpose -- recorded so the next
+   attempt does not repeat the same experiment. A real printed comparison (arnab-biswas-book1.pdf
+   vs its Bengali translation, same child, same content) showed Bengali running shorter per
+   block, which cascades: every later page break lands somewhere different than in English, and
+   the shift is not uniformly bad -- Recipe Link Index, for instance, loses the page-9 partner it
+   shares with the Food Groups table's tail in English, because that table now finishes a page
+   earlier, leaving Recipe Link Index alone on an underfilled sheet.
+   Tried tightening `section + section`'s 10mm inter-block gap to 6mm for lang="bn" only, as the
+   one shared lever for "how much fits per sheet." Measured against a real regenerated book: zero
+   effect on the set of underfilled pages (identical 12 of 43, same page count, before and after
+   a 40% change) -- these breaks are not landing at loose intra-part gaps a few mm can shift, they
+   are landing where a whole block genuinely does not fit in the remaining space by much more than
+   that. It also silently re-broke .backcover-page's own fix further down this file (a more
+   specific selector re-enabled a stray-blank-page bug that rule exists to cancel) before being
+   caught by the same real-print check -- evidence that a blanket margin lever here carries real
+   regression risk for no measured benefit, not just extra code. Reverted rather than kept
+   "just in case": a lever this project's own printed-page checks show does nothing is not worth
+   the specificity risk it reintroduces elsewhere in this file. */
 
 body {
   font-family: var(--font-serif);
