@@ -24,7 +24,13 @@
      comment for why. */}}
 <section class="page-break">
   <div class="chapter">
-    <img class="chapter-art" src="{{ if eq .MealCategoryID "MC-01" }}{{ coverArt "egg-noodle-bowl" }}{{ else if eq .MealCategoryID "MC-03" }}{{ coverArt "banana-leaf-rice" }}{{ else if eq .MealCategoryID "MC-06" }}{{ coverArt "hotpot" }}{{ else }}{{ coverArt "egg-noodle-bowl" }}{{ end }}" alt="">
+    {{/* MC-03 (Lunch) used "banana-leaf-rice" originally -- the one supplied illustration
+         drawn as a tall sliced wedge rather than the wide bowl shape the other two chapters
+         use. At the 50mm chapter-art width every other illustration on this page is scaled
+         to, that wedge printed on its side, reading as a layout mistake rather than a dish.
+         "noodle-roll" is a round bowl like "egg-noodle-bowl" and "hotpot", so all three
+         chapter openers now share the same horizontal silhouette. */}}
+    <img class="chapter-art" src="{{ if eq .MealCategoryID "MC-01" }}{{ coverArt "egg-noodle-bowl" }}{{ else if eq .MealCategoryID "MC-03" }}{{ coverArt "noodle-roll" }}{{ else if eq .MealCategoryID "MC-06" }}{{ coverArt "hotpot" }}{{ else }}{{ coverArt "egg-noodle-bowl" }}{{ end }}" alt="">
     <p class="chapter-num">{{ printf "%02d" .Number }}</p>
     <h2>{{ .Title }}</h2>
     {{/* Not "from a provider target of N" any more: meal_category_target.default_target_
