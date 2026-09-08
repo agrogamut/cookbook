@@ -39,14 +39,21 @@ type GrowthRow = {
   weight_kg: string;
   height_cm: string;
   head_circumference_cm: string;
+  // The three z-scores book1.go's growth trend table reads by name ("weight-for-age",
+  // "height-for-age", "BMI-for-age" -- see growthZScores in book1.go). Only weight_for_age_z
+  // used to be collected here; the other two were accepted by GenerateInput.growth and
+  // stored/printed by profile.GrowthMeasurement, but this form had nowhere to enter them.
   weight_for_age_z: string;
+  height_for_age_z: string;
+  bmi_for_age_z: string;
   interpretation: string;
   measured_by: string;
 };
 
 const emptyGrowth: GrowthRow = {
   measured_on: "", weight_kg: "", height_cm: "", head_circumference_cm: "",
-  weight_for_age_z: "", interpretation: "", measured_by: "",
+  weight_for_age_z: "", height_for_age_z: "", bmi_for_age_z: "",
+  interpretation: "", measured_by: "",
 };
 
 /** num turns a form field into a number the API will accept, or undefined.
@@ -355,6 +362,8 @@ export function ChildInputForm({
         height_cm: num(g.height_cm),
         head_circumference_cm: num(g.head_circumference_cm),
         weight_for_age_z: num(g.weight_for_age_z),
+        height_for_age_z: num(g.height_for_age_z),
+        bmi_for_age_z: num(g.bmi_for_age_z),
         interpretation: g.interpretation || undefined,
         measured_by: g.measured_by || undefined,
       }));
@@ -640,6 +649,10 @@ export function ChildInputForm({
                          onChange={(e) => growthCell(i, "head_circumference_cm")(e.target.value)} />
                   <Input className="font-mono" value={g.weight_for_age_z} placeholder="wt-for-age z"
                          onChange={(e) => growthCell(i, "weight_for_age_z")(e.target.value)} />
+                  <Input className="font-mono" value={g.height_for_age_z} placeholder="ht-for-age z"
+                         onChange={(e) => growthCell(i, "height_for_age_z")(e.target.value)} />
+                  <Input className="font-mono" value={g.bmi_for_age_z} placeholder="BMI-for-age z"
+                         onChange={(e) => growthCell(i, "bmi_for_age_z")(e.target.value)} />
                   <Input value={g.measured_by} placeholder="measured by"
                          onChange={(e) => growthCell(i, "measured_by")(e.target.value)} />
                   <div className="flex gap-1 sm:col-span-2">
