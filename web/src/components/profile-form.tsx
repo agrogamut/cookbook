@@ -12,12 +12,13 @@ import {
 } from "@/components/ui/accordion";
 import { SectionTrigger, summarise } from "@/components/section-trigger";
 import { SuspectedAllergenFieldset } from "./suspected-allergen-fieldset";
+import { ClinicalFlagsFieldset } from "./clinical-flags-fieldset";
 import {
   getAllergens, getClinicalMarkers, getEnums, getRegions, getCuisines, getProfileEngineInput,
   getSpecialCareConditions,
 } from "@/lib/api";
 import type {
-  Allergen, ChildProfile, ClinicalMarker, ClinicalMarkerValue, Cuisine, Region, ReferenceEnums,
+  Allergen, ChildProfile, ClinicalMarker, Cuisine, Region, ReferenceEnums,
   SpecialCareCondition,
 } from "@/lib/types";
 
@@ -44,61 +45,6 @@ const CLINICAL_MARKERS = [
 ];
 
 const NONE = "__none__"; // Radix Select forbids an empty-string item value
-
-// A clinical flag must never be sendable as a value that cannot fire the rule it is named
-// after. markerControl is a whitelist that mirrors the engine's own triggerFires switch
-// (internal/engine/clinical.go) rather than inverting it: only the two operators that switch
-// actually implements a live case for produce a control here. Everything else -- contains,
-// less_than, incompatible_with, and any operator the provider invents later -- renders
-// inert, because nothing on this console could make it fire.
-//
-// Within a supported operator, only VALUES the engine's own query loads are offered. That is
-// now nearly all of them: clinicalFilter loads every domain but Age/Feeding and Data Quality.
-//
-// trigger_operator is singular and pure per marker (asserted by
-// TestReferenceClinicalMarkersCoversEveryTriggerField), so this is a function of the
-// marker as a whole, not a per-value branch -- except that the value LIST offered is
-// filtered to loadable entries.
-type MarkerControl =
-  | { kind: "toggle"; value: ClinicalMarkerValue; mixedCount: number }
-  | { kind: "select"; values: ClinicalMarkerValue[]; mixedCount: number }
-  | { kind: "inert"; note: string };
-
-function markerControl(m: ClinicalMarker): MarkerControl {
-  const op = m.trigger_operator;
-  if (op !== "equals" && op !== "in_list") {
-    const note = op === "contains"
-      ? "matches a substring rather than an exact value, so this console has no control " +
-        "shape for it. A confirmed allergen belongs in Declared allergens above, not here."
-      : `trigger_operator "${op}" has no case in the engine's own switch -- nothing here could fire it, so no control is offered.`;
-    return { kind: "inert", note };
-  }
-  // Offerable is now simply "the engine loads this rule", and that is a much wider set than
-  // it was: 27 of 28 trigger fields rather than 13.
-  //
-  // This used to also require `escalates`, on the reasoning that a loaded rule which fired
-  // had exactly two outcomes -- hold generation for specialist review, or trip the engine's
-  // unclassified-rule error -- and never a third "filters something" outcome, so a
-  // non-escalating value was a false affordance. Both of those outcomes were deleted by the
-  // 2026-09-05 gate removal. A loaded rule that fires is now recorded in the engine's step
-  // list with the provider's own escalation_reason and specialist_required text, and it
-  // feeds nutrition-target selection and the drafted modification notes. That is a real
-  // effect, so every loadable value is a real control.
-  const offerable = m.values.filter((v) => v.loadable);
-  const mixedCount = m.values.length - offerable.length;
-  if (offerable.length === 0) {
-    return {
-      kind: "inert",
-      note: "the engine loads no rule for this marker -- it sits in Age/Feeding, which " +
-        "recipe_master's own age bounds already enforce, or in Data Quality, which " +
-        "describes the dataset rather than the child.",
-    };
-  }
-  if (offerable.length === 1) {
-    return { kind: "toggle", value: offerable[0], mixedCount };
-  }
-  return { kind: "select", values: offerable, mixedCount };
-}
 
 export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
   const [ageMonths, setAgeMonths] = useState<number | "">("");
@@ -211,15 +157,6 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
       if (!(field in prev)) return prev;
       const next = { ...prev };
       delete next[field];
-      return next;
-    });
-  }
-
-  function toggleFlag(field: string, value: string) {
-    setClinicalFlags((prev) => {
-      const next = { ...prev };
-      if (next[field] === value) delete next[field];
-      else next[field] = value;
       return next;
     });
   }
@@ -436,101 +373,21 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
                 )}
               </div>
 
-              <fieldset className="space-y-1.5">
-                <legend className={label}>Clinical flags</legend>
-                <div className="flex flex-col gap-1.5">
-                  {markerOptions.map((m) => {
-                    const control = markerControl(m);
-                    // No "holds" badge any more. It said this value would stop generation for
-                    // specialist review, which nothing does after the 2026-09-05 gate removal --
-                    // a badge for a state the system cannot reach is worse than no badge. What a
-                    // set flag does now is in the title: the rules it fires and their engine
-                    // actions, which is what the operator can actually act on.
-                    const title = `${m.rule_ids} - ${m.engine_actions}`;
-
-                    if (control.kind === "inert") {
-                      return (
-                        <div key={m.trigger_field} className="flex items-center gap-2 opacity-50" title={title}>
-                          <Badge variant="outline" className="border-dashed">{m.trigger_field}</Badge>
-                          <span className="text-xs text-muted-foreground">{control.note}</span>
-                        </div>
-                      );
-                    }
-
-                    if (control.kind === "toggle") {
-                      const on = clinicalFlags[m.trigger_field] === control.value.value;
-                      return (
-                        <div key={m.trigger_field} className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => toggleFlag(m.trigger_field, control.value.value)}
-                            title={title}
-                            aria-pressed={on}
-                            aria-label={m.trigger_field}
-                            className="focus-visible:ring-ring w-fit rounded focus-visible:outline-none focus-visible:ring-2"
-                          >
-                            <Badge variant={on ? "default" : "outline"}>{m.trigger_field}</Badge>
-                          </button>
-                          {control.mixedCount > 0 && (
-                            <span className="text-xs text-muted-foreground">
-                              +{control.mixedCount} recorded value(s) not offered: the engine loads no rule for them
-                            </span>
-                          )}
-                        </div>
-                      );
-                    }
-
-                    // select: several offerable values. Every loadable value is listed. The only
-                    // ones left off are those the engine's rule query never loads at all -- the
-                    // Age/Feeding and Data Quality domains -- and those are surfaced as the
-                    // "+N recorded, not offered" note rather than silently dropped.
-                    const current = clinicalFlags[m.trigger_field] ?? NONE;
-
-                    return (
-                      <div key={m.trigger_field} className="flex items-center gap-2" title={title}>
-                        <Badge variant={current !== NONE ? "default" : "outline"}>
-                          {m.trigger_field}
-                        </Badge>
-                        <Select
-                          value={current}
-                          onValueChange={(v) => (v === NONE ? clearFlag(m.trigger_field) : setFlag(m.trigger_field, v))}
-                        >
-                          <SelectTrigger className="h-7 w-44 text-xs" aria-label={m.trigger_field}>
-                            <SelectValue placeholder="not set" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value={NONE}>not set</SelectItem>
-                            {control.values.map((v) => (
-                              <SelectItem key={v.value} value={v.value}>
-                                {v.value}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {control.mixedCount > 0 && (
-                          <span className="text-xs text-muted-foreground">
-                            +{control.mixedCount} recorded value(s) not offered: the engine loads no rule for them
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Two states appear here. A live control (toggle badge or dropdown) sends a value
-                  the engine&apos;s rule query actually loads: the rule is recorded in the step list with
-                  the provider&apos;s own reason and specialist text, and it feeds nutrition-target
-                  selection and the drafted per-recipe modification notes. Setting one no longer
-                  stops generation -- nothing does. A dashed, unclickable marker has nothing this
-                  console can usefully send: either its operator has no case in the engine&apos;s switch
-                  (the one substring-matching allergy flag, which belongs in Declared allergens
-                  instead), or its rules sit in Age/Feeding or Data Quality, the two domains
-                  clinicalFilter excludes because recipe_master&apos;s age bounds already enforce the
-                  first and the second describes the dataset rather than the child. A dropdown may
-                  still show a &quot;+N recorded, not offered&quot; note: the value is left off the list
-                  rather than hidden entirely, because the provider did record it.
-                </p>
-              </fieldset>
+              <ClinicalFlagsFieldset
+                markers={markerOptions}
+                flags={clinicalFlags}
+                onSet={setFlag}
+                onClear={clearFlag}
+              />
+              <p className="text-xs text-muted-foreground">
+                Setting a clinical flag no longer stops generation -- nothing does. A dashed,
+                unclickable marker has nothing this console can usefully send: either its
+                operator has no case in the engine&apos;s switch (the one substring-matching
+                allergy flag, which belongs in Declared allergens instead), or its rules sit in
+                Age/Feeding or Data Quality, the two domains clinicalFilter excludes because
+                recipe_master&apos;s age bounds already enforce the first and the second describes
+                the dataset rather than the child.
+              </p>
             </AccordionContent>
           </AccordionItem>
 

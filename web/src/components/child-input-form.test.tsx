@@ -5,7 +5,7 @@ import { ChildInputForm } from "./child-input-form";
 import { matchProfiles, getProfile } from "@/lib/api";
 import type { MatchCandidate, StoredProfile } from "@/lib/types";
 
-// ChildInputForm loads five reference vocabularies on mount, same as ProfileForm; mocking
+// ChildInputForm loads six reference vocabularies on mount, same as ProfileForm; mocking
 // the whole api module keeps the test off the network. matchProfiles and getProfile are the
 // two calls this test actually drives, so they're left as bare vi.fn()s configured per test.
 vi.mock("@/lib/api", () => ({
@@ -14,6 +14,7 @@ vi.mock("@/lib/api", () => ({
   getAllergens: vi.fn(() => Promise.resolve([])),
   getEnums: vi.fn(() => Promise.resolve({})),
   getSpecialCareConditions: vi.fn(() => Promise.resolve([])),
+  getClinicalMarkers: vi.fn(() => Promise.resolve([])),
   matchProfiles: vi.fn(),
   getProfile: vi.fn(),
 }));

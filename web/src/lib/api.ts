@@ -238,7 +238,11 @@ export interface GenerateInput {
   region_culture?: string;
   cuisine_code?: string;
   diet_type?: string;
+  vegan?: boolean;
+  religious_restriction?: string;
   budget_band?: string;
+  max_prep_time_min?: number;
+  max_cook_time_min?: number;
   allergens: { group: string; status: string; source: string }[];
   conditions?: { trigger_field: string; flag_value: string; class?: string }[];
   growth?: {

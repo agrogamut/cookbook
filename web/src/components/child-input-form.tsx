@@ -3,11 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import {
   GenerateInput, getRegions, getCuisines, getAllergens, getEnums,
-  getSpecialCareConditions, matchProfiles, getProfile,
+  getSpecialCareConditions, getClinicalMarkers, matchProfiles, getProfile,
 } from "@/lib/api";
 import type {
-  Region, Cuisine, Allergen, ReferenceEnums, SpecialCareCondition, MatchCandidate,
+  Region, Cuisine, Allergen, ReferenceEnums, SpecialCareCondition, ClinicalMarker,
+  MatchCandidate,
 } from "@/lib/types";
+import { ClinicalFlagsFieldset } from "@/components/clinical-flags-fieldset";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -132,10 +134,21 @@ export function ChildInputForm({
   const [region, setRegion] = useState("");
   const [cuisine, setCuisine] = useState("");
   const [diet, setDiet] = useState("");
+  const [vegan, setVegan] = useState(false);
+  const [religiousRestriction, setReligiousRestriction] = useState("");
   const [budget, setBudget] = useState("");
+  const [maxPrep, setMaxPrep] = useState("");
+  const [maxCook, setMaxCook] = useState("");
   const [confirmed, setConfirmed] = useState<string[]>([]);
   const [suspected, setSuspected] = useState<string[]>([]);
   const [specialCare, setSpecialCare] = useState("");
+  // clinical_rule_master flags, the same picker and wire shape ProfileForm sends -- one
+  // trigger_field per set value. A separate control from Special-care condition above: that
+  // one is the six STOP-REVIEW archetypes, this is the other 27 clinical_rule_master domains
+  // (anemia/iron risk, growth faltering, and so on) that feed nutrition-target selection and
+  // the drafted per-recipe modification notes. Previously the only way to set one of these
+  // through a generated book was to hand-build the request outside this form.
+  const [clinicalFlags, setClinicalFlags] = useState<Record<string, string>>({});
   const [growth, setGrowth] = useState<GrowthRow[]>([]);
   const [photo, setPhoto] = useState<Photo>(null);
   const [caption, setCaption] = useState("");
@@ -158,6 +171,7 @@ export function ChildInputForm({
   const [allergens, setAllergens] = useState<Allergen[]>([]);
   const [enums, setEnums] = useState<ReferenceEnums>({});
   const [conditions, setConditions] = useState<SpecialCareCondition[]>([]);
+  const [markerOptions, setMarkerOptions] = useState<ClinicalMarker[]>([]);
 
   // Every option list comes from the database rather than being written here, so a re-import
   // that changes the corpus changes the form with it. A hardcoded list would keep offering a
@@ -168,6 +182,7 @@ export function ChildInputForm({
     getAllergens().then(setAllergens).catch(() => {});
     getEnums().then(setEnums).catch(() => {});
     getSpecialCareConditions().then(setConditions).catch(() => {});
+    getClinicalMarkers().then(setMarkerOptions).catch(() => {});
   }, []);
 
   // Debounced: fires 500ms after the operator stops typing, so a check doesn't fire on
@@ -224,7 +239,11 @@ export function ChildInputForm({
     setRegion(p.region_culture ?? "");
     setCuisine(p.cuisine_code ?? "");
     setDiet(p.diet_type ?? "");
+    setVegan(Boolean(p.vegan));
+    setReligiousRestriction(p.religious_restriction ?? "");
     setBudget(p.budget_band ?? "");
+    setMaxPrep(p.max_prep_time_min ? String(p.max_prep_time_min) : "");
+    setMaxCook(p.max_cook_time_min ? String(p.max_cook_time_min) : "");
     setCaseId(p.case_id ?? "");
     setMotherName(p.mother_name ?? "");
     setConfirmed(p.allergens.filter((a) => a.status === "confirmed").map((a) => a.group));
@@ -234,6 +253,7 @@ export function ChildInputForm({
     // has no clinical/growth fields on a stored profile to correctly refill these from (see
     // profileDTO), so the honest fix is to clear them, not to guess.
     setSpecialCare("");
+    setClinicalFlags({});
     setGrowth([]);
     setLoadMatchError("");
     setMatches([]);
@@ -242,6 +262,22 @@ export function ChildInputForm({
 
   function toggle(list: string[], set: (v: string[]) => void, value: string) {
     set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
+  }
+
+  // clinical_flags is Record<field, value> -- one value per field, matching what the engine's
+  // triggerFires actually compares. Mirrors ProfileForm's own setFlag/clearFlag exactly, so
+  // the same marker behaves identically from either screen.
+  function setFlag(field: string, value: string) {
+    setClinicalFlags((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function clearFlag(field: string) {
+    setClinicalFlags((prev) => {
+      if (!(field in prev)) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
   }
 
   // Shared by all three photo fields (front cover, back cover, prescription): same allowlist,
@@ -277,7 +313,11 @@ export function ChildInputForm({
       region_culture: region || undefined,
       cuisine_code: cuisine || undefined,
       diet_type: diet || undefined,
+      vegan: vegan || undefined,
+      religious_restriction: religiousRestriction || undefined,
       budget_band: budget || undefined,
+      max_prep_time_min: num(maxPrep),
+      max_cook_time_min: num(maxCook),
       allergens: [
         // source is parent_reported because that is what a consultation form is. It is one of
         // exactly two values the database accepts; the other, clinician_documented, is a
@@ -292,11 +332,21 @@ export function ChildInputForm({
       prescription_photo_data_uri: prescriptionPhoto?.dataUri,
       prescription_photo_caption: prescriptionCaption || undefined,
     };
-    if (specialCare) {
-      input.conditions = [{
-        trigger_field: "Special_Care_Condition", flag_value: specialCare, class: "chronic",
-      }];
-    }
+    // Special-care condition and clinical flags are two different pickers over two different
+    // provider tables (special_care_condition_gate's six STOP-REVIEW archetypes vs
+    // clinical_rule_master's other 27 domains) but the same wire shape -- both land in
+    // profile.Stored's one Conditions list, so a book generated from this form can now carry
+    // both, or several clinical flags at once, rather than the single hardcoded slot this form
+    // used to be limited to.
+    const conditionRows = [
+      ...(specialCare
+        ? [{ trigger_field: "Special_Care_Condition", flag_value: specialCare, class: "chronic" }]
+        : []),
+      ...Object.entries(clinicalFlags).map(([trigger_field, flag_value]) => (
+        { trigger_field, flag_value, class: "chronic" }
+      )),
+    ];
+    if (conditionRows.length > 0) input.conditions = conditionRows;
     const rows = growth
       .filter((g) => g.measured_on.trim() !== "")
       .map((g) => ({
@@ -313,11 +363,13 @@ export function ChildInputForm({
   }
 
   const childFilled = countFilled(caseId, name, dob, sex, language, motherName);
-  const practiceFilled = countFilled(region, cuisine, diet, budget);
+  const practiceFilled = countFilled(region, cuisine, diet, budget, religiousRestriction, maxPrep, maxCook)
+    + (vegan ? 1 : 0);
   const allergySummary = summarise(
     confirmed.length > 0 && `${confirmed.length} confirmed`,
     suspected.length > 0 && `${suspected.length} suspected`,
   );
+  const clinicalCount = (specialCare ? 1 : 0) + Object.keys(clinicalFlags).length;
   const growthVisits = growth.filter((g) => g.measured_on.trim() !== "").length;
   const photoCount = [photo, parentsPhoto, prescriptionPhoto].filter(Boolean).length;
 
@@ -406,7 +458,7 @@ export function ChildInputForm({
 
           <AccordionItem value="practice">
             <SectionTrigger label="Food practice and place"
-                            summary={practiceFilled > 0 ? `${practiceFilled} of 4` : undefined} />
+                            summary={practiceFilled > 0 ? `${practiceFilled} of 7` : undefined} />
             <AccordionContent className="grid gap-3 sm:grid-cols-2">
               <div className={field}>
                 <Label htmlFor="g-region">Region</Label>
@@ -452,6 +504,39 @@ export function ChildInputForm({
                   </SelectContent>
                 </Select>
               </div>
+              <div className={field}>
+                <Label htmlFor="g-religious">Religious/cultural restriction</Label>
+                <Input id="g-religious" value={religiousRestriction}
+                       onChange={(e) => setReligiousRestriction(e.target.value)}
+                       placeholder="e.g. Halal, Jain, no beef" />
+              </div>
+              <div className={field}>
+                <Label htmlFor="g-prep">Max prep (min)</Label>
+                <Select value={maxPrep} onValueChange={setMaxPrep}>
+                  <SelectTrigger id="g-prep" className="w-full"><SelectValue placeholder="Any" /></SelectTrigger>
+                  <SelectContent>
+                    {(enums.prep_time_min ?? []).map((v) => (
+                      <SelectItem key={v.value} value={v.value}>{v.value}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className={field}>
+                <Label htmlFor="g-cook">Max cook (min)</Label>
+                <Select value={maxCook} onValueChange={setMaxCook}>
+                  <SelectTrigger id="g-cook" className="w-full"><SelectValue placeholder="Any" /></SelectTrigger>
+                  <SelectContent>
+                    {(enums.cook_time_min ?? []).map((v) => (
+                      <SelectItem key={v.value} value={v.value}>{v.value}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <label className="flex items-start gap-2 text-xs sm:col-span-2">
+                <input type="checkbox" checked={vegan} onChange={(e) => setVegan(e.target.checked)}
+                       className="mt-0.5" />
+                <span>Vegan &mdash; additional to diet type; excludes dairy, fish and animal-protein food groups</span>
+              </label>
             </AccordionContent>
           </AccordionItem>
 
@@ -493,8 +578,9 @@ export function ChildInputForm({
           </AccordionItem>
 
           <AccordionItem value="clinical">
-            <SectionTrigger label="Clinical" summary={specialCare ? "1 declared" : undefined} />
-            <AccordionContent>
+            <SectionTrigger label="Clinical"
+                            summary={clinicalCount > 0 ? `${clinicalCount} set` : undefined} />
+            <AccordionContent className="space-y-3">
               <div className={field}>
                 <Label htmlFor="g-sc">Special-care condition</Label>
                 <Select value={specialCare} onValueChange={setSpecialCare}>
@@ -507,7 +593,27 @@ export function ChildInputForm({
                     ))}
                   </SelectContent>
                 </Select>
+                {/* The reviewer the provider names for this condition, printed verbatim.
+                    Nothing here withholds a result waiting for that reviewer -- it records the
+                    provider's own action, reviewer and stop text in the step list, and the
+                    child is ranked like any other. */}
+                {specialCare && (
+                  <p className="text-xs text-muted-foreground">
+                    Provider&apos;s named reviewer:{" "}
+                    {conditions.find((c) => c.condition_id === specialCare)?.mandatory_reviewer}
+                  </p>
+                )}
               </div>
+              {/* The other 27 clinical_rule_master domains (anemia/iron risk, growth
+                  faltering, and so on) -- distinct from Special-care condition above, which is
+                  only the six STOP-REVIEW archetypes. Both feed the same profile.Stored
+                  Conditions list a generated book reads. */}
+              <ClinicalFlagsFieldset
+                markers={markerOptions}
+                flags={clinicalFlags}
+                onSet={setFlag}
+                onClear={clearFlag}
+              />
             </AccordionContent>
           </AccordionItem>
 
