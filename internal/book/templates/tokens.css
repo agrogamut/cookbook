@@ -1154,6 +1154,13 @@ td .write-line, th .write-line { min-width: 0; width: 100%; }
    measured against a real book, page 7 opened on "Warning: choking safety at this age"
    with nothing else on it. */
 .stage-target > .callout { break-before: avoid; }
+/* The target facet's own definition table never got the break-inside guard .growth-table
+   and .data-quality already carry, despite being the same shape: at most nine label/value
+   rows, no thead to repeat. A real book split it after three rows -- Feeding phase, Milk /
+   breastfeeding, Complementary food landed on one sheet, the remaining six rows and all
+   three callouts on the next, with the first sheet ending well short of full. Nine rows of
+   this table's height is nowhere near a page, so nothing is stranded by keeping it whole. */
+.stage-target table { break-inside: avoid; }
 
 /* A tracker's head moves whole; its grid does not.
 

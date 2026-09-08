@@ -90,7 +90,18 @@ const underfillThreshold = 0.62
 // room. Reclaiming the two pages means re-flowing the daily-life domain layout, which is
 // tuned against trackerRowsByFrequency and the .tracker row height and is out of scope for a
 // gate removal.
-const maxUnderfilledPages = 13
+//
+// 14  B1-STAGE-01's "target" facet (stage.html) never got the break-inside guard
+//     .growth-table/.data-quality already carry, despite being the identical shape -- at
+//     most nine label/value rows, no thead. A real printed book split it after three rows,
+//     landing Feeding phase/Milk-breastfeeding/Complementary food on one sheet and the
+//     remaining six rows plus all three warning callouts on the next, both halves reading as
+//     a torn form rather than a page. tokens.css's .stage-target table now takes the same
+//     break-inside: avoid every other table this size already has. It moves book1 p6 from
+//     70% to 59% fill -- the same trade the .domain-guidance/.illness/.stage-target callout
+//     fixes above already made, raising the budget rather than leaving a known bad page
+//     break in place to protect a number.
+const maxUnderfilledPages = 14
 
 // maxPagesOpeningOnAnOrphan is the same kind of budget for the other half of the problem: a
 // sheet whose first line is a warning belonging to the previous page's topic, or a bare column
