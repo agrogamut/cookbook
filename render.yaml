@@ -89,6 +89,33 @@ services:
       - key: GEMINI_API_KEY
         sync: false
 
+      # The public origin of the console, with no trailing path. Two things read it and both
+      # break quietly if it is wrong rather than loudly: the CORS allow-list is now this one
+      # origin instead of "*", and config.Load derives SecureCookies from the scheme, so an
+      # http value would ship a staff session cookie without the Secure flag over a public
+      # HTTPS site. It has to match the console service's own URL below.
+      - key: APP_ORIGIN
+        value: https://madamgy-console.onrender.com
+
+      # Staff identity. Supabase Auth holds the password; this service stores none. Both are
+      # set together or neither -- config.Load rejects one without the other -- and with
+      # neither set, staff sign-in is unavailable rather than open. Same Supabase project as
+      # DATABASE_URL above. sync: false: the secret key is never committed here.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+
+      # Optional consultation payment. Key id and secret are set together or neither; the
+      # webhook secret verifies Razorpay's own callback signature. Unset, checkout is simply
+      # not offered and registration still works.
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+
   # ---------------------------------------------------------------------------------------
   # The operator console.
   # ---------------------------------------------------------------------------------------
@@ -113,4 +140,12 @@ services:
       #
       # It therefore has to match the api service's name above. Change one and change both.
       - key: NEXT_PUBLIC_API_URL
+        value: https://madamgy-api.onrender.com
+
+      # The console proxies /api to the Go service through a Next rewrite, so the browser only
+      # ever talks to this origin. That is what makes the HttpOnly session cookie work at all:
+      # it is SameSite=Lax and host-only, and a cross-origin call straight from the browser to
+      # madamgy-api would not carry it. next.config.ts reads this at build and at start, and
+      # falls back to NEXT_PUBLIC_API_URL above when it is unset.
+      - key: API_PROXY_URL
         value: https://madamgy-api.onrender.com
