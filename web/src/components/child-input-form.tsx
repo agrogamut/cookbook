@@ -119,17 +119,20 @@ function PhotoRow({
 }
 
 export function ChildInputForm({
-  busy, onGenerate,
+  busy, onGenerate, initialChild,
 }: {
   busy: boolean;
   onGenerate: (input: GenerateInput) => void;
+  initialChild?: { display_name: string; date_of_birth: string };
 }) {
-  const [name, setName] = useState("");
-  const [dob, setDob] = useState("");
+  const [name, setName] = useState(initialChild?.display_name ?? "");
+  const [dob, setDob] = useState(initialChild?.date_of_birth ?? "");
   const [caseId, setCaseId] = useState("");
   const [motherName, setMotherName] = useState("");
   const [matches, setMatches] = useState<MatchCandidate[]>([]);
-  const [dismissedMatch, setDismissedMatch] = useState(false);
+  const [matchedIdentity, setMatchedIdentity] = useState("");
+  const [dismissedIdentity, setDismissedIdentity] = useState("");
+  const identityKey = JSON.stringify([caseId, name, dob, motherName]);
   const [loadMatchError, setLoadMatchError] = useState("");
   // Set just before loadMatch rewrites caseId/name/dob/motherName -- the debounce effect's
   // own dependency array -- so that self-triggered effect run can be told apart from the
@@ -207,11 +210,10 @@ export function ChildInputForm({
       justLoadedRef.current = false;
       return;
     }
-    setDismissedMatch(false);
     if (!caseId && !(name && dob && motherName)) {
-      setMatches([]);
       return;
     }
+    let active = true;
     const handle = setTimeout(() => {
       matchProfiles({
         case_id: caseId || undefined,
@@ -220,15 +222,17 @@ export function ChildInputForm({
         date_of_birth: dob || undefined,
       })
         .then((found) => {
+          if (!active) return;
           setMatches(found);
+          setMatchedIdentity(identityKey);
           setLoadMatchError("");
         })
-        .catch(() => setMatches([])); // A failed check is not itself an error worth surfacing --
+        .catch(() => { if (active) { setMatches([]); setMatchedIdentity(identityKey); } }); // A failed check is not itself an error worth surfacing --
         // it only means the suggestion banner does not appear, and generation proceeds exactly
         // as it does when there genuinely is no match.
     }, 500);
-    return () => clearTimeout(handle);
-  }, [caseId, name, dob, motherName]);
+    return () => { active = false; clearTimeout(handle); };
+  }, [caseId, name, dob, motherName, identityKey]);
 
   async function loadMatch(childID: string) {
     let p;
@@ -264,7 +268,7 @@ export function ChildInputForm({
     setGrowth([]);
     setLoadMatchError("");
     setMatches([]);
-    setDismissedMatch(true);
+    setDismissedIdentity(identityKey);
   }
 
   function toggle(list: string[], set: (v: string[]) => void, value: string) {
@@ -392,7 +396,7 @@ export function ChildInputForm({
     // uploads to reach the button that does the work.
     <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-2">
-        {matches.length > 0 && !dismissedMatch && (
+        {matches.length > 0 && matchedIdentity === identityKey && dismissedIdentity !== identityKey && (
           <Alert>
             <AlertTitle>
               {matches.length === 1 ? "This may already be a saved child" : `${matches.length} possible matches found`}
@@ -408,7 +412,7 @@ export function ChildInputForm({
                   </Button>
                 </div>
               ))}
-              <Button type="button" size="sm" variant="ghost" onClick={() => setDismissedMatch(true)}>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setDismissedIdentity(identityKey)}>
                 This is a different child
               </Button>
               {loadMatchError && <p className="text-xs text-destructive">{loadMatchError}</p>}

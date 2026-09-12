@@ -4,6 +4,7 @@ import type {
   Allergen, ClinicalMarker, ReferenceEnums, StoredProfile, EngineInputResult, SpecialCareCondition,
   MatchCandidate,
 } from "./types";
+import type { StaffAccount, Registration, RegistrationList, ConsultationSettings, PublicSettings, CheckoutOrder, CheckoutConfirmation, IntakeInput, PaymentStatus } from "./portal-types";
 
 /** Resolve the API base URL, tolerating an address given without a scheme.
  *
@@ -22,7 +23,7 @@ export function resolveBaseUrl(raw: string): string {
   return `https://${trimmed}`;
 }
 
-const BASE_URL = resolveBaseUrl(process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080");
+const BASE_URL = "";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -31,8 +32,8 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await apiFetch(`${BASE_URL}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
@@ -42,6 +43,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   return res.json() as Promise<T>;
 }
+
+export const signIn = (email: string, password: string) => request<StaffAccount>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+export const signOut = () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST", body: "{}" });
+export const changePassword = (current_password: string, password: string) => request<{ ok: boolean }>("/api/auth/password", { method: "POST", body: JSON.stringify({ current_password, password }) });
+export const getPublicSettings = () => request<PublicSettings>("/api/public/settings");
+export const registerConsultation = (input: IntakeInput) => request<{ id: string }>("/api/public/registrations", { method: "POST", body: JSON.stringify(input) });
+export const getRegistrationStatus = (id: string, token: string) => request<{ id: string; payment_status: PaymentStatus }>(`/api/public/registrations/${encodeURIComponent(id)}`, { headers: { "X-Registration-Token": token } });
+export const createCheckoutOrder = (id: string, token: string) => request<CheckoutOrder>(`/api/public/registrations/${encodeURIComponent(id)}/order`, { method: "POST", headers: { "X-Registration-Token": token }, body: "{}" });
+export const verifyCheckout = (id: string, token: string, result: CheckoutConfirmation) => request<{ id: string; payment_status: PaymentStatus }>(`/api/public/registrations/${encodeURIComponent(id)}/verify`, { method: "POST", headers: { "X-Registration-Token": token }, body: JSON.stringify(result) });
+export const listRegistrations = (query: URLSearchParams) => request<RegistrationList>(`/api/registrations?${query}`);
+export const getRegistration = (id: string) => request<Registration>(`/api/registrations/${encodeURIComponent(id)}`);
+export const updateRegistration = (id: string, values: Partial<Pick<Registration, "guardian_name" | "child_name" | "date_of_birth" | "phone" | "email" | "status" | "notes">> & { assigned_doctor_id?: string | null }) => request<Registration>(`/api/registrations/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(values) });
+export const listStaff = () => request<StaffAccount[]>("/api/admin/staff");
+export const createDoctor = (name: string, email: string, password: string) => request<StaffAccount>("/api/admin/staff", { method: "POST", body: JSON.stringify({ name, email, password }) });
+export const updateDoctor = (id: string, name: string, active: boolean) => request<{ ok: boolean }>(`/api/admin/staff/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ name, active }) });
+export const resetDoctorPassword = (id: string, password: string) => request<{ ok: boolean }>(`/api/admin/staff/${encodeURIComponent(id)}/password`, { method: "POST", body: JSON.stringify({ password }) });
+export const getConsultationSettings = () => request<ConsultationSettings>("/api/admin/settings");
+export const saveConsultationSettings = (amount_paise: number | null, payments_enabled: boolean) => request<ConsultationSettings>("/api/admin/settings", { method: "PUT", body: JSON.stringify({ amount_paise, payments_enabled }) });
 
 export function search(profile: ChildProfile): Promise<EngineResult> {
   return request<EngineResult>("/api/search", { method: "POST", body: JSON.stringify(profile) });
@@ -181,13 +200,13 @@ function omissionsOf(res: Response): string[] {
 }
 
 export async function getBookPreview(childID: string, book: "book1" | "book2"): Promise<BookPreview> {
-  const res = await fetch(`${BASE_URL}/api/books/${encodeURIComponent(childID)}/${book}/preview`);
+  const res = await apiFetch(`${BASE_URL}/api/books/${encodeURIComponent(childID)}/${book}/preview`);
   if (!res.ok) throw await bookError(res);
   return { html: await res.text(), omissions: omissionsOf(res) };
 }
 
 export async function getBookPdf(childID: string, book: "book1" | "book2"): Promise<Blob> {
-  const res = await fetch(`${BASE_URL}/api/books/${encodeURIComponent(childID)}/${book}.pdf`);
+  const res = await apiFetch(`${BASE_URL}/api/books/${encodeURIComponent(childID)}/${book}.pdf`);
   if (!res.ok) throw await bookError(res);
   return res.blob();
 }
@@ -208,7 +227,7 @@ export interface BookSet {
 }
 
 export async function getBookSet(childID: string): Promise<BookSet> {
-  const res = await fetch(`${BASE_URL}/api/books/${encodeURIComponent(childID)}/preview`);
+  const res = await apiFetch(`${BASE_URL}/api/books/${encodeURIComponent(childID)}/preview`);
   if (!res.ok) throw await bookError(res);
   const body = await res.json();
   return {
@@ -261,7 +280,7 @@ export interface GenerateInput {
 
 /** One generation run from inline inputs. Returns both books. */
 export async function generateBooks(input: GenerateInput): Promise<BookSet> {
-  const res = await fetch(`${BASE_URL}/api/books/generate`, {
+  const res = await apiFetch(`${BASE_URL}/api/books/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -281,7 +300,7 @@ export async function generateBooks(input: GenerateInput): Promise<BookSet> {
 
 /** The same run, printed: both books as PDFs in one zip. */
 export async function generateBooksZip(input: GenerateInput): Promise<Blob> {
-  const res = await fetch(`${BASE_URL}/api/books/generate.zip`, {
+  const res = await apiFetch(`${BASE_URL}/api/books/generate.zip`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -294,7 +313,7 @@ export async function generateBooksZip(input: GenerateInput): Promise<Blob> {
 export async function generateBookPdf(
   input: GenerateInput, book: "book1" | "book2",
 ): Promise<Blob> {
-  const res = await fetch(`${BASE_URL}/api/books/generate/${book}.pdf`, {
+  const res = await apiFetch(`${BASE_URL}/api/books/generate/${book}.pdf`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -306,7 +325,13 @@ export async function generateBookPdf(
 /** Both books as printed PDFs, in one zip. Two books, two files -- not one merged PDF, which
  *  would renumber Book 2's pages behind Book 1's. */
 export async function getBookSetZip(childID: string): Promise<Blob> {
-  const res = await fetch(`${BASE_URL}/api/books/${encodeURIComponent(childID)}/books.zip`);
+  const res = await apiFetch(`${BASE_URL}/api/books/${encodeURIComponent(childID)}/books.zip`);
   if (!res.ok) throw await bookError(res);
   return res.blob();
+}
+
+async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const headers = new Headers(init?.headers);
+  headers.set("X-Madamgy-Request", "1");
+  return fetch(input, { ...init, headers, credentials: "include", cache: "no-store" });
 }

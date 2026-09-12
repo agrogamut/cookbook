@@ -1,4 +1,4 @@
-import { getNutritionAudit } from "@/lib/api";
+import { getNutritionAudit } from "@/lib/server-api";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ProvenanceChip } from "@/components/provenance-chip";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/madamgy/recipie/internal/portal"
 	"github.com/madamgy/recipie/internal/profile"
 )
 
@@ -270,6 +271,9 @@ func (h *Handlers) PutProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d.ChildID = childID
+	if actor := portal.Current(r.Context()); actor.ID != "" {
+		d.CreatedBy = actor.ID
+	}
 
 	s, err := fromDTO(d)
 	if err != nil {
@@ -390,6 +394,16 @@ func (h *Handlers) MatchProfiles(w http.ResponseWriter, r *http.Request) {
 	// show zero.
 	out := make([]matchCandidateDTO, 0, len(matches))
 	for _, m := range matches {
+		if portal.Current(r.Context()).ID != "" {
+			allowed, err := portal.CanAccessProfile(r.Context(), h.pool, m.ChildID)
+			if err != nil {
+				writeError(w, 500, "Could not check child access.")
+				return
+			}
+			if !allowed {
+				continue
+			}
+		}
 		out = append(out, matchCandidateDTO{
 			ChildID: m.ChildID, CaseID: m.CaseID, DisplayName: m.DisplayName,
 			DateOfBirth: m.DateOfBirth.UTC().Format(dateLayout),

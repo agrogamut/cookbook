@@ -1,4 +1,4 @@
-import { getRuns } from "@/lib/api";
+import { getRuns } from "@/lib/server-api";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";

@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getRecipe, ApiError } from "@/lib/api";
+import { getRecipe, ApiError } from "@/lib/server-api";
 import { ProvenanceChip } from "@/components/provenance-chip";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";

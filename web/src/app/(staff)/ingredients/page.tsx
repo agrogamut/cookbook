@@ -1,4 +1,4 @@
-import { listIngredients } from "@/lib/api";
+import { listIngredients } from "@/lib/server-api";
 import { ProvenanceChip } from "@/components/provenance-chip";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { PageHeader } from "@/components/page-header";

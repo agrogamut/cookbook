@@ -12,11 +12,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/madamgy/recipie/internal/aidraft"
 	"github.com/madamgy/recipie/internal/api/handlers"
+	"github.com/madamgy/recipie/internal/portal"
 )
 
-// NewRouter builds the full route table. Middleware order: recover, logger, CORS -- auth
-// is deliberately absent; see docs/superpowers/plans/2026-08-16-backend-engine-api.md,
-// "Architecture", for why.
+// Staff routes require a revocable session. Intake, settings and signed payment
+// notifications have their own public access rules.
 // printTimeout bounds a PDF request. Generous because it covers the slowest real case --
 // two books printed in one request on a small instance -- and because the alternative to
 // waiting is an operator retrying a request that was going to succeed. Raised from 180s after
@@ -49,14 +49,19 @@ import (
 // rather than a gateway's.
 const printTimeout = 1200 * time.Second
 
-func NewRouter(pool *pgxpool.Pool, drafter aidraft.Drafter) http.Handler {
+func NewRouter(pool *pgxpool.Pool, drafter aidraft.Drafter, access ...*portal.Server) http.Handler {
+	security := portal.New(pool, portal.Options{})
+	if len(access) > 0 && access[0] != nil {
+		security = access[0]
+	}
 	r := chi.NewRouter()
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Logger)
+	r.Use(portal.RequestLogger)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins: []string{"*"}, // internal tool, no browser cookie auth to protect; tighten if this ever leaves a private network
-		AllowedMethods: []string{"GET", "POST", "PUT", "OPTIONS"},
-		AllowedHeaders: []string{"Content-Type"},
+		AllowedOrigins:   []string{security.Origin()},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "OPTIONS"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-Madamgy-Request", "X-Registration-Token"},
+		AllowCredentials: true,
 		// A browser hides every non-simple response header unless it is named here. The
 		// omissions list is what a book does not contain, so a frontend that cannot read
 		// it would render a book as though nothing had been left out.
@@ -64,6 +69,11 @@ func NewRouter(pool *pgxpool.Pool, drafter aidraft.Drafter) http.Handler {
 		MaxAge:         300,
 	}))
 	h := handlers.New(pool, drafter)
+	r.Get("/healthz", h.Healthz)
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.Timeout(30 * time.Second))
+		security.Routes(r)
+	})
 
 	// Two sibling groups, not nested: a chi middleware.Timeout wraps the request context in
 	// context.WithTimeout, and two of those nested inside one another compose as the
@@ -80,14 +90,15 @@ func NewRouter(pool *pgxpool.Pool, drafter aidraft.Drafter) http.Handler {
 	r.Group(func(r chi.Router) {
 		// 30s suits every JSON endpoint here.
 		r.Use(middleware.Timeout(30 * time.Second))
+		r.Use(security.BrowserWrite)
+		r.Use(security.RequireStaff)
 
-		r.Get("/healthz", h.Healthz)
 		r.Post("/api/search", h.Search)
 		r.Get("/api/recipes/{recipeID}", h.RecipeDetail)
 		r.Get("/api/ingredients", h.Ingredients)
-		r.Get("/api/audit/nutrition", h.NutritionAudit)
-		r.Get("/api/gaps", h.Gaps)
-		r.Get("/api/runs", h.Runs)
+		r.With(portal.AdminOnly).Get("/api/audit/nutrition", h.NutritionAudit)
+		r.With(portal.AdminOnly).Get("/api/gaps", h.Gaps)
+		r.With(portal.AdminOnly).Get("/api/runs", h.Runs)
 		r.Get("/api/reference/regions", h.ReferenceRegions)
 		r.Get("/api/reference/cuisines", h.ReferenceCuisines)
 		r.Get("/api/reference/nutrition-targets", h.ReferenceNutritionTargets)
@@ -96,17 +107,17 @@ func NewRouter(pool *pgxpool.Pool, drafter aidraft.Drafter) http.Handler {
 		r.Get("/api/reference/enums", h.ReferenceEnums)
 		r.Get("/api/reference/book1-blocks", h.ReferenceBook1Blocks)
 		r.Get("/api/reference/special-care-conditions", h.ReferenceSpecialCareConditions)
-		r.Put("/api/profiles/{childID}", h.PutProfile)
-		r.Get("/api/profiles/{childID}", h.GetProfile)
-		r.Get("/api/profiles/{childID}/engine-input", h.GetProfileEngineInput)
+		r.With(security.RequireProfile).Put("/api/profiles/{childID}", h.PutProfile)
+		r.With(security.RequireProfile).Get("/api/profiles/{childID}", h.GetProfile)
+		r.With(security.RequireProfile).Get("/api/profiles/{childID}/engine-input", h.GetProfileEngineInput)
 		r.Get("/api/profile-matches", h.MatchProfiles)
 		// The set is the primary surface: one run, both books, one profile read. The
 		// per-book routes below remain for fetching one book directly.
 		// Generation from inline inputs: no child id, nothing persisted. This is what the
 		// console calls. The {childID} routes below serve a profile already in the database.
 		r.Post("/api/books/generate", h.BookGenerate)
-		r.Get("/api/books/{childID}/preview", h.BookSetPreview)
-		r.Get("/api/books/{childID}/{book}/preview", h.BookPreview)
+		r.With(security.RequireProfile).Get("/api/books/{childID}/preview", h.BookSetPreview)
+		r.With(security.RequireProfile).Get("/api/books/{childID}/{book}/preview", h.BookPreview)
 	})
 
 	// Printing gets its own timeout. Launching a browser and laying out a 22-page book is
@@ -119,10 +130,12 @@ func NewRouter(pool *pgxpool.Pool, drafter aidraft.Drafter) http.Handler {
 	// fails in 30s instead of holding a connection for three minutes.
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Timeout(printTimeout))
+		r.Use(security.BrowserWrite)
+		r.Use(security.RequireStaff)
 		r.Post("/api/books/generate.zip", h.BookGenerateZip)
 		r.Post("/api/books/generate/{book}.pdf", h.BookGenerateOne)
-		r.Get("/api/books/{childID}/books.zip", h.BookSetDownload)
-		r.Get("/api/books/{childID}/{book}.pdf", h.BookDownload)
+		r.With(security.RequireProfile).Get("/api/books/{childID}/books.zip", h.BookSetDownload)
+		r.With(security.RequireProfile).Get("/api/books/{childID}/{book}.pdf", h.BookDownload)
 	})
 
 	return r

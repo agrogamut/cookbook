@@ -23,7 +23,7 @@ type Which = "book1" | "book2";
 
 const NO_PDFS: Record<Which, string | null> = { book1: null, book2: null };
 
-export function BookGenerator() {
+export function BookGenerator({ initialChild }: { initialChild?: { display_name: string; date_of_birth: string } } = {}) {
   // The inputs that produced the books on screen. Held so a download re-sends exactly what
   // was generated: re-reading the form would let an edit made after Generate slip into a PDF
   // that does not match the preview beside it.
@@ -210,7 +210,7 @@ export function BookGenerator() {
     <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
       <ResizablePanel defaultSize="38%" minSize="26%" maxSize="60%">
         <div className="h-full pr-4">
-          <ChildInputForm busy={busy} onGenerate={generate} />
+          <ChildInputForm busy={busy} onGenerate={generate} initialChild={initialChild} />
         </div>
       </ResizablePanel>
       <ResizableHandle withHandle />

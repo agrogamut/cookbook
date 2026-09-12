@@ -12,6 +12,7 @@ import (
 	"github.com/madamgy/recipie/internal/book"
 	"github.com/madamgy/recipie/internal/config"
 	"github.com/madamgy/recipie/internal/db"
+	"github.com/madamgy/recipie/internal/portal"
 )
 
 func main() {
@@ -52,8 +53,12 @@ func main() {
 	defer book.ShutdownBrowser()
 
 	srv := &http.Server{
-		Addr:              ":" + strconv.Itoa(cfg.Port),
-		Handler:           api.NewRouter(pool, drafter),
+		Addr: ":" + strconv.Itoa(cfg.Port),
+		Handler: api.NewRouter(pool, drafter, portal.New(pool, portal.Options{
+			Identity: portal.NewSupabase(cfg.SupabaseURL, cfg.SupabaseSecretKey),
+			Gateway:  portal.NewRazorpay(cfg.RazorpayKeyID, cfg.RazorpayKeySecret, cfg.RazorpayWebhookSecret),
+			Origin:   cfg.AppOrigin, SecureCookies: cfg.SecureCookies,
+		})),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 

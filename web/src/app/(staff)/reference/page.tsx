@@ -1,4 +1,4 @@
-import { getRegions, getCuisines, getNutritionTargets, getBook1Blocks } from "@/lib/api";
+import { getRegions, getCuisines, getNutritionTargets, getBook1Blocks } from "@/lib/server-api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ProvenanceChip } from "@/components/provenance-chip";

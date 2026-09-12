@@ -1,13 +1,18 @@
 # MadamGY Recipe Engine
 
-A constraint-driven pediatric recipe finder. A parent or clinician enters a child profile
+A constraint-driven pediatric recipe finder. A staff member enters a child profile
 - age, diet pattern, allergies, clinical condition, region, budget - and the engine
 returns the recipes that are safe and appropriate for that child.
 
 Regional scope is **India and Bangladesh**, weighted toward West Bengal and Bengali
 cuisine.
 
-Internal tool. Staff use it to serve families; families never use it directly.
+Families can request a doctor consultation from the public homepage without creating an
+account. Staff use protected workspaces for registration management, assigned children and
+book generation. The recipe engine lives at `/console`.
+
+See [consultation portal setup](docs/consultation-portal.md) for Supabase staff access,
+the first administrator account, optional Razorpay payment and environment configuration.
 
 ## Status
 
@@ -73,6 +78,11 @@ go run ./cmd/server        # listens on :8080 by default, set PORT to override
 | `/api/profiles/{childID}` | PUT | Create or replace one child's stored profile |
 | `/api/profiles/{childID}` | GET | The stored profile verbatim |
 | `/api/profiles/{childID}/engine-input` | GET | What the engine receives today, plus every stored fact the conversion dropped |
+
+These engine endpoints require staff sign-in. Stored child profiles are restricted to an
+assigned doctor or an administrator; audits, gaps and import history require an administrator.
+Public intake and payment endpoints, plus the staff management routes, are described in the
+[consultation portal guide](docs/consultation-portal.md).
 
 Useful views once loaded:
 

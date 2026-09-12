@@ -3,16 +3,17 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"embed"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
 	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	_ "github.com/jackc/pgx/v5/stdlib" // registers the "pgx" database/sql driver
+	"github.com/jackc/pgx/v5/stdlib"
 )
 
 //go:embed migrations/*.sql
@@ -25,7 +26,12 @@ func Connect(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("db: %w", err)
 	}
 
-	pool, err := pgxpool.New(ctx, databaseURL)
+	poolConfig, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("db: parse pool config: %w", err)
+	}
+	poolConfig.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		return nil, fmt.Errorf("db: open pool: %w", err)
 	}
@@ -44,10 +50,11 @@ func Migrate(databaseURL string) error {
 	}
 	defer src.Close()
 
-	sqlDB, err := sql.Open("pgx", databaseURL)
+	config, err := migrationConfig(databaseURL)
 	if err != nil {
-		return fmt.Errorf("open sql handle: %w", err)
+		return fmt.Errorf("parse migration connection: %w", err)
 	}
+	sqlDB := stdlib.OpenDB(*config)
 	defer sqlDB.Close()
 
 	driver, err := migratepgx.WithInstance(sqlDB, &migratepgx.Config{})
@@ -63,4 +70,21 @@ func Migrate(databaseURL string) error {
 		return fmt.Errorf("migrate up: %w", err)
 	}
 	return nil
+}
+
+func migrationConfig(databaseURL string) (*pgx.ConnConfig, error) {
+	config, err := pgx.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, err
+	}
+	config.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+	// Migration locks last for a session. The hosted pooler's session port uses
+	// the same host and credentials; normal application queries still use 6543.
+	if strings.HasSuffix(config.Host, ".pooler.supabase.com") && config.Port == 6543 {
+		config.Port = 5432
+		for _, fallback := range config.Fallbacks {
+			fallback.Port = 5432
+		}
+	}
+	return config, nil
 }

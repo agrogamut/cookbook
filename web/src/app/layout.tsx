@@ -1,10 +1,13 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
-import { SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AppSidebar } from "@/components/app-sidebar";
-import { CommandPalette } from "@/components/command-palette";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: { default: "MadamGY | Care that starts with your child", template: "%s | MadamGY" },
+  description: "Start a pediatric consultation with MadamGY. Share your child's details and connect with a doctor for guidance on food, growth and everyday care.",
+};
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
@@ -15,11 +18,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="antialiased">
         <ThemeProvider>
           <TooltipProvider>
-            <SidebarProvider>
-              <AppSidebar />
-              <main className="h-svh flex-1 overflow-y-auto p-6">{children}</main>
-              <CommandPalette />
-            </SidebarProvider>
+            {children}
           </TooltipProvider>
         </ThemeProvider>
       </body>

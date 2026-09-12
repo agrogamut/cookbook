@@ -38,6 +38,12 @@ const storedProfile: StoredProfile = {
 };
 
 describe("ChildInputForm", () => {
+  it("prefills a registered child without inventing the mother's identity", async () => {
+    render(<ChildInputForm busy={false} onGenerate={() => {}} initialChild={{ display_name: "Test Child", date_of_birth: "2023-02-28" }} />);
+    await waitFor(() => expect(screen.getByLabelText("Name")).toHaveValue("Test Child"));
+    expect(screen.getByLabelText(/date of birth/i)).toHaveValue("2023-02-28");
+    expect(screen.getByLabelText(/mother's name/i)).toHaveValue("");
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(matchProfiles).mockResolvedValue([candidate]);
