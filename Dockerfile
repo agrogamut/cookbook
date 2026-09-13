@@ -19,7 +19,8 @@ COPY internal/ ./internal/
 # CGO off so the binaries do not need the toolchain's shared libraries at runtime.
 ENV CGO_ENABLED=0
 RUN go build -o /out/server ./cmd/server && \
-    go build -o /out/import ./cmd/import
+    go build -o /out/import ./cmd/import && \
+    go build -o /out/staff-admin ./cmd/staff-admin
 
 FROM debian:bookworm-slim
 WORKDIR /app
@@ -34,7 +35,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /out/server /out/import /usr/local/bin/
+# staff-admin creates the first administrator. It ships in the image because there is no
+# other way to run it against a deployed database: staff accounts are provisioned, never
+# self-registered, so without this binary a fresh deployment has nobody who can sign in and
+# no route to creating them. It is a one-off job's start command, never the entrypoint.
+COPY --from=build /out/server /out/import /out/staff-admin /usr/local/bin/
 
 # The provider's 14 workbooks are the source of truth and are committed to the repository, so
 # the importer reads them from the image rather than needing a volume or a download.
