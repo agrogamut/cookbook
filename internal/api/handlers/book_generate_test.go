@@ -18,6 +18,7 @@ func generateRouter(t *testing.T) *chi.Mux {
 	r := chi.NewRouter()
 	r.Post("/api/books/generate", h.BookGenerate)
 	r.Post("/api/books/generate.zip", h.BookGenerateZip)
+	r.Post("/api/books/generate.printed", h.BookGeneratePrinted)
 	return r
 }
 
@@ -262,6 +263,36 @@ func TestGenerateZipIsNamedFromTheChildsName(t *testing.T) {
 	for _, f := range zr.File {
 		if !strings.HasPrefix(f.Name, "inline-child-") {
 			t.Fatalf("entry %q should be named from the child", f.Name)
+		}
+	}
+}
+
+// The console's one request: both books' HTML and a print result for each, from one run. A
+// missing browser is not a failed request -- the HTML still previews -- so the response is a
+// 200 either way, and each book says whether it printed.
+func TestGeneratePrintedReturnsHTMLAndAPrintResultForEachBook(t *testing.T) {
+	rec := postGenerate(t, generateRouter(t), "/api/books/generate.printed", generateBody)
+	if rec.Code != 200 {
+		t.Fatalf("got %d: %s", rec.Code, rec.Body.String())
+	}
+	var got printedSetResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.Book1 == "" || got.Book2 == "" {
+		t.Fatal("both books' HTML must be present")
+	}
+	for which, p := range map[string]printedBook{"book1": got.Book1PDF, "book2": got.Book2PDF} {
+		if (p.PDF == nil) == (p.Error == nil) {
+			t.Fatalf("%s: exactly one of pdf and error must be set, got pdf=%d bytes error=%v",
+				which, len(p.PDF), p.Error)
+		}
+		if bookBrowserOnPath() {
+			if !bytes.HasPrefix(p.PDF, []byte("%PDF")) {
+				t.Fatalf("%s: browser on PATH, want a printed PDF, got error %v", which, p.Error)
+			}
+		} else if p.Error == nil || p.Error.Kind != "unavailable" {
+			t.Fatalf("%s: no browser, want kind unavailable, got %+v", which, p.Error)
 		}
 	}
 }

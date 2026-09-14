@@ -302,3 +302,69 @@ func (h *Handlers) BookGenerateZip(w http.ResponseWriter, r *http.Request) {
 	// slugged. Falls back to "books" rather than producing a file called "-books.zip".
 	h.writeBookZip(w, r, slugOrDefault(s.DisplayName, "books"), resp, set)
 }
+
+// printedBook is one book's print result inside a generate.printed response. Exactly one of
+// PDF and Error is set. Go's JSON encoder writes a []byte as base64, which is what the
+// console decodes.
+type printedBook struct {
+	PDF   []byte      `json:"pdf,omitempty"`
+	Error *printError `json:"error,omitempty"`
+}
+
+// printError keeps the split the single-book route makes with its status codes, now that
+// both prints share one 200: "unavailable" is a missing browser, an install problem the HTML
+// preview stands in for; "print-failed" is a browser that was there and failed, which may be
+// about the document and must reach the operator as an error.
+type printError struct {
+	Kind    string `json:"kind"`
+	Message string `json:"message"`
+}
+
+type printedSetResponse struct {
+	bookSetResponse
+	Book1PDF printedBook `json:"book1_print"`
+	Book2PDF printedBook `json:"book2_print"`
+}
+
+// BookGeneratePrinted runs one generation and returns both books' HTML and both printed PDFs.
+//
+// The console's action. It used to call /generate and then generate/book1.pdf and
+// generate/book2.pdf, and each of those three requests assembled the whole set again -- every
+// Gemini drafting and translation call, three times per click, for one book set. Against a
+// per-day request quota on the drafting model that tripled what a click cost. One request,
+// one assembly, two prints of the same bytes also means the PDF on screen and the HTML beside
+// it can no longer come from two different drafting runs.
+//
+// A print failure does not fail the response. The set assembled, and its HTML genuinely
+// works as a preview, so each book's print result is reported next to it and the caller
+// decides; that is the same per-book independence the console had when the prints were two
+// settled requests. Assembly failure is still a 500, since then there is nothing to show.
+func (h *Handlers) BookGeneratePrinted(w http.ResponseWriter, r *http.Request) {
+	s, photo, parentsPhoto, prescriptionPhoto, ok := h.decodeGenerate(w, r)
+	if !ok {
+		return
+	}
+	resp, set, ok := h.renderSetWithPhotos(w, r, s, photo, parentsPhoto, prescriptionPhoto)
+	if !ok {
+		return
+	}
+
+	out := printedSetResponse{bookSetResponse: resp}
+	out.Book1PDF = printOne(r, "book1", resp.Book1, set.Book1.Metadata)
+	out.Book2PDF = printOne(r, "book2", resp.Book2, set.Book2.Metadata)
+	writeJSON(w, http.StatusOK, out)
+}
+
+func printOne(r *http.Request, which, htmlDoc string, meta book.Metadata) printedBook {
+	pdf, err := book.PrintPDF(r.Context(), []byte(htmlDoc), meta)
+	switch {
+	case err == nil:
+		return printedBook{PDF: pdf}
+	case errors.Is(err, book.ErrChromiumUnavailable):
+		return printedBook{Error: &printError{Kind: "unavailable",
+			Message: "pdf renderer unavailable: " + err.Error()}}
+	default:
+		return printedBook{Error: &printError{Kind: "print-failed",
+			Message: "pdf render failed for " + which + ": " + err.Error()}}
+	}
+}

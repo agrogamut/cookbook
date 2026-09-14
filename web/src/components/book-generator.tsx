@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
-  generateBooks, generateBooksZip, generateBookPdf, BookSet, GenerateInput,
+  generateBooksPrinted, BookSet, GenerateInput,
   RendererUnavailableError, PrintFailedError,
 } from "@/lib/api";
+import { buildZip } from "@/lib/zip";
 import { ChildInputForm } from "@/components/child-input-form";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -35,13 +36,15 @@ export function BookGenerator({ initialChild }: { initialChild?: { display_name:
   const [problem, setProblem] = useState<Problem | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // The printed PDF for each book of the current run, as object URLs. Populated after
-  // generateBooks resolves, by printing both books in parallel -- printing is a single
-  // warm-Chromium render now that the browser is shared across requests, so paying for it on
-  // every generation (rather than only when an operator clicks "open") is what lets the console
-  // show the real document instead of an approximation of it. A null entry means this book's
-  // PDF is not on screen, either because printing has not finished or because it failed.
+  // The printed PDF for each book of the current run, as object URLs. They arrive in the same
+  // response as the HTML: one request, one server-side assembly. Printing is a single
+  // warm-Chromium render, so paying for it on every generation (rather than only when an
+  // operator clicks "open") is what lets the console show the real document instead of an
+  // approximation of it. A null entry means this book did not print.
   const [pdfUrls, setPdfUrls] = useState<Record<Which, string | null>>(NO_PDFS);
+  // The same PDFs as blobs, kept so the zip is packaged from bytes already on screen rather
+  // than by asking the server to assemble the whole set again.
+  const pdfBlobs = useRef<Record<Which, Blob | null>>({ book1: null, book2: null });
   // Set when a PDF could not be printed because the server has no browser installed. This is
   // not an error: the HTML preview this component already holds genuinely works, so the
   // operator gets that instead of a dead end, with this note explaining why it is not the real
@@ -92,29 +95,26 @@ export function BookGenerator({ initialChild }: { initialChild?: { display_name:
     // only reopening that same stale link afterwards would fail, and nothing here does that.
     revokeHeldPdfUrls();
     setPdfUrls(NO_PDFS);
+    pdfBlobs.current = { book1: null, book2: null };
     try {
-      const bookSet = await generateBooks(input);
-      setSet(bookSet);
+      const printed = await generateBooksPrinted(input);
+      setSet(printed.set);
       setSubmitted(input);
-
-      const [book1Result, book2Result] = await Promise.allSettled([
-        generateBookPdf(input, "book1"),
-        generateBookPdf(input, "book2"),
-      ]);
 
       const nextUrls: Record<Which, string | null> = { book1: null, book2: null };
       let fallbackMessage: string | null = null;
       let printProblem: Problem | null = null;
+      pdfBlobs.current = { book1: printed.book1.pdf, book2: printed.book2.pdf };
 
       for (const [book, result] of [
-        ["book1", book1Result],
-        ["book2", book2Result],
+        ["book1", printed.book1],
+        ["book2", printed.book2],
       ] as const) {
-        if (result.status === "fulfilled") {
-          nextUrls[book] = URL.createObjectURL(result.value);
+        if (result.pdf) {
+          nextUrls[book] = URL.createObjectURL(result.pdf);
           continue;
         }
-        const classified = classify(result.reason);
+        const classified = classify(result.error);
         if (classified.kind === "unavailable") {
           fallbackMessage = classified.message;
         } else {
@@ -151,7 +151,7 @@ export function BookGenerator({ initialChild }: { initialChild?: { display_name:
   // checking a book before handing it over should not accumulate a file per attempt. The zip
   // still downloads: an archive has nothing to view.
   //
-  // This used to re-print through generateBookPdf and hand the fresh blob to the tab. It no
+  // This used to re-print through a per-book PDF request and hand the fresh blob to the tab. It no
   // longer does: by the time this button is clickable, the component already printed this exact
   // PDF while generating the set, so there is nothing left to do but point a new tab at the
   // object URL already on screen. That also removes the only way the tab and the preview could
@@ -184,17 +184,17 @@ export function BookGenerator({ initialChild }: { initialChild?: { display_name:
     return name || "books";
   }
 
+  // Packaged locally from the two PDFs this run already printed. It used to post the inputs to
+  // generate.zip, which assembled the whole set a fourth time to return the same bytes.
   async function downloadBoth() {
-    if (!submitted) return;
-    setBusy(true);
-    setProblem(null);
-    try {
-      save(await generateBooksZip(submitted), `${fileStem()}-books.zip`);
-    } catch (err) {
-      setProblem(classify(err));
-    } finally {
-      setBusy(false);
-    }
+    const { book1, book2 } = pdfBlobs.current;
+    if (!book1 || !book2) return;
+    const stem = fileStem();
+    const archive = buildZip([
+      { name: `${stem}-book1.pdf`, data: new Uint8Array(await book1.arrayBuffer()) },
+      { name: `${stem}-book2.pdf`, data: new Uint8Array(await book2.arrayBuffer()) },
+    ]);
+    save(new Blob([archive as BlobPart], { type: "application/zip" }), `${stem}-books.zip`);
   }
 
   const html = set === null ? null : shown === "book1" ? set.book1Html : set.book2Html;
@@ -245,7 +245,12 @@ export function BookGenerator({ initialChild }: { initialChild?: { display_name:
           >
             Open Book 2 PDF
           </Button>
-          <Button size="sm" variant="outline" onClick={downloadBoth} disabled={busy}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={downloadBoth}
+            disabled={busy || !pdfUrls.book1 || !pdfUrls.book2}
+          >
             Download .zip
           </Button>
           {/* The run's identity, so an operator comparing two printed books can tell whether

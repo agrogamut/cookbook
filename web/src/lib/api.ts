@@ -298,28 +298,60 @@ export async function generateBooks(input: GenerateInput): Promise<BookSet> {
   };
 }
 
-/** The same run, printed: both books as PDFs in one zip. */
-export async function generateBooksZip(input: GenerateInput): Promise<Blob> {
-  const res = await apiFetch(`${BASE_URL}/api/books/generate.zip`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  if (!res.ok) throw await bookError(res);
-  return res.blob();
+/** One book's print result from generateBooksPrinted. Exactly one of the two is set. */
+export type BookPrint =
+  | { pdf: Blob; error: null }
+  | { pdf: null; error: RendererUnavailableError | PrintFailedError };
+
+export interface PrintedBookSet {
+  set: BookSet;
+  book1: BookPrint;
+  book2: BookPrint;
 }
 
-/** One book of the same generation, printed. Same inputs, same assembly, one print. */
-export async function generateBookPdf(
-  input: GenerateInput, book: "book1" | "book2",
-): Promise<Blob> {
-  const res = await apiFetch(`${BASE_URL}/api/books/generate/${book}.pdf`, {
+function decodePrint(raw: { pdf?: string; error?: { kind: string; message: string } } | undefined): BookPrint {
+  if (raw?.pdf) {
+    const bin = atob(raw.pdf);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return { pdf: new Blob([bytes], { type: "application/pdf" }), error: null };
+  }
+  const message = raw?.error?.message ?? "no pdf returned";
+  return {
+    pdf: null,
+    error: raw?.error?.kind === "unavailable"
+      ? new RendererUnavailableError(message)
+      : new PrintFailedError(message),
+  };
+}
+
+/** One generation run, both books as HTML and as printed PDFs, from one request.
+ *
+ *  This replaced a /generate call followed by two per-book PDF calls. Each of those three
+ *  requests assembled the whole set on the server, so every drafting and translation call ran
+ *  three times per click. A print failure arrives per book inside a 200: the set assembled and
+ *  its HTML still previews, so it is not a failed request. */
+export async function generateBooksPrinted(input: GenerateInput): Promise<PrintedBookSet> {
+  const res = await apiFetch(`${BASE_URL}/api/books/generate.printed`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
   });
   if (!res.ok) throw await bookError(res);
-  return res.blob();
+  const body = await res.json();
+  return {
+    set: {
+      childID: body.child_id,
+      asOf: body.as_of,
+      book1Html: body.book1_html,
+      book2Html: body.book2_html,
+      profileOmissions: body.profile_omissions ?? [],
+      book1Omissions: body.book1_omissions ?? [],
+      book2Omissions: body.book2_omissions ?? [],
+    },
+    book1: decodePrint(body.book1_print),
+    book2: decodePrint(body.book2_print),
+  };
 }
 
 /** Both books as printed PDFs, in one zip. Two books, two files -- not one merged PDF, which

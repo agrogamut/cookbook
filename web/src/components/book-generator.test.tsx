@@ -31,24 +31,18 @@ function jsonResponse(status: number, body: string) {
   };
 }
 
-/** A printed-PDF response. `blob()` is what generateBookPdf actually reads; the mock's body is
- *  otherwise irrelevant content, since no test inspects PDF bytes -- only which URL the
- *  component ends up holding for it. */
-function pdfResponse(status: number, errorBody?: string) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    headers: { get: () => null },
-    text: async () => errorBody ?? "",
-    json: async () => JSON.parse(errorBody ?? "{}"),
-    blob: async () => new Blob(["%PDF-mock"], { type: "application/pdf" }),
-  };
+/** One book's print result as generate.printed sends it: the PDF base64-encoded, or an error
+ *  of kind "unavailable" (no browser) or "print-failed" (a browser was there and failed). */
+function printResult(status: number, errorBody?: string) {
+  if (status >= 200 && status < 300) return { pdf: btoa("%PDF-mock") };
+  const message = errorBody ? JSON.parse(errorBody).error : "print failed";
+  return { error: { kind: status === 503 ? "unavailable" : "print-failed", message } };
 }
 
 /** Routes fetch calls by URL shape: reference-data calls the form loads on mount get an empty
- *  list so the form itself renders; /api/books/generate is the set; the two .../generate/*.pdf
- *  calls are the printed books fetched alongside it. Each leg's status is independently
- *  configurable, because task 13's whole point is that a PDF can fail while the set does not. */
+ *  list so the form itself renders; /api/books/generate.printed is the one generation request,
+ *  carrying both books' HTML and both print results. Each book's print is independently
+ *  configurable, because a PDF can fail while the set does not. */
 function mockFetch(opts: {
   generateStatus?: number;
   generateBody?: string;
@@ -70,13 +64,15 @@ function mockFetch(opts: {
     if (!u.includes("/api/books/")) {
       return Promise.resolve(jsonResponse(200, "[]"));
     }
-    if (u.includes("/generate/book1.pdf")) {
-      return Promise.resolve(pdfResponse(book1Status, book1Body));
+    if (generateStatus !== 200) {
+      return Promise.resolve(jsonResponse(generateStatus, generateBody));
     }
-    if (u.includes("/generate/book2.pdf")) {
-      return Promise.resolve(pdfResponse(book2Status, book2Body));
-    }
-    return Promise.resolve(jsonResponse(generateStatus, generateBody));
+    const body = JSON.stringify({
+      ...JSON.parse(generateBody),
+      book1_print: printResult(book1Status, book1Body),
+      book2_print: printResult(book2Status, book2Body),
+    });
+    return Promise.resolve(jsonResponse(200, body));
   });
 }
 
@@ -121,13 +117,14 @@ describe("BookGenerator", () => {
 
     const bookCalls = () =>
       fetchMock.mock.calls.filter((c) => String(c[0]).includes("/api/books/")).length;
-    // One call for the set plus one print per book: generating never re-runs on a tab switch.
-    expect(bookCalls()).toBe(3);
+    // One request carries the set and both prints, so the server assembles once per click;
+    // generating never re-runs on a tab switch either.
+    expect(bookCalls()).toBe(1);
 
     await userEvent.click(screen.getByRole("tab", { name: /book 2/i }));
     const book2Frame = await screen.findByTitle("Book 2 preview");
     await waitFor(() => expect(book2Frame.getAttribute("src")).toMatch(/^blob:mock-/));
-    expect(bookCalls()).toBe(3);
+    expect(bookCalls()).toBe(1);
   });
 
   // The clinical stop this used to assert is gone (SP1: see
@@ -242,7 +239,7 @@ describe("BookGenerator", () => {
     await waitFor(() => expect(button).toBeEnabled());
 
     const bookCalls = () =>
-      fetchMock.mock.calls.filter((c) => String(c[0]).includes("/generate/book1.pdf")).length;
+      fetchMock.mock.calls.filter((c) => String(c[0]).includes("/api/books/")).length;
     expect(bookCalls()).toBe(1);
 
     await userEvent.click(button);
@@ -255,6 +252,21 @@ describe("BookGenerator", () => {
     expect(openedUrl).toMatch(/^blob:mock-/);
 
     openSpy.mockRestore();
+  });
+
+  it("packages the zip from the PDFs it already has, without generating again", async () => {
+    const fetchMock = mockFetch();
+    vi.stubGlobal("fetch", fetchMock);
+    await generate();
+    const button = await screen.findByRole("button", { name: /download .zip/i });
+    await waitFor(() => expect(button).toBeEnabled());
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    await userEvent.click(button);
+
+    await waitFor(() => expect(clickSpy).toHaveBeenCalledTimes(1));
+    expect(fetchMock.mock.calls.filter((c) => String(c[0]).includes("/api/books/")).length).toBe(1);
+    clickSpy.mockRestore();
   });
 
   it("revokes the previous object URLs when a new set is generated", async () => {
