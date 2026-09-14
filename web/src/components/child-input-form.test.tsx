@@ -38,6 +38,26 @@ const storedProfile: StoredProfile = {
 };
 
 describe("ChildInputForm", () => {
+  it("submits the Bengali code selected from the two-language dropdown", async () => {
+    const onGenerate = vi.fn();
+    const originalScroll = HTMLElement.prototype.scrollIntoView;
+    HTMLElement.prototype.scrollIntoView = vi.fn();
+    try {
+      render(<ChildInputForm busy={false} onGenerate={onGenerate} initialChild={{ display_name: "Test Child", date_of_birth: "2023-02-28" }} />);
+      const language = screen.getByRole("combobox", { name: "Language" });
+      expect(language).toHaveTextContent("English");
+      language.focus();
+      await userEvent.keyboard("{ArrowDown}");
+      expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["English", "Bengali"]);
+      await userEvent.keyboard("{End}{Enter}");
+      await waitFor(() => expect(language).toHaveTextContent("Bengali"));
+      await userEvent.click(screen.getByRole("button", { name: "Generate both books" }));
+      expect(onGenerate).toHaveBeenCalledWith(expect.objectContaining({ language_id: "bn" }));
+    } finally {
+      HTMLElement.prototype.scrollIntoView = originalScroll;
+    }
+  });
+
   it("prefills a registered child without inventing the mother's identity", async () => {
     render(<ChildInputForm busy={false} onGenerate={() => {}} initialChild={{ display_name: "Test Child", date_of_birth: "2023-02-28" }} />);
     await waitFor(() => expect(screen.getByLabelText("Name")).toHaveValue("Test Child"));
