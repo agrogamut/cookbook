@@ -104,6 +104,7 @@ func WithDrafter(d aidraft.Drafter) AssembleOption {
 // this project has no data to construct honestly, so it stays nil (its documented meaning
 // in types.go) until a real rotation logic is designed against real diversity data.
 func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, asOf time.Time, opts ...AssembleOption) (Book2, []string, error) {
+	ctx = aidraft.WithUsageBook(ctx, "book2")
 	cfg := assembleOptions{drafter: aidraft.Disabled}
 	for _, opt := range opts {
 		opt(&cfg)
