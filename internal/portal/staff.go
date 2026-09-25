@@ -119,7 +119,15 @@ func (s *Server) UpdateStaff(w http.ResponseWriter, r *http.Request) {
 			serverError(w, err)
 			return
 		}
-		if _, err = tx.Exec(r.Context(), `UPDATE app_private.consultation_registration SET assigned_doctor_id=NULL,updated_at=now() WHERE assigned_doctor_id=$1`, id); err != nil {
+		if _, err = tx.Exec(r.Context(), `UPDATE app_private.appointment
+			SET status='cancelled',decided_by=$2,updated_at=now()
+			WHERE doctor_id=$1 AND status IN ('pending_admin','confirmed')`, id, Current(r.Context()).ID); err != nil {
+			serverError(w, err)
+			return
+		}
+		if _, err = tx.Exec(r.Context(), `UPDATE app_private.consultation_registration
+			SET assigned_doctor_id=NULL,status=CASE WHEN status='scheduled' THEN 'cancelled' ELSE status END,updated_at=now()
+			WHERE assigned_doctor_id=$1`, id); err != nil {
 			serverError(w, err)
 			return
 		}

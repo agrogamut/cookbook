@@ -30,6 +30,7 @@ export default async function BooksPage({
       />
       <BookGenerator
         key={registration?.id ?? "new"}
+        registrationID={registration?.id}
         initialChild={
           registration
             ? {

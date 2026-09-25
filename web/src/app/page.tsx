@@ -23,6 +23,7 @@ export default function LandingPage() {
         </Link>
         <nav aria-label="Main navigation">
           <a href="#how-it-works">How it works</a>
+          <Link href="/family/login">Family sign in</Link>
           <Link href="/login">Staff sign in</Link>
         </nav>
       </header>
@@ -151,6 +152,7 @@ export default function LandingPage() {
         <Image src="/madamgy-logo.png" alt="MadamGY" width={145} height={29} />
         <p>A thoughtful place to begin your child’s next chapter.</p>
         <Link href="/login">Doctor and admin sign in</Link>
+        <Link href="/family/login">Family sign in</Link>
       </footer>
     </div>
   );

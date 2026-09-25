@@ -13,52 +13,79 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+var (
+	errRegistrationNotFound = errors.New("registration not found")
+	errCheckoutUnavailable  = errors.New("checkout unavailable")
+	errPaymentAlreadyExists = errors.New("payment already exists")
+)
+
+func (s *Server) createOrderFor(ctx context.Context, id, guardianID, secret string) (GatewayOrder, error) {
+	settings, err := s.settings(ctx)
+	if err != nil {
+		return GatewayOrder{}, err
+	}
+	if !settings.CheckoutAvailable {
+		return GatewayOrder{}, errCheckoutUnavailable
+	}
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return GatewayOrder{}, err
+	}
+	defer tx.Rollback(ctx)
+	var registrationID string
+	if guardianID != "" {
+		err = tx.QueryRow(ctx, `SELECT id FROM app_private.consultation_registration WHERE id=$1 AND guardian_id=$2 FOR UPDATE`, id, guardianID).Scan(&registrationID)
+	} else {
+		err = tx.QueryRow(ctx, `SELECT id FROM app_private.consultation_registration WHERE id=$1 AND token_hash=$2 FOR UPDATE`, id, tokenHash(secret)).Scan(&registrationID)
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return GatewayOrder{}, errRegistrationNotFound
+	}
+	if err != nil {
+		return GatewayOrder{}, err
+	}
+	var order GatewayOrder
+	var status string
+	err = tx.QueryRow(ctx, `SELECT id,amount_paise,currency,status FROM app_private.consultation_order WHERE registration_id=$1`, id).Scan(&order.ID, &order.Amount, &order.Currency, &status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		order, err = s.options.Gateway.CreateOrder(ctx, id, *settings.AmountPaise, settings.Currency)
+		if err != nil {
+			slog.Error("create checkout order", "error", err)
+			return GatewayOrder{}, err
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO app_private.consultation_order(id,registration_id,amount_paise,currency) VALUES ($1,$2,$3,$4)`, order.ID, id, order.Amount, order.Currency)
+	} else if err == nil && (status == "paid" || status == "partially_refunded" || status == "refunded" || status == "authorized") {
+		return GatewayOrder{}, errPaymentAlreadyExists
+	}
+	if err != nil {
+		return GatewayOrder{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return GatewayOrder{}, err
+	}
+	return order, nil
+}
+
 func (s *Server) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	id, secret := chi.URLParam(r, "id"), r.Header.Get("X-Registration-Token")
 	if !validUUID(id) || !validToken(secret) {
 		fail(w, 404, "Registration not found.")
 		return
 	}
-	settings, err := s.settings(r.Context())
-	if err != nil {
-		serverError(w, err)
+	order, err := s.createOrderFor(r.Context(), id, "", secret)
+	if errors.Is(err, errRegistrationNotFound) {
+		fail(w, 404, "Registration not found.")
 		return
 	}
-	if !settings.CheckoutAvailable {
+	if errors.Is(err, errCheckoutUnavailable) {
 		fail(w, 503, "Online payment is currently unavailable. Your registration is saved.")
 		return
 	}
-	tx, err := s.pool.Begin(r.Context())
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	defer tx.Rollback(r.Context())
-	var registrationID string
-	err = tx.QueryRow(r.Context(), `SELECT id FROM app_private.consultation_registration WHERE id=$1 AND token_hash=$2 FOR UPDATE`, id, tokenHash(secret)).Scan(&registrationID)
-	if notFound(w, err) {
-		return
-	}
-	var order GatewayOrder
-	var status string
-	err = tx.QueryRow(r.Context(), `SELECT id,amount_paise,currency,status FROM app_private.consultation_order WHERE registration_id=$1`, id).Scan(&order.ID, &order.Amount, &order.Currency, &status)
-	if errors.Is(err, pgx.ErrNoRows) {
-		order, err = s.options.Gateway.CreateOrder(r.Context(), id, *settings.AmountPaise, settings.Currency)
-		if err != nil {
-			slog.Error("create checkout order", "error", err)
-			fail(w, 502, "Checkout could not be opened. Your registration is saved; please try again.")
-			return
-		}
-		_, err = tx.Exec(r.Context(), `INSERT INTO app_private.consultation_order(id,registration_id,amount_paise,currency) VALUES ($1,$2,$3,$4)`, order.ID, id, order.Amount, order.Currency)
-	} else if err == nil && (status == "paid" || status == "partially_refunded" || status == "refunded" || status == "authorized") {
+	if errors.Is(err, errPaymentAlreadyExists) {
 		fail(w, 409, "A payment already exists for this consultation. Refresh its payment status.")
 		return
 	}
 	if err != nil {
-		serverError(w, err)
-		return
-	}
-	if err = tx.Commit(r.Context()); err != nil {
 		serverError(w, err)
 		return
 	}
@@ -104,6 +131,79 @@ func (s *Server) VerifyPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.PublicRegistration(w, r)
+}
+
+func (s *Server) CreateFamilyOrder(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if !validUUID(id) {
+		fail(w, http.StatusNotFound, "Registration not found.")
+		return
+	}
+	order, err := s.createOrderFor(r.Context(), id, CurrentGuardian(r.Context()).ID, "")
+	if errors.Is(err, errRegistrationNotFound) {
+		fail(w, http.StatusNotFound, "Registration not found.")
+		return
+	}
+	if errors.Is(err, errCheckoutUnavailable) {
+		fail(w, http.StatusServiceUnavailable, "Online payment is currently unavailable. Your registration is saved.")
+		return
+	}
+	if errors.Is(err, errPaymentAlreadyExists) {
+		fail(w, http.StatusConflict, "A payment already exists for this consultation. Refresh its payment status.")
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	respond(w, http.StatusOK, map[string]any{"order_id": order.ID, "amount_paise": order.Amount, "currency": order.Currency, "key_id": s.options.Gateway.PublicKey()})
+}
+
+func (s *Server) VerifyFamilyPayment(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if !validUUID(id) {
+		fail(w, http.StatusNotFound, "Registration not found.")
+		return
+	}
+	var b struct {
+		OrderID   string `json:"razorpay_order_id"`
+		PaymentID string `json:"razorpay_payment_id"`
+		Signature string `json:"razorpay_signature"`
+	}
+	if !decode(w, r, &b) {
+		return
+	}
+	var orderID string
+	err := s.pool.QueryRow(r.Context(), `SELECT o.id FROM app_private.consultation_order o
+		JOIN app_private.consultation_registration r ON r.id=o.registration_id
+		WHERE r.id=$1 AND r.guardian_id=$2`, id, CurrentGuardian(r.Context()).ID).Scan(&orderID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		fail(w, http.StatusNotFound, "Registration not found.")
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	if b.OrderID != orderID || !validProviderID(b.PaymentID, "pay_") || !s.options.Gateway.VerifyCheckout(orderID, b.PaymentID, b.Signature) {
+		fail(w, http.StatusBadRequest, "Payment confirmation could not be verified.")
+		return
+	}
+	p, err := s.options.Gateway.FetchPayment(r.Context(), b.PaymentID)
+	if err != nil {
+		slog.Error("fetch family checkout payment", "error", err)
+		fail(w, http.StatusBadGateway, "Payment confirmation is pending. Check the status again shortly.")
+		return
+	}
+	if p.OrderID != orderID {
+		fail(w, http.StatusBadRequest, "Payment does not belong to this consultation.")
+		return
+	}
+	if err = s.applyPayment(r.Context(), p, ""); err != nil {
+		serverError(w, err)
+		return
+	}
+	s.FamilyRegistrationStatus(w, r)
 }
 
 func paymentState(p Payment) (string, error) {

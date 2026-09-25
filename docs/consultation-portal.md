@@ -2,7 +2,9 @@
 
 The public homepage collects a guardian's name, a child's name and date of birth, a phone number, and optional email. It saves the request before offering optional payment for a doctor consultation. Payment does not reserve an appointment time or restrict book generation.
 
-The administrator workspace at `/admin` shows contact details, birth date, calculated age, assignment, consultation progress, internal notes and payment status. Administrators create, rename, deactivate and reset passwords for doctor accounts. Deactivating a doctor revokes their sessions and returns their children to the unassigned queue. Doctors use `/doctor` to see assigned children and open their book forms. Any signed-in doctor can also generate a book from new inline details at `/books`.
+Families can create a separate account at `/family/register` and sign in at `/family/login`. The family cookie is separate from the staff cookie. A family account can create a new registration or attach an existing intake by its private token; an email address never silently links an older intake. The family home shows only that account's registrations, payment state, appointment state and latest book-release state. Delivery is in-app only. There is no email, SMS or push delivery.
+
+The administrator workspace at `/admin` shows contact details, birth date, calculated age, assignment, consultation progress, internal notes and payment status. Administrators create, rename, deactivate and reset passwords for doctor accounts, manage every availability block, decide booking requests and approve or reject stored book PDFs. Deactivating a doctor revokes their sessions and returns their children to the unassigned queue. Doctors use `/doctor` to see assigned children, publish and revoke their own availability, and open their book forms. Any signed-in doctor can also generate a book from new inline details at `/books`; only a generation tied to a stored registration creates a family-visible release, and that release remains hidden until an administrator approves the exact PDF bytes.
 
 The existing engine lives at `/console`. Its API, reference pages and book routes require staff authentication. Stored child profiles and match suggestions are limited to assigned doctors; administrators can access all records. Audit and import-history endpoints are administrator-only.
 
@@ -52,9 +54,17 @@ Fees are stored as integer paise. The server creates the order and keeps its amo
 
 Webhooks are checked against their raw body before parsing, as required by [Razorpay's webhook validation guide](https://razorpay.com/docs/webhooks/validate-test/?locale=en-US). Event IDs are recorded transactionally to handle duplicates. Delayed failures and older refund amounts cannot overwrite a newer settled state. Refunds initiated in Razorpay appear in the app when their verified notifications arrive. The portal does not initiate refunds or manually override payment status.
 
+Families pay from their signed-in registration page through the same order, signed callback and webhook paths. The browser never supplies the amount. A missing fee, disabled checkout or unpaid registration remains visible as its real state.
+
+## Availability and booking
+
+Doctors publish half-open availability ranges from `/doctor`, using Asia/Kolkata in the browser and `timestamptz` in Postgres. Administrators can create, edit and revoke any active doctor's blocks. The database exclusion constraint rejects overlapping active blocks.
+
+Family booking requests are pending until an administrator confirms them. A time-range request selects an eligible free doctor by fewest confirmed appointments in that India-calendar week, then staff identifier. A specific-doctor request only considers that doctor's free interval. Pending requests hold their interval, and a second overlapping request returns no available slot. Confirmation assigns the doctor and changes the registration to `scheduled`; rejection and cancellation release the interval.
+
 ## Data and access boundaries
 
-Migration `0041` creates the private staff, session, registration, setting, order and event tables. The schema is not exposed to Supabase's browser Data API, privileges are revoked from browser roles, and row-level security is enabled. Existing child-profile tables are also protected from direct browser access. Go checks staff roles and assignments before returning patient data.
+Migrations `0041` and `0042` create the private staff, family, session, registration, setting, order, event, availability, appointment and book-release tables. Family accounts use the existing server-side identity provider but have their own account and session tables. The schema is not exposed to Supabase's browser Data API, privileges are revoked from browser roles, and row-level security is enabled. Existing child-profile tables are also protected from direct browser access. Go checks staff roles, family ownership and doctor assignments before returning patient data. Family registration and approved-book queries apply ownership in SQL.
 
 Every registration gets a separate child profile with the supplied name and birth date. Guardian identity stays on the registration; it is never inferred to be the mother's identity. Clinical fields remain absent until a staff member supplies them. The landing form does not create clinical advice or invented records. Inline book generation keeps its existing transient behavior; registration notes are stored separately from book inputs.
 
@@ -66,7 +76,7 @@ Public intake, login and checkout have bounded in-process rate limits. The serve
 
 ## Verification
 
-`go test ./...`, `go build ./...`, `go vet ./...`, and `pnpm test`, `pnpm lint`, `pnpm build` inside `web` cover the implementation. Set `PORTAL_TEST_DATABASE_URL` to a disposable local Postgres database to include registration, assignment, session, RLS, duplicate-order and payment-state integration tests. `TEST_DATABASE_URL` separately enables the existing corpus integration suite. Provider-client tests use local mock HTTP servers; they do not establish that supplied hosted credentials work.
+`go test ./...`, `go build ./...`, `go vet ./...`, and `pnpm test`, `pnpm lint`, `pnpm build` inside `web` cover the implementation. Set `PORTAL_TEST_DATABASE_URL` to a disposable local Postgres database to include family isolation, role boundaries, availability and appointment exclusion constraints, doctor selection, confirmation assignment, release approval, duplicate-order and payment-state integration tests. `TEST_DATABASE_URL` separately enables the existing corpus integration suite. Provider-client tests use local mock HTTP servers; they do not establish that supplied hosted credentials work.
 
 The local preview was also checked with official Supabase Auth v2.196.0 and a loopback TLS gateway. Administrator provisioning, doctor creation, both password logins, logout and role enforcement passed against that service. Both accounts signed in through the shared browser's actual form, and the administrator's Doctors tab displayed their active records. Preview passwords and service keys are outside version control. Hosted Supabase and Razorpay checkout still require verification with the project's credentials.
 

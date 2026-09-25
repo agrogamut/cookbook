@@ -75,3 +75,77 @@ export interface IntakeInput {
   email: string;
   token: string;
 }
+
+export interface GuardianAccount {
+  id: string;
+  name: string;
+  email: string;
+  active: boolean;
+}
+export type AppointmentStatus =
+  | "pending_admin"
+  | "confirmed"
+  | "rejected"
+  | "cancelled";
+export type AppointmentMode = "time_range" | "specific_doctor";
+export interface AvailabilityBlock {
+  id: string;
+  doctor_id: string;
+  doctor_name: string;
+  starts_at: string;
+  ends_at: string;
+  active: boolean;
+  created_at: string;
+}
+export interface FreeInterval {
+  doctor_id: string;
+  doctor_name: string;
+  starts_at: string;
+  ends_at: string;
+}
+export interface Appointment {
+  id: string;
+  registration_id: string;
+  child_name: string;
+  doctor_id: string;
+  doctor_name: string;
+  starts_at: string;
+  ends_at: string;
+  mode: AppointmentMode;
+  status: AppointmentStatus;
+  requested_by: string;
+  decided_by: string;
+  created_at: string;
+}
+export type BookReleaseStatus = "pending_admin" | "approved" | "rejected";
+export interface BookRelease {
+  id: string;
+  registration_id: string;
+  child_name: string;
+  book: "book1" | "book2";
+  status: BookReleaseStatus;
+  generated_by: string;
+  approved_by: string;
+  generated_at: string;
+  decided_at: string | null;
+  size_bytes: number;
+}
+export interface FamilyRegistration {
+  id: string;
+  child_name: string;
+  date_of_birth: string;
+  registration_status: ConsultationStatus;
+  payment_status: PaymentStatus;
+  amount_paise: number | null;
+  currency: string;
+  doctor_name: string;
+  appointment_id: string | null;
+  appointment_status: AppointmentStatus | null;
+  appointment_starts_at: string | null;
+  appointment_ends_at: string | null;
+  book1_release_id: string | null;
+  book1_status: BookReleaseStatus | null;
+  book2_release_id: string | null;
+  book2_status: BookReleaseStatus | null;
+  created_at: string;
+}

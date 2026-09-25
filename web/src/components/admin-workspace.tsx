@@ -12,6 +12,10 @@ import {
 import { errorMessage, money } from "@/lib/portal-utils";
 import type { ConsultationSettings, StaffAccount } from "@/lib/portal-types";
 import { RegistrationWorkspace } from "./registration-workspace";
+import { AvailabilityEditor } from "./availability-editor";
+import { AdminOperations } from "./admin-operations";
+import { FamilyAccountLinker } from "./family-account-linker";
+import { AdminDirectBooking } from "./admin-direct-booking";
 import { PageHeader } from "./page-header";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -46,15 +50,28 @@ export function AdminWorkspace() {
           <TabsTrigger value="registrations">Registrations</TabsTrigger>
           <TabsTrigger value="doctors">Doctors</TabsTrigger>
           <TabsTrigger value="fee">Consultation fee</TabsTrigger>
+          <TabsTrigger value="schedule">Availability and bookings</TabsTrigger>
+          <TabsTrigger value="books">Book releases</TabsTrigger>
         </TabsList>
         <TabsContent value="registrations">
-          <RegistrationWorkspace />
+          <div className="space-y-5">
+            <RegistrationWorkspace />
+            <FamilyAccountLinker />
+          </div>
         </TabsContent>
         <TabsContent value="doctors">
           <DoctorManagement />
         </TabsContent>
         <TabsContent value="fee">
           <FeeSettings />
+        </TabsContent>
+        <TabsContent value="schedule" className="space-y-5">
+          <AvailabilityEditor admin />
+          <AdminDirectBooking />
+          <AdminOperations />
+        </TabsContent>
+        <TabsContent value="books">
+          <AdminOperations />
         </TabsContent>
       </Tabs>
     </div>

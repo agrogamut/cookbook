@@ -212,6 +212,10 @@ export function ConsultationForm() {
           <strong>{paymentLabels[receipt.payment_status]}</strong>
         </div>
         <p className="receipt-reference">Reference: {receipt.id}</p>
+        <p className="field-hint">
+          Keep this private token if you want to attach this request to a family
+          account later: <code>{receipt.token}</code>
+        </p>
         {paid ? (
           <p className="confirmation-note">
             Payment received. Your consultation time will be arranged

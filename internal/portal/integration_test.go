@@ -264,6 +264,9 @@ func TestPortalPersistenceAndAuthorization(t *testing.T) {
 		t.Fatalf("created %d orders, expected one", gateway.creates)
 	}
 	order := gateway.order
+	if order.Amount != 12345 || order.Currency != "INR" {
+		t.Fatalf("checkout used client or wrong settings amount: %d %s", order.Amount, order.Currency)
+	}
 	p := Payment{ID: "pay_" + token()[:16], OrderID: order.ID, Amount: order.Amount, Currency: order.Currency, Status: "authorized"}
 	gateway.set(p)
 	confirmation := map[string]string{"razorpay_order_id": order.ID, "razorpay_payment_id": p.ID, "razorpay_signature": sign(gateway.Secret, []byte(order.ID+"|"+p.ID))}

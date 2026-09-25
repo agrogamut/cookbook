@@ -1,8 +1,51 @@
 import type { PaymentStatus } from "./portal-types";
 
+const indiaTimeZone = "Asia/Kolkata";
+
+function indiaParts(value: Date) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: indiaTimeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(value);
+  return Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+}
+
+export function indiaCalendarDate(now = new Date()): Date {
+  const parts = indiaParts(now);
+  return new Date(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
+}
+
+export function calendarDayValue(date: Date): string {
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+}
+
+export function indiaTimeValue(value: string): string {
+  const parts = indiaParts(new Date(value));
+  return `${parts.hour}:${parts.minute}`;
+}
+
+export function indiaDateTimeInput(value: string): string {
+  const parts = indiaParts(new Date(value));
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+export function indiaDateFromInstant(value: string): Date {
+  const parts = indiaParts(new Date(value));
+  return new Date(Number(parts.year), Number(parts.month) - 1, Number(parts.day));
+}
+
+export function indiaInstant(day: string, time: string): string {
+  return `${day}T${time}:00+05:30`;
+}
+
 export function calendarDate(now = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kolkata",
+    timeZone: indiaTimeZone,
     year: "numeric",
     month: "2-digit",
     day: "2-digit",

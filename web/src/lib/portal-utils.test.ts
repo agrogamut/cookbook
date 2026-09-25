@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   ageFromBirth,
   calendarDate,
+  indiaDateTimeInput,
+  indiaTimeValue,
   newRegistrationToken,
 } from "./portal-utils";
 
@@ -27,5 +29,12 @@ describe("calendar age", () => {
     const first = newRegistrationToken();
     expect(first).toMatch(/^[a-f0-9]{64}$/);
     expect(newRegistrationToken()).not.toBe(first);
+  });
+});
+
+describe("India scheduling formatting", () => {
+  it("converts API UTC timestamps to Asia/Kolkata wall time", () => {
+    expect(indiaTimeValue("2026-09-25T04:30:00Z")).toBe("10:00");
+    expect(indiaDateTimeInput("2026-09-25T04:30:00Z")).toBe("2026-09-25T10:00");
   });
 });

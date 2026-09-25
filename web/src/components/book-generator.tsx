@@ -24,7 +24,7 @@ type Which = "book1" | "book2";
 
 const NO_PDFS: Record<Which, string | null> = { book1: null, book2: null };
 
-export function BookGenerator({ initialChild }: { initialChild?: { display_name: string; date_of_birth: string } } = {}) {
+export function BookGenerator({ initialChild, registrationID }: { initialChild?: { display_name: string; date_of_birth: string }; registrationID?: string } = {}) {
   // The inputs that produced the books on screen. Held so a download re-sends exactly what
   // was generated: re-reading the form would let an edit made after Generate slip into a PDF
   // that does not match the preview beside it.
@@ -97,7 +97,7 @@ export function BookGenerator({ initialChild }: { initialChild?: { display_name:
     setPdfUrls(NO_PDFS);
     pdfBlobs.current = { book1: null, book2: null };
     try {
-      const printed = await generateBooksPrinted(input);
+      const printed = await generateBooksPrinted(input, registrationID);
       setSet(printed.set);
       setSubmitted(input);
 
@@ -229,6 +229,7 @@ export function BookGenerator({ initialChild }: { initialChild?: { display_name:
               These open the PDF; the zip downloads, because an archive has nothing to view.
               Disabled while its own PDF is not yet on screen, which also covers the
               renderer-unavailable case -- there is nothing for the button to open. */}
+          {registrationID && <Badge variant="outline">Pending admin approval after generation</Badge>}
           <Button
             size="sm"
             variant="outline"

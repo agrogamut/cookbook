@@ -135,6 +135,7 @@ func NewRouter(pool *pgxpool.Pool, drafter aidraft.Drafter, access ...*portal.Se
 		r.Use(security.RequireStaff)
 		// The console's action: one assembly, both books' HTML and both printed PDFs.
 		r.Post("/api/books/generate.printed", h.BookGeneratePrinted)
+		r.Post("/api/registrations/{registrationID}/book-releases", h.GenerateBookReleases)
 		r.Post("/api/books/generate.zip", h.BookGenerateZip)
 		r.Post("/api/books/generate/{book}.pdf", h.BookGenerateOne)
 		r.With(security.RequireProfile).Get("/api/books/{childID}/books.zip", h.BookSetDownload)

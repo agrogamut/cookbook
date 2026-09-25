@@ -4,7 +4,11 @@ import type {
   Allergen, ClinicalMarker, ReferenceEnums, StoredProfile, EngineInputResult, SpecialCareCondition,
   MatchCandidate,
 } from "./types";
-import type { StaffAccount, Registration, RegistrationList, ConsultationSettings, PublicSettings, CheckoutOrder, CheckoutConfirmation, IntakeInput, PaymentStatus } from "./portal-types";
+import type {
+  StaffAccount, Registration, RegistrationList, ConsultationSettings, PublicSettings,
+  CheckoutOrder, CheckoutConfirmation, IntakeInput, PaymentStatus, GuardianAccount,
+  AvailabilityBlock, FreeInterval, Appointment, BookRelease, FamilyRegistration,
+} from "./portal-types";
 
 /** Resolve the API base URL, tolerating an address given without a scheme.
  *
@@ -44,6 +48,11 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function requestError(res: Response): Promise<ApiError> {
+  const body = await res.json().catch(() => ({ error: res.statusText }));
+  return new ApiError(res.status, body.error ?? res.statusText);
+}
+
 export const signIn = (email: string, password: string) => request<StaffAccount>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
 export const signOut = () => request<{ ok: boolean }>("/api/auth/logout", { method: "POST", body: "{}" });
 export const changePassword = (current_password: string, password: string) => request<{ ok: boolean }>("/api/auth/password", { method: "POST", body: JSON.stringify({ current_password, password }) });
@@ -53,6 +62,15 @@ export const getRegistrationStatus = (id: string, token: string) => request<{ id
 export const createCheckoutOrder = (id: string, token: string) => request<CheckoutOrder>(`/api/public/registrations/${encodeURIComponent(id)}/order`, { method: "POST", headers: { "X-Registration-Token": token }, body: "{}" });
 export const verifyCheckout = (id: string, token: string, result: CheckoutConfirmation) => request<{ id: string; payment_status: PaymentStatus }>(`/api/public/registrations/${encodeURIComponent(id)}/verify`, { method: "POST", headers: { "X-Registration-Token": token }, body: JSON.stringify(result) });
 export const listRegistrations = (query: URLSearchParams) => request<RegistrationList>(`/api/registrations?${query}`);
+export async function listAllRegistrations(): Promise<Registration[]> {
+  const items: Registration[] = [];
+  for (let page = 1; page <= 100000; page += 1) {
+    const result = await listRegistrations(new URLSearchParams({ page: String(page) }));
+    items.push(...result.items);
+    if (result.items.length === 0 || items.length >= result.total) return items;
+  }
+  throw new Error("The registration list is too large to load.");
+}
 export const getRegistration = (id: string) => request<Registration>(`/api/registrations/${encodeURIComponent(id)}`);
 export const updateRegistration = (id: string, values: Partial<Pick<Registration, "guardian_name" | "child_name" | "date_of_birth" | "phone" | "email" | "status" | "notes">> & { assigned_doctor_id?: string | null }) => request<Registration>(`/api/registrations/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(values) });
 export const listStaff = () => request<StaffAccount[]>("/api/admin/staff");
@@ -61,6 +79,40 @@ export const updateDoctor = (id: string, name: string, active: boolean) => reque
 export const resetDoctorPassword = (id: string, password: string) => request<{ ok: boolean }>(`/api/admin/staff/${encodeURIComponent(id)}/password`, { method: "POST", body: JSON.stringify({ password }) });
 export const getConsultationSettings = () => request<ConsultationSettings>("/api/admin/settings");
 export const saveConsultationSettings = (amount_paise: number | null, payments_enabled: boolean) => request<ConsultationSettings>("/api/admin/settings", { method: "PUT", body: JSON.stringify({ amount_paise, payments_enabled }) });
+export const listGuardians = () => request<GuardianAccount[]>("/api/admin/guardians");
+export const attachRegistrationToGuardian = (registrationID: string, guardianID: string) => request<{ guardian_id: string }>(`/api/admin/registrations/${encodeURIComponent(registrationID)}/guardian`, { method: "PATCH", body: JSON.stringify({ guardian_id: guardianID }) });
+
+export const familySignUp = (name: string, email: string, password: string) => request<GuardianAccount>("/api/family/auth/register", { method: "POST", body: JSON.stringify({ name, email, password }) });
+export const familySignIn = (email: string, password: string) => request<GuardianAccount>("/api/family/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+export const familySignOut = () => request<{ ok: boolean }>("/api/family/auth/logout", { method: "POST", body: "{}" });
+export const familyMe = () => request<GuardianAccount>("/api/family/auth/me");
+export const listFamilyRegistrations = () => request<FamilyRegistration[]>("/api/family/registrations");
+export const createFamilyRegistration = (input: { child_name: string; date_of_birth: string; phone: string }) => request<{ id: string }>("/api/family/registrations", { method: "POST", body: JSON.stringify(input) });
+export const attachFamilyRegistration = (token: string, id?: string) => request<{ id: string }>(id ? `/api/family/registrations/${encodeURIComponent(id)}/attach` : "/api/family/registrations/attach", { method: "POST", body: JSON.stringify({ token }) });
+export const listFamilyAvailability = (date: string, doctorID = "") => request<FreeInterval[]>(`/api/family/availability?date=${encodeURIComponent(date)}${doctorID ? `&doctor_id=${encodeURIComponent(doctorID)}` : ""}`);
+export const createFamilyAppointment = (input: { registration_id: string; doctor_id?: string; starts_at: string; ends_at: string }) => request<{ id: string; status: string }>("/api/family/appointments", { method: "POST", body: JSON.stringify(input) });
+export const cancelFamilyAppointment = (id: string) => request<{ ok: boolean }>(`/api/family/appointments/${encodeURIComponent(id)}/cancel`, { method: "POST", body: "{}" });
+export const createFamilyOrder = (id: string) => request<CheckoutOrder>(`/api/family/registrations/${encodeURIComponent(id)}/order`, { method: "POST", body: "{}" });
+export const verifyFamilyCheckout = (id: string, result: CheckoutConfirmation) => request<FamilyRegistration>(`/api/family/registrations/${encodeURIComponent(id)}/verify`, { method: "POST", body: JSON.stringify(result) });
+export const downloadFamilyBook = async (id: string): Promise<Blob> => {
+  const res = await apiFetch(`${BASE_URL}/api/family/book-releases/${encodeURIComponent(id)}/download`);
+  if (!res.ok) throw await requestError(res);
+  return res.blob();
+};
+
+export const listAvailability = (doctorID = "") => request<AvailabilityBlock[]>(`/api/availability${doctorID ? `?doctor_id=${encodeURIComponent(doctorID)}` : ""}`);
+export const saveAvailability = (input: { id?: string; doctor_id?: string; starts_at: string; ends_at: string; active?: boolean }) => request<{ ok: boolean }>(input.id ? `/api/availability/${encodeURIComponent(input.id)}` : "/api/availability", { method: input.id ? "PUT" : "POST", body: JSON.stringify(input) });
+export const revokeAvailability = (id: string) => request<{ ok: boolean }>(`/api/availability/${encodeURIComponent(id)}`, { method: "DELETE" });
+export const listAppointments = () => request<Appointment[]>("/api/appointments");
+export const createAdminAppointment = (input: { registration_id: string; doctor_id: string; starts_at: string; ends_at: string }) => request<{ id: string; status: string }>("/api/admin/appointments", { method: "POST", body: JSON.stringify(input) });
+export const decideAppointment = (id: string, input: { action: "confirm" | "reject" | "cancel" | "reschedule"; doctor_id?: string; starts_at?: string; ends_at?: string }) => request<{ ok: boolean }>(`/api/admin/appointments/${encodeURIComponent(id)}/decision`, { method: "POST", body: JSON.stringify(input) });
+export const listBookReleases = (registrationID = "") => request<BookRelease[]>(`/api/book-releases${registrationID ? `?registration_id=${encodeURIComponent(registrationID)}` : ""}`);
+export const decideBookRelease = (id: string, action: "approve" | "reject") => request<{ status: string }>(`/api/admin/book-releases/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ action }) });
+export const downloadStaffBookRelease = async (id: string): Promise<Blob> => {
+  const res = await apiFetch(`${BASE_URL}/api/book-releases/${encodeURIComponent(id)}/pdf`);
+  if (!res.ok) throw await requestError(res);
+  return res.blob();
+};
 
 export function search(profile: ChildProfile): Promise<EngineResult> {
   return request<EngineResult>("/api/search", { method: "POST", body: JSON.stringify(profile) });
@@ -331,8 +383,11 @@ function decodePrint(raw: { pdf?: string; error?: { kind: string; message: strin
  *  requests assembled the whole set on the server, so every drafting and translation call ran
  *  three times per click. A print failure arrives per book inside a 200: the set assembled and
  *  its HTML still previews, so it is not a failed request. */
-export async function generateBooksPrinted(input: GenerateInput): Promise<PrintedBookSet> {
-  const res = await apiFetch(`${BASE_URL}/api/books/generate.printed`, {
+export async function generateBooksPrinted(input: GenerateInput, registrationID?: string): Promise<PrintedBookSet> {
+  const path = registrationID
+    ? `${BASE_URL}/api/registrations/${encodeURIComponent(registrationID)}/book-releases`
+    : `${BASE_URL}/api/books/generate.printed`;
+  const res = await apiFetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
