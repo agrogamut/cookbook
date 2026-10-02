@@ -61,9 +61,11 @@
      name set beside serif prose and one set inside a sans label are different type. Verify the
      faces exist in the render environment before trusting output: a missing face renders tofu,
      not an error. */
-  --font-indic: "Noto Serif Bengali", "Noto Serif Devanagari", "Noto Sans Bengali",
-                "Noto Sans Devanagari", var(--font-serif);
-  --font-indic-sans: "Noto Sans Bengali", "Noto Sans Devanagari", var(--font-sans);
+  --font-indic: "Noto Serif Bengali", "Noto Sans Bengali", "Noto Serif Devanagari",
+                "Noto Sans Devanagari", "Poppins", "Noto Serif", "Liberation Serif", Georgia, serif;
+  --font-indic-sans: "Noto Sans Bengali", "Noto Serif Bengali", "Noto Sans Devanagari",
+                     "Noto Serif Devanagari", "Poppins", "Noto Sans", "Liberation Sans",
+                     "Segoe UI", system-ui, sans-serif;
   /* Identity and quantity: ids, versions, dates, the provider's review status, and every
      number a reader might transcribe. */
   --font-mono: "Noto Sans Mono", "DejaVu Sans Mono", ui-monospace, monospace;
@@ -110,14 +112,14 @@
    var(--font-serif)/var(--font-sans) -- which is nearly everything on the page -- picks up
    conjunct-forming glyphs with no further per-element change. --font-mono is deliberately
    left alone: ids, dates and quantities stay in the same numeral font regardless of language.
-   Letter-spacing on .label is zeroed for the same page -- the kicker/label spacing was tuned
-   for an uppercase Latin word, and the same tracking pulls a Bengali conjunct apart into
+   Letter-spacing on Bengali-visible furniture is zeroed for the same page -- the tracking was
+   tuned for uppercase Latin words, and the same spacing pulls a Bengali conjunct apart into
    glyphs that no longer form the ligature a reader expects. */
 html[lang="bn"] {
   --font-serif: var(--font-indic);
   --font-sans: var(--font-indic-sans);
 }
-html[lang="bn"] .label {
+html[lang="bn"] :is(.label, [class*="kicker"], th, h3, .contents-group, .toc-group) {
   letter-spacing: normal;
 }
 /* Bengali underfill was investigated and NOT fixed here, on purpose -- recorded so the next

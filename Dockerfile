@@ -33,6 +33,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         chromium \
         fonts-noto-core \
         ca-certificates \
+    && test "$(fc-match -f "%{family}" "Noto Sans Bengali")" = "Noto Sans Bengali" \
+    && test "$(fc-match -f "%{family}" "Noto Serif Bengali")" = "Noto Serif Bengali" \
     && rm -rf /var/lib/apt/lists/*
 
 # staff-admin creates the first administrator. It ships in the image because there is no

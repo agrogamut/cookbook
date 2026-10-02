@@ -53,6 +53,33 @@ func TestRenderedDocumentEmbedsThePoppinsFontFaces(t *testing.T) {
 	}
 }
 
+func TestBengaliConjunctFixtureRendersInTheBengaliDocument(t *testing.T) {
+	const fixture = "ক্ষ জ্ঞ ক্ত ন্দ্র শ্র ত্ত্ব চ্ছ স্থ"
+	meta := Metadata{Title: "Bengali fixture", Language: "bn"}
+	data := Book1{
+		Metadata: meta,
+		Sections: []Section{{
+			TemplateID: "B1-PROFILE-01",
+			Title:      fixture,
+			Rows:       []Row{{Label: fixture, Note: fixture}},
+		}},
+	}
+
+	var buf bytes.Buffer
+	if err := RenderHTML(&buf, Kind1, meta, data); err != nil {
+		t.Fatalf("render Bengali fixture: %v", err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, `<html lang="bn">`) {
+		t.Fatal("Bengali fixture must render with lang=bn")
+	}
+	for _, conjunct := range strings.Fields(fixture) {
+		if !strings.Contains(out, conjunct) {
+			t.Fatalf("rendered Bengali fixture lost conjunct %q", conjunct)
+		}
+	}
+}
+
 // The palette is chosen by book, and the two must not be confusable: Book 1 is teal/navy and
 // Book 2 is plum/rose per the contract's visual_language.
 func TestEachBookCarriesItsOwnPaletteClass(t *testing.T) {

@@ -46,3 +46,67 @@ func TestTokensUsePoppinsForLatinTextAndNotoForIndicText(t *testing.T) {
 		}
 	}
 }
+
+func TestIndicFontStacksHaveNoCSSVariableCycle(t *testing.T) {
+	css, err := templateFS.ReadFile("templates/tokens.css")
+	if err != nil {
+		t.Fatalf("read tokens.css: %v", err)
+	}
+	s := string(css)
+
+	for _, tc := range []struct {
+		name      string
+		forbidden string
+		want      string
+	}{
+		{"--font-indic", "var(--font-serif)", `"Noto Serif Bengali"`},
+		{"--font-indic-sans", "var(--font-sans)", `"Noto Sans Bengali"`},
+	} {
+		declaration := cssCustomProperty(s, tc.name)
+		if declaration == "" {
+			t.Fatalf("missing %s declaration", tc.name)
+		}
+		if strings.Contains(declaration, tc.forbidden) {
+			t.Fatalf("%s must not fall back to the variable it replaces: %s", tc.name, declaration)
+		}
+		if !strings.Contains(declaration, tc.want) {
+			t.Fatalf("%s must explicitly prefer a Bengali-capable Noto family: %s", tc.name, declaration)
+		}
+	}
+}
+
+func TestBengaliFurnitureRemovesLatinTrackingOnlyForBengali(t *testing.T) {
+	css, err := templateFS.ReadFile("templates/tokens.css")
+	if err != nil {
+		t.Fatalf("read tokens.css: %v", err)
+	}
+	s := string(css)
+
+	want := `html[lang="bn"] :is(.label, [class*="kicker"], th, h3, .contents-group, .toc-group) {
+  letter-spacing: normal;
+}`
+	if !strings.Contains(s, want) {
+		t.Fatalf("Bengali labels, kickers, headings, and table headers must disable Latin tracking")
+	}
+	for _, latinRule := range []string{
+		"letter-spacing: 0.08em;",
+		"letter-spacing: 0.14em;",
+		"letter-spacing: 0.24em;",
+	} {
+		if !strings.Contains(s, latinRule) {
+			t.Fatalf("Latin tracking rule %q must remain available outside the Bengali override", latinRule)
+		}
+	}
+}
+
+func cssCustomProperty(css, name string) string {
+	start := strings.Index(css, name+":")
+	if start == -1 {
+		return ""
+	}
+	declaration := css[start+len(name)+1:]
+	if end := strings.IndexByte(declaration, ';'); end >= 0 {
+		declaration = declaration[:end]
+	}
+	return strings.TrimSpace(declaration)
+}

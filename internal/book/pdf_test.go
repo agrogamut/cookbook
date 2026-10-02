@@ -50,6 +50,81 @@ func TestPrintPDFProducesAPDF(t *testing.T) {
 	}
 }
 
+func TestBengaliPDFUsesNotoAndRetainsBengaliText(t *testing.T) {
+	if !browserOnPath() {
+		t.Skip("no chromium on PATH")
+	}
+	for _, tool := range []string{"pdffonts", "pdftotext"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skipf("%s is not installed", tool)
+		}
+	}
+
+	const fixture = "ক্ষ জ্ঞ ক্ত ন্দ্র শ্র ত্ত্ব চ্ছ স্থ"
+	meta := Metadata{
+		Title: "Bengali fixture", Language: "bn",
+		BookVersion: "V1", ReleaseID: "TEST", GenerationDate: time.Now(),
+	}
+	data := Book1{
+		Metadata: meta,
+		Sections: []Section{{
+			TemplateID: "B1-PROFILE-01",
+			Title:      fixture,
+			Rows:       []Row{{Label: fixture, Note: fixture}},
+		}},
+	}
+	var doc bytes.Buffer
+	if err := RenderHTML(&doc, Kind1, meta, data); err != nil {
+		t.Fatalf("render Bengali fixture: %v", err)
+	}
+	pdf, err := PrintPDF(context.Background(), doc.Bytes(), meta)
+	if err != nil {
+		if errors.Is(err, ErrChromiumUnavailable) {
+			t.Skipf("chromium present but not runnable here: %v", err)
+		}
+		t.Fatalf("PrintPDF: %v", err)
+	}
+	pdfPath := filepath.Join(t.TempDir(), "bengali-fixture.pdf")
+	if err := os.WriteFile(pdfPath, pdf, 0o600); err != nil {
+		t.Fatalf("write PDF fixture: %v", err)
+	}
+
+	fonts := commandOutput(t, "pdffonts", pdfPath)
+	if !strings.Contains(fonts, "NotoSansBengali") && !strings.Contains(fonts, "NotoSerifBengali") {
+		t.Fatalf("PDF must use a Bengali-capable Noto font, got:\n%s", fonts)
+	}
+	if strings.Contains(fonts, "FreeSans") {
+		t.Fatalf("PDF must not fall back to FreeSans for Bengali text, got:\n%s", fonts)
+	}
+	text := commandOutput(t, "pdftotext", pdfPath)
+	if !containsBengali(text) {
+		t.Fatalf("PDF text layer contains no Bengali text; fonts:\n%s\nextracted bytes=%d prefix=%q",
+			fonts, len(text), text[:min(len(text), 500)])
+	}
+}
+
+func commandOutput(t *testing.T, name, path string) string {
+	t.Helper()
+	args := []string{path}
+	if name == "pdftotext" {
+		args = append(args, "-")
+	}
+	out, err := exec.Command(name, args...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s %s: %v\n%s", name, path, err, out)
+	}
+	return string(out)
+}
+
+func containsBengali(s string) bool {
+	for _, r := range s {
+		if r >= '\u0980' && r <= '\u09ff' {
+			return true
+		}
+	}
+	return false
+}
+
 // TestNoPageContentOverflowsTheTextBlock is the guard for a defect that printed an entire
 // book at four fifths size without failing a single assertion.
 //
