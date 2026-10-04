@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/madamgy/recipie/internal/aidraft"
 	"github.com/madamgy/recipie/internal/book"
 	"github.com/madamgy/recipie/internal/profile"
 )
@@ -84,7 +85,7 @@ func (h *Handlers) renderSetWithPhotos(w http.ResponseWriter, r *http.Request, s
 	// one book in Bengali and the other in English would read as broken, not bilingual.
 	book1HTML, book2HTML := buf1.Bytes(), buf2.Bytes()
 	if set.Book1.Metadata.Language == "bn" {
-		translated, err := book.TranslateHTML(ctx, book1HTML, h.drafter, "bn")
+		translated, err := book.TranslateHTML(aidraft.WithUsageBook(ctx, "book1"), book1HTML, h.drafter, "bn")
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "book1 translation failed: "+err.Error())
 			return bookSetResponse{}, book.Set{}, false
@@ -92,7 +93,7 @@ func (h *Handlers) renderSetWithPhotos(w http.ResponseWriter, r *http.Request, s
 		book1HTML = translated
 	}
 	if set.Book2.Metadata.Language == "bn" {
-		translated, err := book.TranslateHTML(ctx, book2HTML, h.drafter, "bn")
+		translated, err := book.TranslateHTML(aidraft.WithUsageBook(ctx, "book2"), book2HTML, h.drafter, "bn")
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "book2 translation failed: "+err.Error())
 			return bookSetResponse{}, book.Set{}, false

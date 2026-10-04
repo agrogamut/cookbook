@@ -15,7 +15,7 @@ import (
 func (g *geminiClient) DraftModificationNote(ctx context.Context, req ModificationRequest) (DraftedText, error) {
 	ctx, cancel := context.WithTimeout(ctx, perCallTimeout)
 	defer cancel()
-	resp, err := g.client.Models.GenerateContent(ctx, modelName, genai.Text(buildModificationPrompt(req)),
+	resp, err := g.generate(ctx, "modification_note", modelName, buildModificationPrompt(req),
 		&genai.GenerateContentConfig{
 			ResponseMIMEType: "application/json",
 			ResponseSchema:   modificationSchema(),
@@ -44,7 +44,7 @@ func (g *geminiClient) DraftModificationNote(ctx context.Context, req Modificati
 func (g *geminiClient) DraftDoctorApproachNote(ctx context.Context, req DoctorApproachRequest) (DraftedText, error) {
 	ctx, cancel := context.WithTimeout(ctx, perCallTimeout)
 	defer cancel()
-	resp, err := g.client.Models.GenerateContent(ctx, modelName, genai.Text(buildDoctorApproachPrompt(req)),
+	resp, err := g.generate(ctx, "doctor_approach", modelName, buildDoctorApproachPrompt(req),
 		&genai.GenerateContentConfig{
 			ResponseMIMEType: "application/json",
 			ResponseSchema:   doctorApproachSchema(),
@@ -74,7 +74,7 @@ func (g *geminiClient) DraftDoctorApproachNote(ctx context.Context, req DoctorAp
 func (g *geminiClient) DraftFoodGroupPriorities(ctx context.Context, req FoodGroupPriorityRequest) (FoodGroupPriorities, error) {
 	ctx, cancel := context.WithTimeout(ctx, perCallTimeout)
 	defer cancel()
-	resp, err := g.client.Models.GenerateContent(ctx, modelName, genai.Text(buildFoodGroupPriorityPrompt(req)),
+	resp, err := g.generate(ctx, "food_group_priorities", modelName, buildFoodGroupPriorityPrompt(req),
 		&genai.GenerateContentConfig{
 			ResponseMIMEType: "application/json",
 			ResponseSchema:   foodGroupPrioritySchema(req.MacroGroups),
@@ -110,7 +110,7 @@ func (g *geminiClient) DraftFoodGroupPriorities(ctx context.Context, req FoodGro
 func (g *geminiClient) DraftInventedRecipe(ctx context.Context, req InventedRecipeRequest) (InventedRecipe, error) {
 	ctx, cancel := context.WithTimeout(ctx, perCallTimeout)
 	defer cancel()
-	resp, err := g.client.Models.GenerateContent(ctx, modelName, genai.Text(buildInventedRecipePrompt(req)),
+	resp, err := g.generate(ctx, "invented_recipe", modelName, buildInventedRecipePrompt(req),
 		&genai.GenerateContentConfig{
 			ResponseMIMEType: "application/json",
 			ResponseSchema:   inventedRecipeSchema(req.AllowedIngredients, req.DishFormatArchetypes),
@@ -171,7 +171,7 @@ func (g *geminiClient) TranslateTexts(ctx context.Context, req TranslateRequest)
 func (g *geminiClient) translateOnce(ctx context.Context, req TranslateRequest) (TranslatedTexts, error) {
 	ctx, cancel := context.WithTimeout(ctx, perCallTimeout)
 	defer cancel()
-	resp, err := g.client.Models.GenerateContent(ctx, translateModelName, genai.Text(buildTranslatePrompt(req)),
+	resp, err := g.generate(ctx, "translation", translateModelName, buildTranslatePrompt(req),
 		&genai.GenerateContentConfig{
 			ResponseMIMEType: "application/json",
 			ResponseSchema:   translateSchema(),

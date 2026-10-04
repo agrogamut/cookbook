@@ -4,6 +4,10 @@ Written in response to a question about generating a full book in Bengali, befor
 decision had been made. Superseded below: a decision was made the same day, and it did
 not take the path this document scoped.
 
+For measured token usage and generation time, see
+[Book generation measurements](book-generation-measurements.md). The earlier cost
+figures below are estimates from before the implemented pipeline was measured.
+
 ## Update (2026-09-08) - built, and not the way this document proposed
 
 `LanguageID` on intake (`bn`/`bengali`/`bangla`, any casing, via `bookLanguage` in

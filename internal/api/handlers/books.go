@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/madamgy/recipie/internal/aidraft"
 	"github.com/madamgy/recipie/internal/book"
 	"github.com/madamgy/recipie/internal/profile"
 )
@@ -92,7 +93,7 @@ func (h *Handlers) renderBookHTML(w http.ResponseWriter, r *http.Request, s prof
 
 	htmlDoc = buf.Bytes()
 	if meta.Language == "bn" {
-		translated, err := book.TranslateHTML(ctx, htmlDoc, h.drafter, "bn")
+		translated, err := book.TranslateHTML(aidraft.WithUsageBook(ctx, kind), htmlDoc, h.drafter, "bn")
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "translation failed: "+err.Error())
 			return nil, book.Metadata{}, nil, false

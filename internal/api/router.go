@@ -113,12 +113,11 @@ func NewRouter(pool *pgxpool.Pool, drafter aidraft.Drafter, access ...*portal.Se
 		r.Get("/api/profile-matches", h.MatchProfiles)
 		// The set is the primary surface: one run, both books, one profile read. The
 		// per-book routes below remain for fetching one book directly.
-		// Generation from inline inputs: no child id, nothing persisted. The console calls
-		// generate.printed below instead, which returns the PDFs from the same run. The
-		// {childID} routes below serve a profile already in the database.
-		r.Post("/api/books/generate", h.BookGenerate)
-		r.With(security.RequireProfile).Get("/api/books/{childID}/preview", h.BookSetPreview)
-		r.With(security.RequireProfile).Get("/api/books/{childID}/{book}/preview", h.BookPreview)
+        // Generation from inline inputs: no child id, nothing persisted. This is what the
+        // console calls. The {childID} routes below serve a profile already in the database.
+        r.With(bookUsage).Post("/api/books/generate", h.BookGenerate)
+        r.With(security.RequireProfile, bookUsage).Get("/api/books/{childID}/preview", h.BookSetPreview)
+        r.With(security.RequireProfile, bookUsage).Get("/api/books/{childID}/{book}/preview", h.BookPreview)
 	})
 
 	// Printing gets its own timeout. Launching a browser and laying out a 22-page book is
@@ -130,6 +129,7 @@ func NewRouter(pool *pgxpool.Pool, drafter aidraft.Drafter, access ...*portal.Se
 	// four routes rather than raised globally, so a hung query on any other endpoint still
 	// fails in 30s instead of holding a connection for three minutes.
 	r.Group(func(r chi.Router) {
+		r.Use(bookUsage)
 		r.Use(middleware.Timeout(printTimeout))
 		r.Use(security.BrowserWrite)
 		r.Use(security.RequireStaff)

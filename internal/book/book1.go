@@ -175,6 +175,7 @@ type nutritionTargetRow struct {
 // NT00-NT12 rows applies to this child," the same question Book 2's recipe pages already
 // answer for themselves.
 func AssembleBook1(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, asOf time.Time, opts ...AssembleOption) (Book1, []string, error) {
+	ctx = aidraft.WithUsageBook(ctx, "book1")
 	cfg := assembleOptions{drafter: aidraft.Disabled}
 	for _, opt := range opts {
 		opt(&cfg)

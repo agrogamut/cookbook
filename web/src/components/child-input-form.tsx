@@ -118,6 +118,15 @@ function PhotoRow({
   );
 }
 
+// storedLanguage folds a stored free-text language_id onto the two codes the dropdown
+// offers, mirroring internal/book's bookLanguage: only bn/bengali/bangla is Bengali,
+// anything else prints English. Without it a record saved before this field was a
+// dropdown would load showing nothing at all.
+function storedLanguage(id: string | undefined): string {
+  if (!id) return "";
+  return ["bn", "bengali", "bangla"].includes(id.trim().toLowerCase()) ? "bn" : "en";
+}
+
 export function ChildInputForm({
   busy, onGenerate, initialChild,
 }: {
@@ -246,7 +255,7 @@ export function ChildInputForm({
     setName(p.display_name ?? "");
     setDob(p.date_of_birth);
     setSex(p.sex ?? "");
-    setLanguage(p.language_id ?? "");
+    setLanguage(storedLanguage(p.language_id));
     setRegion(p.region_culture ?? "");
     setCuisine(p.cuisine_code ?? "");
     setDiet(p.diet_type ?? "");
@@ -458,8 +467,17 @@ export function ChildInputForm({
               </div>
               <div className={field}>
                 <Label htmlFor="g-lang">Language</Label>
-                <Input id="g-lang" value={language} onChange={(e) => setLanguage(e.target.value)}
-                       placeholder="e.g. bn" className="font-mono" />
+                {/* Two options because two are what the renderer has: internal/book's
+                    bookLanguage resolves "bn" to Bengali and everything else, unset
+                    included, to English. A free-text box offered languages no book
+                    can print. */}
+                <Select value={language} onValueChange={setLanguage}>
+                  <SelectTrigger id="g-lang" className="w-full"><SelectValue placeholder="English" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="en">English</SelectItem>
+                    <SelectItem value="bn">Bengali</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className={field}>
                 <Label htmlFor="g-mother">Mother&apos;s name</Label>
