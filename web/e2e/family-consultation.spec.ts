@@ -64,6 +64,11 @@ test("register, hold, pay, confirm, access and download", async ({
     .first()
     .click();
   await page.getByLabel("Start time").fill("10:00");
+  await expect(page.getByLabel("End time")).toHaveValue("10:30");
+  await expect(page.getByLabel("End time")).toHaveAttribute("max", "10:30");
+  await page.getByLabel("End time").fill("10:31");
+  await page.getByRole("button", { name: "Continue to payment" }).click();
+  await expect(page.getByText("Consultations cannot exceed 30 minutes.", { exact: true })).toBeVisible();
   await page.getByLabel("End time").fill("10:30");
   await page.getByRole("button", { name: "Continue to payment" }).click();
   await expect(
@@ -123,6 +128,10 @@ test("register, hold, pay, confirm, access and download", async ({
   await expect(
     page.getByRole("button", { name: "Confirm", exact: true }),
   ).toBeVisible();
+  await page.getByLabel("End for New Browser Child", { exact: true }).fill(`${fixture.date}T10:31`);
+  await page.getByRole("button", { name: "Confirm", exact: true }).click();
+  await expect(page.getByText("Consultations cannot exceed 30 minutes.", { exact: true })).toBeVisible();
+  await page.getByLabel("End for New Browser Child", { exact: true }).fill(`${fixture.date}T10:30`);
   await page.getByRole("button", { name: "Confirm", exact: true }).click();
   await expect(page.locator('[data-slot="badge"]').filter({ hasText: /^confirmed$/ })).toBeVisible();
   await page
@@ -210,13 +219,17 @@ test("register, hold, pay, confirm, access and download", async ({
     .first()
     .click();
   await page.getByLabel("Start time").fill("11:00");
-  await page.getByLabel("End time").fill("11:30");
+  await expect(page.getByLabel("End time")).toHaveValue("11:30");
+  await expect(page.getByLabel("End time")).toHaveAttribute("max", "11:30");
+  await page.screenshot({ path: path.join(evidence, "booking-thirty-minute-limit.png"), fullPage: true });
   const booking = page.waitForRequest(
     (r) =>
       r.url().endsWith("/api/family/appointments") && r.method() === "POST",
   );
   await page.getByRole("button", { name: "Continue to payment" }).click();
-  expect((await booking).postDataJSON().doctor_id).toBeUndefined();
+  const booked = (await booking).postDataJSON();
+  expect(booked.doctor_id).toBeUndefined();
+  expect(Date.parse(booked.ends_at) - Date.parse(booked.starts_at)).toBe(30 * 60_000);
   await expect(page.getByRole("button", { name: /^Pay / })).toBeVisible();
   await page.getByRole("button", { name: "Cancel request" }).click();
   await expect(

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/date-input";
 import { Label } from "@/components/ui/label";
 import { listPublicDoctors } from "@/lib/api";
+import { consultationDurationError, consultationEnd } from "@/lib/consultation";
 import {
   calendarDayValue,
   errorMessage,
@@ -41,6 +42,12 @@ export function AppointmentWizard({
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState("");
+
+  function endForStart(start: string, interval = selected) {
+    if (!start || !interval) return "";
+    const end = consultationEnd(indiaInstant(date, start), interval.ends_at);
+    return end ? indiaTimeValue(end) : "";
+  }
 
   useEffect(() => {
     let active = true;
@@ -80,6 +87,11 @@ export function AppointmentWizard({
     if (!selected || !starts || !ends) return;
     const start = indiaInstant(date, starts),
       end = indiaInstant(date, ends);
+    const durationError = consultationDurationError(start, end);
+    if (durationError) {
+      setError(durationError);
+      return;
+    }
     if (
       new Date(start) < new Date(selected.starts_at) ||
       new Date(end) > new Date(selected.ends_at) ||
@@ -162,7 +174,7 @@ export function AppointmentWizard({
             onClick={() => {
               setSelected(item);
               setStarts(indiaTimeValue(item.starts_at));
-              setEnds(indiaTimeValue(item.ends_at));
+              setEnds(endForStart(indiaTimeValue(item.starts_at), item));
               setError("");
             }}
           >
@@ -175,7 +187,8 @@ export function AppointmentWizard({
       {selected && (
         <div className="space-y-3 rounded-lg bg-muted p-3">
           <p className="text-sm">
-            Choose your consultation interval within these available hours.
+            Each consultation is limited to 30 minutes. Choose a time within
+            these available hours.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -186,7 +199,11 @@ export function AppointmentWizard({
                 value={starts}
                 min={indiaTimeValue(selected.starts_at)}
                 max={indiaTimeValue(selected.ends_at)}
-                onChange={(e) => setStarts(e.target.value)}
+                onChange={(e) => {
+                  setStarts(e.target.value);
+                  setEnds(endForStart(e.target.value));
+                  setError("");
+                }}
               />
             </div>
             <div>
@@ -196,7 +213,7 @@ export function AppointmentWizard({
                 type="time"
                 value={ends}
                 min={starts}
-                max={indiaTimeValue(selected.ends_at)}
+                max={endForStart(starts)}
                 onChange={(e) => setEnds(e.target.value)}
               />
             </div>

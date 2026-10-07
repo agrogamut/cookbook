@@ -60,6 +60,8 @@ Families pay immediately after choosing a time from either the public intake rec
 
 Doctors publish half-open availability ranges from `/doctor`, using Asia/Kolkata in the browser and `timestamptz` in Postgres. Administrators can create, edit and revoke any active doctor's blocks. The database exclusion constraint rejects overlapping active blocks.
 
+Each consultation can last at most 30 minutes. Selecting availability defaults to 30 minutes or the remaining free time when shorter. Changing the start time updates that end limit. Public, family and administrator booking routes, including confirmation and rescheduling, reject longer intervals on the server. Doctor availability blocks can still span a full working day. Existing appointments are not automatically shortened.
+
 Family booking requests begin as `awaiting_payment` with a 15-minute hold. A captured payment advances them to `paid_pending_admin`; only then can an administrator confirm. A time-range request selects an eligible free doctor by fewest confirmed appointments in that India-calendar week, then staff identifier. A specific-doctor request only considers that doctor's free interval. Active requests hold their interval, and a second overlapping request returns no available slot. Confirmation assigns the doctor and changes the registration to `scheduled`; rejection and cancellation release the interval. A payment that arrives after an expired hold is marked `refund_required` for staff follow-up.
 
 ## Data and access boundaries

@@ -103,7 +103,7 @@ func TestFamilyBookingReleaseAndRoleBoundaries(t *testing.T) {
 		VALUES ($1,$2,$3,$4,'specific_doctor','confirmed',$5)`, registrationThree, doctorOne.ID, start.Add(-2*time.Hour), start.Add(-time.Hour), admin.ID); err != nil {
 		t.Fatal(err)
 	}
-	booking := map[string]string{"registration_id": registrationOne, "starts_at": start.Add(time.Hour).Format(time.RFC3339), "ends_at": start.Add(2 * time.Hour).Format(time.RFC3339)}
+	booking := map[string]string{"registration_id": registrationOne, "starts_at": start.Add(time.Hour).Format(time.RFC3339), "ends_at": start.Add(90 * time.Minute).Format(time.RFC3339)}
 	w := portalRequest(router, "POST", "/api/family/appointments", booking, familyOneCookie, "")
 	expectCode(t, w, 201)
 	appointmentOne := decodeResponse[map[string]string](t, w)["id"]
@@ -124,13 +124,13 @@ func TestFamilyBookingReleaseAndRoleBoundaries(t *testing.T) {
 	}
 
 	// A specific-doctor request uses doctor one, whose earlier confirmed appointment does not overlap.
-	specific := map[string]string{"registration_id": registrationTwo, "doctor_id": doctorOne.ID, "starts_at": start.Add(time.Hour).Format(time.RFC3339), "ends_at": start.Add(2 * time.Hour).Format(time.RFC3339)}
+	specific := map[string]string{"registration_id": registrationTwo, "doctor_id": doctorOne.ID, "starts_at": start.Add(time.Hour).Format(time.RFC3339), "ends_at": start.Add(90 * time.Minute).Format(time.RFC3339)}
 	w = portalRequest(router, "POST", "/api/family/appointments", specific, familyTwoCookie, "")
 	expectCode(t, w, 201)
 	appointmentTwo := decodeResponse[map[string]string](t, w)["id"]
 	// Both doctors are now held, so a third request fails honestly.
 	registrationFour := createRegistration(familyOneCookie, "Child Four")
-	noFree := map[string]string{"registration_id": registrationFour, "starts_at": start.Add(time.Hour).Format(time.RFC3339), "ends_at": start.Add(2 * time.Hour).Format(time.RFC3339)}
+	noFree := map[string]string{"registration_id": registrationFour, "starts_at": start.Add(time.Hour).Format(time.RFC3339), "ends_at": start.Add(90 * time.Minute).Format(time.RFC3339)}
 	expectCode(t, portalRequest(router, "POST", "/api/family/appointments", noFree, familyOneCookie, ""), 409)
 
 	expectCode(t, portalRequest(router, "POST", "/api/admin/appointments/"+appointmentOne+"/decision", map[string]string{"action": "confirm"}, doctorCookie, ""), 403)
@@ -145,7 +145,7 @@ func TestFamilyBookingReleaseAndRoleBoundaries(t *testing.T) {
 	expectCode(t, portalRequest(router, "POST", "/api/admin/appointments/"+appointmentTwo+"/decision", map[string]string{"action": "reject"}, adminCookie, ""), 200)
 	expectCode(t, portalRequest(router, "POST", "/api/admin/appointments/"+appointmentOne+"/decision", map[string]string{
 		"action": "reschedule", "doctor_id": doctorOne.ID,
-		"starts_at": start.Add(time.Hour).Format(time.RFC3339), "ends_at": start.Add(2 * time.Hour).Format(time.RFC3339),
+		"starts_at": start.Add(time.Hour).Format(time.RFC3339), "ends_at": start.Add(90 * time.Minute).Format(time.RFC3339),
 	}, adminCookie, ""), 200)
 	if err := pool.QueryRow(ctx, `SELECT doctor_id::text,status FROM app_private.appointment WHERE id=$1`, appointmentOne).Scan(&assigned, &status); err != nil {
 		t.Fatal(err)

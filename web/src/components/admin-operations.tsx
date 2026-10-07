@@ -15,6 +15,7 @@ import {
   listStaff,
 } from "@/lib/api";
 import { errorMessage, indiaInstant, money } from "@/lib/portal-utils";
+import { consultationDurationError } from "@/lib/consultation";
 import type {
   Appointment,
   BookRelease,
@@ -105,6 +106,13 @@ export function AdminOperations() {
     setError("");
     try {
       const change = changeFor(item);
+      if (action === "confirm" || action === "reschedule") {
+        const durationError = consultationDurationError(
+          indiaInstant(change.starts.slice(0, 10), change.starts.slice(11, 16)),
+          indiaInstant(change.ends.slice(0, 10), change.ends.slice(11, 16)),
+        );
+        if (durationError) throw new Error(durationError);
+      }
       await decideAppointment(
         item.id,
         action === "confirm" || action === "reschedule"
@@ -193,7 +201,7 @@ export function AdminOperations() {
           <h2 className="text-base font-semibold">Booking requests</h2>
           <p className="text-xs text-muted-foreground">
             Payment must be captured before a request can be confirmed. All
-            times are IST.
+            times are IST. Consultations cannot exceed 30 minutes.
           </p>
         </div>
         <label className="block text-sm">

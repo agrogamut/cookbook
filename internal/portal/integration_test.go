@@ -264,7 +264,7 @@ func TestPortalPersistenceAndAuthorization(t *testing.T) {
 	expectCode(t, portalRequest(router, "POST", publicPath+"/order", map[string]string{}, nil, token()), 404)
 	expectCode(t, portalRequest(router, "POST", publicPath+"/order", map[string]string{}, nil, input.Token), 409)
 	slotStart := time.Now().Add(48 * time.Hour).Truncate(time.Minute)
-	slotEnd := slotStart.Add(time.Hour)
+	slotEnd := slotStart.Add(30 * time.Minute)
 	expectCode(t, portalRequest(router, "POST", "/api/availability", map[string]string{"doctor_id": actors[1].ID, "starts_at": slotStart.Format(time.RFC3339), "ends_at": slotEnd.Format(time.RFC3339)}, admin, ""), 200)
 	expectCode(t, portalRequest(router, "POST", publicPath+"/appointment", map[string]string{"doctor_id": actors[1].ID, "starts_at": slotStart.Format(time.RFC3339), "ends_at": slotEnd.Format(time.RFC3339)}, nil, input.Token), 201)
 	var wait sync.WaitGroup

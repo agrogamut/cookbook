@@ -21,6 +21,8 @@ var (
 
 var indiaTime = time.FixedZone("Asia/Kolkata", 5*60*60+30*60)
 
+const maxConsultationDuration = 30 * time.Minute
+
 type Availability struct {
 	ID         string    `json:"id"`
 	DoctorID   string    `json:"doctor_id"`
@@ -80,6 +82,16 @@ func parseInstant(value string) (time.Time, error) {
 func validInterval(startsAt, endsAt time.Time) error {
 	if startsAt.IsZero() || endsAt.IsZero() || !endsAt.After(startsAt) {
 		return errors.New("end time must be after start time")
+	}
+	return nil
+}
+
+func validAppointmentInterval(startsAt, endsAt time.Time) error {
+	if err := validInterval(startsAt, endsAt); err != nil {
+		return err
+	}
+	if endsAt.Sub(startsAt) > maxConsultationDuration {
+		return errors.New("Consultations cannot exceed 30 minutes.")
 	}
 	return nil
 }
@@ -444,7 +456,7 @@ func (s *Server) insertAppointment(ctx context.Context, tx pgx.Tx, registrationI
 	if !startsAt.After(time.Now()) {
 		return "", ErrNoAvailableSlot
 	}
-	if err := validInterval(startsAt, endsAt); err != nil {
+	if err := validAppointmentInterval(startsAt, endsAt); err != nil {
 		return "", err
 	}
 	doctorID, err := s.chooseDoctor(ctx, tx, startsAt, endsAt, requestedDoctor, "")
@@ -488,7 +500,7 @@ func (s *Server) createAppointment(w http.ResponseWriter, r *http.Request, famil
 		fail(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := validInterval(startsAt, endsAt); err != nil {
+	if err := validAppointmentInterval(startsAt, endsAt); err != nil {
 		fail(w, 400, err.Error())
 		return
 	}
@@ -631,7 +643,7 @@ func (s *Server) CreatePublicAppointment(w http.ResponseWriter, r *http.Request)
 		fail(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := validInterval(startsAt, endsAt); err != nil {
+	if err := validAppointmentInterval(startsAt, endsAt); err != nil {
 		fail(w, 400, err.Error())
 		return
 	}
@@ -898,7 +910,7 @@ func (s *Server) DecideAppointment(w http.ResponseWriter, r *http.Request) {
 			fail(w, 400, "Choose a future appointment time.")
 			return
 		}
-		if err = validInterval(startsAt, endsAt); err != nil {
+		if err = validAppointmentInterval(startsAt, endsAt); err != nil {
 			fail(w, http.StatusBadRequest, err.Error())
 			return
 		}
