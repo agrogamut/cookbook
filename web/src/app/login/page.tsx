@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 };
 export default function LoginPage() {
   return (
-    <main className="flex min-h-svh items-center justify-center bg-[#fff0f4] p-6 text-[#58293b]">
+    <main className="family-surface flex min-h-svh items-center justify-center bg-[#fff0f4] p-6 text-[#58293b]">
       <section className="w-full max-w-md rounded-xl border border-[#edc6d3] bg-[#fff9fb] p-8 shadow-sm">
         <Link href="/">
           <Image

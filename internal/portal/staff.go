@@ -99,7 +99,7 @@ func (s *Server) UpdateStaff(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "Enter a name of at most 100 characters.")
 		return
 	}
-	tx, err := s.pool.Begin(r.Context())
+	tx, err := s.beginBookingTx(r.Context())
 	if err != nil {
 		serverError(w, err)
 		return
@@ -119,9 +119,9 @@ func (s *Server) UpdateStaff(w http.ResponseWriter, r *http.Request) {
 			serverError(w, err)
 			return
 		}
-		if _, err = tx.Exec(r.Context(), `UPDATE app_private.appointment
-			SET status='cancelled',decided_by=$2,updated_at=now()
-			WHERE doctor_id=$1 AND status IN ('pending_admin','confirmed')`, id, Current(r.Context()).ID); err != nil {
+		if _, err = tx.Exec(r.Context(), `UPDATE app_private.appointment a
+			SET status=CASE WHEN EXISTS(SELECT 1 FROM app_private.consultation_order o WHERE o.appointment_id=a.id AND o.status IN ('paid','partially_refunded')) THEN 'refund_required' ELSE 'cancelled' END,hold_expires_at=NULL,decided_by=$2,updated_at=now()
+			WHERE doctor_id=$1 AND status IN ('awaiting_payment','pending_admin','paid_pending_admin','confirmed')`, id, Current(r.Context()).ID); err != nil {
 			serverError(w, err)
 			return
 		}

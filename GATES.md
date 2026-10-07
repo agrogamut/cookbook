@@ -76,3 +76,25 @@ Scope: Separate family accounts, transactional doctor availability and booking, 
   EXPECT: portal-review-build-gate-passed
   CWD: web
   EVIDENCE: exit=0; shell=/usr/bin/fish; cwd=/home/ghoul/.ao/data/worktrees/recipie/recipie-3/web; path=b08d56a2bdca/35 entries; output=ƒ  (Dynamic)  server-rendered on demand | portal-review-build-gate-passed
+
+## Paid consultation flow implementation
+
+Scope: public and family scheduling, mandatory captured payment, protected child access, admin decisions and refunds.
+
+- [x] G15: Database-backed portal tests pass with PostgreSQL.
+  EVIDENCE: 2026-10-07, `PORTAL_TEST_DATABASE_URL` set to a disposable PostgreSQL 16 database. Portal tests passed, including concurrency, late capture, refunds, rebooking, sibling isolation and migration down/up preservation. The earlier 2026-10-04 run did not set this variable and skipped integration tests.
+
+- [x] G16: Full Go suite, build and vet pass.
+  EVIDENCE: 2026-10-07, `go test ./... -count=1` with the portal database enabled, `go build ./...` and `go vet ./...` exited 0. Corpus-dependent tests without their separate data configuration remain outside this portal check.
+
+- [x] G17: Frontend tests, lint and type checking pass.
+  EVIDENCE: 2026-10-07, 49 component/unit tests passed; lint and TypeScript checks exited 0.
+
+- [x] G18: Production frontend build passes.
+  EVIDENCE: 2026-10-07, `pnpm exec next build --webpack` exited 0 and generated all routes.
+
+- [x] G19: Browser E2E exercises registration through payment, admin confirmation and protected download.
+  EVIDENCE: 2026-10-07, Playwright journey passed against the real Next.js application, Go handlers and PostgreSQL with simulated external providers. Includes any-doctor booking/cancellation and screenshots at 360, 768 and 1440 pixels. Screenshots and recording: `docs/evidence/consultation-flow/`.
+
+- [ ] G20: Hosted smoke checks and controlled Razorpay test-account transaction.
+  EVIDENCE: publication and hosted checks pending. Local provider simulation does not establish real gateway settlement.

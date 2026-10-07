@@ -16,6 +16,7 @@ const registration: FamilyRegistration = {
   appointment_status: null,
   appointment_starts_at: null,
   appointment_ends_at: null,
+  appointment_hold_expires_at: null,
   book1_release_id: "release-1",
   book1_status: "pending_admin",
   book2_release_id: "release-2",
@@ -35,11 +36,11 @@ describe("FamilyRegistrationCard", () => {
       />,
     );
     expect(screen.queryByRole("button", { name: /download/i })).toBeNull();
-    expect(screen.getByText("Book 1: pending_admin")).toBeInTheDocument();
+    expect(screen.getByText("Book 1: pending admin")).toBeInTheDocument();
     expect(screen.getByText("Book 2: rejected")).toBeInTheDocument();
   });
 
-  it("allows payment retry and rebooking after a rejected request", () => {
+  it("requires a new time before payment after a rejected request", () => {
     render(
       <FamilyRegistrationCard
         registration={{ ...registration, payment_status: "failed", appointment_status: "rejected", book1_release_id: null, book1_status: null, book2_release_id: null, book2_status: null }}
@@ -49,7 +50,7 @@ describe("FamilyRegistrationCard", () => {
         onCancel={vi.fn()}
       />,
     );
-    expect(screen.getByRole("button", { name: /pay/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /pay/i })).toBeNull();
     expect(screen.getByRole("button", { name: /book a consultation/i })).toBeInTheDocument();
   });
 });

@@ -2,13 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, LockKeyhole } from "lucide-react";
+import { AppointmentWizard, type BookingChoice } from "./appointment-wizard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  cancelPublicAppointment,
+  createPublicAppointment,
   createCheckoutOrder,
   getPublicSettings,
   getRegistrationStatus,
+  listPublicAvailability,
   registerConsultation,
   verifyCheckout,
 } from "@/lib/api";
@@ -20,10 +24,14 @@ import {
   newRegistrationToken,
   paymentLabels,
 } from "@/lib/portal-utils";
+import { useHoldClock } from "@/lib/use-hold-clock";
 import { loadCheckout } from "@/lib/checkout";
-import type { PaymentStatus, PublicSettings } from "@/lib/portal-types";
+import type {
+  PublicRegistrationStatus,
+  PublicSettings,
+} from "@/lib/portal-types";
 
-type Receipt = { id: string; token: string; payment_status: PaymentStatus };
+type Receipt = { id: string; token: string } & PublicRegistrationStatus;
 const receiptKey = "madamgy.consultation.receipt";
 const emptyForm = {
   guardian_name: "",
@@ -41,14 +49,23 @@ function forgetReceipt() {
   }
 }
 
+function displayInstant(value: string) {
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
 export function ConsultationForm() {
+  const today = calendarDate();
   const [form, setForm] = useState(emptyForm);
   const [settings, setSettings] = useState<PublicSettings | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
+  const hold = useHoldClock(receipt?.hold_expires_at);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const formToken = useRef("");
-  const today = calendarDate();
   const age = ageFromBirth(form.date_of_birth, today);
 
   useEffect(() => {
@@ -69,6 +86,22 @@ export function ConsultationForm() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!receipt?.id || !receipt?.token) return;
+    const id = receipt.id,
+      token = receipt.token;
+    const timer = window.setInterval(() => {
+      getRegistrationStatus(id, token)
+        .then((status) => {
+          setReceipt((current) =>
+            current?.id === id ? { ...current, ...status } : current,
+          );
+        })
+        .catch(() => {});
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [receipt?.id, receipt?.token]);
+
   function remember(next: Receipt) {
     setReceipt(next);
     try {
@@ -83,6 +116,44 @@ export function ConsultationForm() {
     setBusy(true);
     setMessage("");
     try {
+      remember({
+        ...receipt,
+        ...(await getRegistrationStatus(receipt.id, receipt.token)),
+      });
+    } catch (e) {
+      setMessage(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function schedule(choice: BookingChoice) {
+    if (!receipt || busy) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      await createPublicAppointment(receipt.id, receipt.token, choice);
+      remember({
+        ...receipt,
+        ...(await getRegistrationStatus(receipt.id, receipt.token)),
+      });
+    } catch (e) {
+      setMessage(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelAppointment() {
+    if (!receipt?.appointment_id || busy) return;
+    setBusy(true);
+    setMessage("");
+    try {
+      await cancelPublicAppointment(
+        receipt.id,
+        receipt.appointment_id,
+        receipt.token,
+      );
       remember({
         ...receipt,
         ...(await getRegistrationStatus(receipt.id, receipt.token)),
@@ -140,7 +211,7 @@ export function ConsultationForm() {
           ondismiss: () => {
             setBusy(false);
             setMessage(
-              "Your registration is saved. You can complete payment whenever you are ready.",
+              "Your registration is saved. Complete payment before the hold expires, or choose another time.",
             );
           },
         },
@@ -187,15 +258,22 @@ export function ConsultationForm() {
   });
 
   if (receipt) {
-    const paid =
-      receipt.payment_status === "paid" ||
-      receipt.payment_status === "partially_refunded";
-    const canPay = ["unpaid", "pending", "failed"].includes(
-      receipt.payment_status,
-    );
+    const paid = receipt.payment_status === "paid";
+    const canPay =
+      Boolean(receipt.appointment_id) &&
+      ["awaiting_payment", "pending_admin"].includes(
+        receipt.appointment_status ?? "",
+      ) &&
+      !hold.expired &&
+      ["unpaid", "pending", "failed"].includes(receipt.payment_status);
+    const canSchedule =
+      !receipt.appointment_id ||
+      ["rejected", "cancelled", "expired", "refunded"].includes(
+        receipt.appointment_status ?? "",
+      );
     return (
       <section
-        className="intake-panel"
+        className="intake-panel family-surface"
         id="consultation"
         aria-labelledby="registered-title"
       >
@@ -204,8 +282,8 @@ export function ConsultationForm() {
         </div>
         <h2 id="registered-title">Your request is with us.</h2>
         <p className="intake-intro">
-          MadamGY staff can now arrange your doctor consultation using the
-          contact details you shared.
+          Choose your consultation time and pay. The team will then confirm your
+          appointment.
         </p>
         <div className="receipt-row">
           <span>Payment</span>
@@ -213,19 +291,56 @@ export function ConsultationForm() {
         </div>
         <p className="receipt-reference">Reference: {receipt.id}</p>
         <p className="field-hint">
-          Keep this private token if you want to attach this request to a family
-          account later: <code>{receipt.token}</code>
+          Save this private token to open your child’s portal with their full
+          name and date of birth:{" "}
+          <code className="block break-all rounded-md border p-2 mt-2">
+            {receipt.token}
+          </code>
         </p>
-        {paid ? (
-          <p className="confirmation-note">
-            Payment received. Your consultation time will be arranged
-            separately.
+        {receipt.appointment_id && (
+          <div className="receipt-row">
+            <span>Appointment</span>
+            <strong>{receipt.appointment_status?.replaceAll("_", " ")}</strong>
+          </div>
+        )}
+        {receipt.hold_expires_at &&
+          receipt.appointment_status === "awaiting_payment" && (
+            <p className="field-hint">
+              {hold.expired
+                ? "This hold has expired. Refresh to choose another time."
+                : `Time remaining to pay: ${hold.label}. Held until ${displayInstant(receipt.hold_expires_at)} IST.`}
+            </p>
+          )}
+        {receipt.doctor_name && (
+          <p className="text-sm">
+            {receipt.doctor_name}
+            {receipt.appointment_starts_at &&
+              `, ${displayInstant(receipt.appointment_starts_at)} IST`}
           </p>
-        ) : canPay && settings?.checkout_available ? (
+        )}
+        {settings?.amount_paise != null && (
+          <p className="text-sm font-medium">
+            Consultation fee: {money(settings.amount_paise, settings.currency)}
+          </p>
+        )}
+        {canSchedule && (
+          <div className="schedule-panel">
+            <h3>Choose a consultation time</h3>
+            <AppointmentWizard
+              loadAvailability={listPublicAvailability}
+              onBook={schedule}
+              busy={busy}
+            />
+          </div>
+        )}
+        {receipt.appointment_id &&
+        !paid &&
+        canPay &&
+        settings?.checkout_available ? (
           <>
             <p className="payment-intro">
-              You can pay for the consultation now, or discuss payment with the
-              team.
+              Your time is held for 15 minutes. Payment is required before the
+              team can confirm this appointment.
             </p>
             <Button className="landing-button" disabled={busy} onClick={pay}>
               {busy
@@ -233,9 +348,32 @@ export function ConsultationForm() {
                 : `Pay ${money(settings.amount_paise, settings.currency)} for consultation`}
             </Button>
             <p className="field-hint">
-              Secure checkout with Razorpay. Payment is optional.
+              Secure checkout with Razorpay. Your booking is not confirmed until
+              payment is captured and the team approves the time.
             </p>
           </>
+        ) : receipt.appointment_status === "refund_required" ? (
+          <p className="confirmation-note">
+            This time is no longer booked. Your payment needs a refund. Contact
+            the team with your reference.
+          </p>
+        ) : receipt.appointment_status === "confirmed" ? (
+          <p className="confirmation-note">Your appointment is confirmed.</p>
+        ) : paid ? (
+          <p className="confirmation-note">
+            Payment received. Your appointment is waiting for the team’s
+            confirmation.
+          </p>
+        ) : receipt.appointment_status === "paid_pending_admin" ? (
+          <p className="confirmation-note">
+            Payment received. Your appointment is waiting for the team’s
+            confirmation.
+          </p>
+        ) : receipt.appointment_id &&
+          receipt.appointment_status === "awaiting_payment" ? (
+          <p className="payment-intro">
+            Complete payment before the hold expires to keep this time.
+          </p>
         ) : (
           <p className="payment-intro">
             {receipt.payment_status === "authorized"
@@ -245,6 +383,19 @@ export function ConsultationForm() {
                 : "Online payment is not available right now. The team can discuss payment with you."}
           </p>
         )}
+        {receipt.appointment_id &&
+          ["awaiting_payment", "pending_admin"].includes(
+            receipt.appointment_status ?? "",
+          ) && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={cancelAppointment}
+              disabled={busy}
+            >
+              Release this time
+            </Button>
+          )}
         {message && (
           <p role="status" className="form-message">
             {message}
@@ -264,18 +415,18 @@ export function ConsultationForm() {
 
   return (
     <section
-      className="intake-panel"
+      className="intake-panel family-surface"
       id="consultation"
       aria-labelledby="intake-title"
     >
       <div className="intake-step">
         <span>1. Your details</span>
-        <span>2. Optional payment</span>
+        <span>2. Schedule and payment</span>
       </div>
       <h2 id="intake-title">Let’s start with your child.</h2>
       <p className="intake-intro">
-        Request a consultation. Our team will contact you to arrange the next
-        step.
+        Register your child, choose an available doctor and time, then pay
+        securely.
       </p>
       <form onSubmit={submit}>
         <fieldset disabled={busy} className="intake-fields">

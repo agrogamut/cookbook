@@ -39,18 +39,27 @@ type FreeInterval struct {
 }
 
 type Appointment struct {
-	ID             string    `json:"id"`
-	RegistrationID string    `json:"registration_id"`
-	ChildName      string    `json:"child_name"`
-	DoctorID       string    `json:"doctor_id"`
-	DoctorName     string    `json:"doctor_name"`
-	StartsAt       time.Time `json:"starts_at"`
-	EndsAt         time.Time `json:"ends_at"`
-	Mode           string    `json:"mode"`
-	Status         string    `json:"status"`
-	RequestedBy    string    `json:"requested_by"`
-	DecidedBy      string    `json:"decided_by"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID             string     `json:"id"`
+	RegistrationID string     `json:"registration_id"`
+	ChildName      string     `json:"child_name"`
+	DoctorID       string     `json:"doctor_id"`
+	DoctorName     string     `json:"doctor_name"`
+	StartsAt       time.Time  `json:"starts_at"`
+	EndsAt         time.Time  `json:"ends_at"`
+	Mode           string     `json:"mode"`
+	Status         string     `json:"status"`
+	PaymentStatus  string     `json:"payment_status"`
+	RequestedBy    string     `json:"requested_by"`
+	DecidedBy      string     `json:"decided_by"`
+	HoldExpiresAt  *time.Time `json:"hold_expires_at"`
+	CreatedAt      time.Time  `json:"created_at"`
+	GuardianName   string     `json:"guardian_name"`
+	Phone          string     `json:"phone"`
+	OrderID        string     `json:"order_id"`
+	PaymentID      string     `json:"payment_id"`
+	RefundID       string     `json:"refund_id"`
+	AmountPaise    *int       `json:"amount_paise"`
+	RefundedPaise  int        `json:"refunded_paise"`
 }
 
 type appointmentInput struct {
@@ -225,6 +234,9 @@ func (s *Server) ListFamilyAvailability(w http.ResponseWriter, r *http.Request) 
 		fail(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if now := time.Now().Truncate(time.Minute).Add(time.Minute); start.Before(now) {
+		start = now
+	}
 	doctorID := strings.TrimSpace(r.URL.Query().Get("doctor_id"))
 	rows, err := s.pool.Query(r.Context(), `SELECT v.doctor_id,d.name,v.starts_at,v.ends_at
 		FROM app_private.doctor_availability v JOIN app_private.staff_account d ON d.id=v.doctor_id
@@ -293,6 +305,29 @@ func (s *Server) ListFamilyAvailability(w http.ResponseWriter, r *http.Request) 
 	respond(w, http.StatusOK, free)
 }
 
+func (s *Server) PublicDoctors(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.pool.Query(r.Context(), `SELECT id,name FROM app_private.staff_account WHERE active AND role='doctor' ORDER BY name,id`)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	defer rows.Close()
+	items := make([]map[string]string, 0)
+	for rows.Next() {
+		var id, name string
+		if err := rows.Scan(&id, &name); err != nil {
+			serverError(w, err)
+			return
+		}
+		items = append(items, map[string]string{"id": id, "name": name})
+	}
+	if err := rows.Err(); err != nil {
+		serverError(w, err)
+		return
+	}
+	respond(w, http.StatusOK, items)
+}
+
 type bookedInterval struct {
 	startsAt time.Time
 	endsAt   time.Time
@@ -302,7 +337,10 @@ func (s *Server) loadBookedIntervals(ctx context.Context, source interface {
 	Query(context.Context, string, ...any) (pgx.Rows, error)
 }, start, end time.Time, doctorID string) (map[string][]bookedInterval, error) {
 	rows, err := source.Query(ctx, `SELECT doctor_id,starts_at,ends_at
-		FROM app_private.appointment WHERE status IN ('pending_admin','confirmed')
+		FROM app_private.appointment WHERE (
+			status IN ('pending_admin','paid_pending_admin','confirmed') OR
+			(status='awaiting_payment' AND (hold_expires_at IS NULL OR hold_expires_at > now()))
+		)
 		AND ends_at>$1 AND starts_at<$2 AND ($3='' OR doctor_id::text=$3) ORDER BY doctor_id,starts_at`, start, end, doctorID)
 	if err != nil {
 		return nil, err
@@ -378,7 +416,10 @@ func (s *Server) chooseDoctor(ctx context.Context, tx pgx.Tx, startsAt, endsAt t
 		}
 		var occupied bool
 		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app_private.appointment
-			WHERE doctor_id=$1 AND status IN ('pending_admin','confirmed')
+			WHERE doctor_id=$1 AND (
+				status IN ('pending_admin','paid_pending_admin','confirmed') OR
+				(status='awaiting_payment' AND (hold_expires_at IS NULL OR hold_expires_at > now()))
+			)
 			AND tstzrange(starts_at,ends_at,'[)') && tstzrange($2,$3,'[)')
 			AND ($4='' OR id::text<>$4))`, id, startsAt, endsAt, excludeArg).Scan(&occupied); err != nil {
 			return "", fmt.Errorf("check doctor overlap: %w", err)
@@ -399,7 +440,10 @@ func (s *Server) chooseDoctor(ctx context.Context, tx pgx.Tx, startsAt, endsAt t
 	return scores[0].id, nil
 }
 
-func (s *Server) insertAppointment(ctx context.Context, tx pgx.Tx, registrationID, requestedBy, requestedDoctor string, startsAt, endsAt time.Time, mode, status string) (string, error) {
+func (s *Server) insertAppointment(ctx context.Context, tx pgx.Tx, registrationID, requestedBy, requestedDoctor string, startsAt, endsAt time.Time, mode, status string, holdExpiresAt *time.Time) (string, error) {
+	if !startsAt.After(time.Now()) {
+		return "", ErrNoAvailableSlot
+	}
 	if err := validInterval(startsAt, endsAt); err != nil {
 		return "", err
 	}
@@ -408,8 +452,8 @@ func (s *Server) insertAppointment(ctx context.Context, tx pgx.Tx, registrationI
 		return "", err
 	}
 	var id string
-	err = tx.QueryRow(ctx, `INSERT INTO app_private.appointment(registration_id,doctor_id,starts_at,ends_at,mode,status,requested_by)
-		VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`, registrationID, doctorID, startsAt, endsAt, mode, status, requestedBy).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO app_private.appointment(registration_id,doctor_id,starts_at,ends_at,mode,status,requested_by,hold_expires_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, registrationID, doctorID, startsAt, endsAt, mode, status, requestedBy, holdExpiresAt).Scan(&id)
 	if isPgError(err, "23P01") || isPgError(err, "23505") {
 		return "", ErrNoAvailableSlot
 	}
@@ -418,7 +462,7 @@ func (s *Server) insertAppointment(ctx context.Context, tx pgx.Tx, registrationI
 
 func (s *Server) familyRegistrationTx(ctx context.Context, tx pgx.Tx, registrationID, guardianID string) error {
 	var found string
-	err := tx.QueryRow(ctx, `SELECT id FROM app_private.consultation_registration WHERE id=$1 AND guardian_id=$2 FOR UPDATE`, registrationID, guardianID).Scan(&found)
+	err := tx.QueryRow(ctx, `SELECT id FROM app_private.consultation_registration WHERE id=$1 AND guardian_id=$2 AND ($3='' OR id::text=$3) FOR UPDATE`, registrationID, guardianID, CurrentGuardian(ctx).RegistrationID).Scan(&found)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return pgx.ErrNoRows
 	}
@@ -444,11 +488,19 @@ func (s *Server) createAppointment(w http.ResponseWriter, r *http.Request, famil
 		fail(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if err := validInterval(startsAt, endsAt); err != nil {
+		fail(w, 400, err.Error())
+		return
+	}
+	if !startsAt.After(time.Now()) {
+		fail(w, 400, "Choose a future appointment time.")
+		return
+	}
 	if body.DoctorID != "" && !validUUID(body.DoctorID) {
 		fail(w, http.StatusBadRequest, "Choose a doctor from the available intervals.")
 		return
 	}
-	tx, err := s.pool.Begin(r.Context())
+	tx, err := s.beginBookingTx(r.Context())
 	if err != nil {
 		serverError(w, err)
 		return
@@ -480,8 +532,16 @@ func (s *Server) createAppointment(w http.ResponseWriter, r *http.Request, famil
 			return
 		}
 	}
+	if _, err = tx.Exec(r.Context(), `UPDATE app_private.appointment SET status='expired',updated_at=now()
+		WHERE status='awaiting_payment' AND hold_expires_at IS NOT NULL AND hold_expires_at <= now()`); err != nil {
+		serverError(w, err)
+		return
+	}
 	var active bool
-	err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM app_private.appointment WHERE registration_id=$1 AND status IN ('pending_admin','confirmed'))`, body.RegistrationID).Scan(&active)
+	err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM app_private.appointment WHERE registration_id=$1 AND (
+		status IN ('pending_admin','paid_pending_admin','confirmed') OR
+		(status='awaiting_payment' AND (hold_expires_at IS NULL OR hold_expires_at > now()))
+	))`, body.RegistrationID).Scan(&active)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -498,7 +558,14 @@ func (s *Server) createAppointment(w http.ResponseWriter, r *http.Request, famil
 	if family {
 		requestedBy = CurrentGuardian(r.Context()).ID
 	}
-	id, err := s.insertAppointment(r.Context(), tx, body.RegistrationID, requestedBy, body.DoctorID, startsAt, endsAt, mode, "pending_admin")
+	status := "pending_admin"
+	var holdExpiresAt *time.Time
+	if family {
+		status = "awaiting_payment"
+		expires := minTime(time.Now().Add(15*time.Minute), startsAt)
+		holdExpiresAt = &expires
+	}
+	id, err := s.insertAppointment(r.Context(), tx, body.RegistrationID, requestedBy, body.DoctorID, startsAt, endsAt, mode, status, holdExpiresAt)
 	if err != nil {
 		if errors.Is(err, ErrNoAvailableSlot) {
 			fail(w, http.StatusConflict, "No doctor is free for that entire interval.")
@@ -507,15 +574,180 @@ func (s *Server) createAppointment(w http.ResponseWriter, r *http.Request, famil
 		serverError(w, err)
 		return
 	}
+	responseStatus := status
+	var paymentStatus string
+	if err = tx.QueryRow(r.Context(), `SELECT status FROM app_private.consultation_order WHERE registration_id=$1 AND appointment_id IS NULL AND status='paid'`, body.RegistrationID).Scan(&paymentStatus); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		serverError(w, err)
+		return
+	}
+	if paymentStatus == "paid" {
+		if _, err = tx.Exec(r.Context(), `UPDATE app_private.consultation_order SET appointment_id=$2 WHERE registration_id=$1 AND appointment_id IS NULL AND status='paid'`, body.RegistrationID, id); err != nil {
+			serverError(w, err)
+			return
+		}
+		if _, err = tx.Exec(r.Context(), `UPDATE app_private.appointment SET status='paid_pending_admin',hold_expires_at=NULL,updated_at=now() WHERE id=$1`, id); err != nil {
+			serverError(w, err)
+			return
+		}
+		responseStatus = "paid_pending_admin"
+		holdExpiresAt = nil
+	}
 	if err := tx.Commit(r.Context()); err != nil {
 		serverError(w, err)
 		return
 	}
-	respond(w, http.StatusCreated, map[string]string{"id": id, "status": "pending_admin"})
+	respond(w, http.StatusCreated, map[string]any{"id": id, "status": responseStatus, "hold_expires_at": holdExpiresAt})
 }
 
 func (s *Server) CreateFamilyAppointment(w http.ResponseWriter, r *http.Request) {
 	s.createAppointment(w, r, true)
+}
+
+// CreatePublicAppointment keeps the first visit account-free while still
+// binding the booking to the private registration token issued at intake.
+func (s *Server) CreatePublicAppointment(w http.ResponseWriter, r *http.Request) {
+	var body appointmentInput
+	if !decode(w, r, &body) {
+		return
+	}
+	registrationID := chi.URLParam(r, "id")
+	secret := r.Header.Get("X-Registration-Token")
+	if body.RegistrationID != "" && body.RegistrationID != registrationID {
+		fail(w, http.StatusNotFound, "Registration not found.")
+		return
+	}
+	body.RegistrationID = registrationID
+	if !validUUID(registrationID) || !validToken(secret) {
+		fail(w, http.StatusNotFound, "Registration not found.")
+		return
+	}
+	startsAt, err := parseInstant(body.StartsAt)
+	if err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	endsAt, err := parseInstant(body.EndsAt)
+	if err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := validInterval(startsAt, endsAt); err != nil {
+		fail(w, 400, err.Error())
+		return
+	}
+	if !startsAt.After(time.Now()) {
+		fail(w, 400, "Choose a future appointment time.")
+		return
+	}
+	if body.DoctorID != "" && !validUUID(body.DoctorID) {
+		fail(w, http.StatusBadRequest, "Choose a doctor from the available intervals.")
+		return
+	}
+	tx, err := s.beginBookingTx(r.Context())
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	defer tx.Rollback(r.Context())
+	var found string
+	if err = tx.QueryRow(r.Context(), `SELECT id FROM app_private.consultation_registration WHERE id=$1 AND token_hash=$2 FOR UPDATE`, registrationID, tokenHash(secret)).Scan(&found); errors.Is(err, pgx.ErrNoRows) {
+		fail(w, http.StatusNotFound, "Registration not found.")
+		return
+	} else if err != nil {
+		serverError(w, err)
+		return
+	}
+	if _, err = tx.Exec(r.Context(), `UPDATE app_private.appointment SET status='expired',updated_at=now()
+		WHERE status='awaiting_payment' AND hold_expires_at IS NOT NULL AND hold_expires_at <= now()`); err != nil {
+		serverError(w, err)
+		return
+	}
+	var active bool
+	if err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM app_private.appointment WHERE registration_id=$1 AND (
+		status IN ('pending_admin','paid_pending_admin','confirmed') OR
+		(status='awaiting_payment' AND (hold_expires_at IS NULL OR hold_expires_at > now()))
+	))`, registrationID).Scan(&active); err != nil {
+		serverError(w, err)
+		return
+	}
+	if active {
+		fail(w, http.StatusConflict, "This registration already has an active appointment request.")
+		return
+	}
+	mode := "time_range"
+	if body.DoctorID != "" {
+		mode = "specific_doctor"
+	}
+	expires := minTime(time.Now().Add(15*time.Minute), startsAt)
+	id, err := s.insertAppointment(r.Context(), tx, registrationID, registrationID, body.DoctorID, startsAt, endsAt, mode, "awaiting_payment", &expires)
+	if errors.Is(err, ErrNoAvailableSlot) {
+		fail(w, http.StatusConflict, "No doctor is free for that entire interval.")
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	responseStatus := "awaiting_payment"
+	var paymentStatus string
+	if err = tx.QueryRow(r.Context(), `SELECT status FROM app_private.consultation_order WHERE registration_id=$1 AND appointment_id IS NULL AND status='paid'`, registrationID).Scan(&paymentStatus); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		serverError(w, err)
+		return
+	}
+	if paymentStatus == "paid" {
+		if _, err = tx.Exec(r.Context(), `UPDATE app_private.consultation_order SET appointment_id=$2 WHERE registration_id=$1 AND appointment_id IS NULL AND status='paid'`, registrationID, id); err != nil {
+			serverError(w, err)
+			return
+		}
+		if _, err = tx.Exec(r.Context(), `UPDATE app_private.appointment SET status='paid_pending_admin',hold_expires_at=NULL,updated_at=now() WHERE id=$1`, id); err != nil {
+			serverError(w, err)
+			return
+		}
+		responseStatus = "paid_pending_admin"
+		expires = time.Time{}
+	}
+	if err = tx.Commit(r.Context()); err != nil {
+		serverError(w, err)
+		return
+	}
+	var holdExpiresAt any
+	if !expires.IsZero() {
+		holdExpiresAt = expires
+	}
+	respond(w, http.StatusCreated, map[string]any{"id": id, "status": responseStatus, "hold_expires_at": holdExpiresAt})
+}
+
+func (s *Server) CancelPublicAppointment(w http.ResponseWriter, r *http.Request) {
+	registrationID := chi.URLParam(r, "id")
+	appointmentID := chi.URLParam(r, "appointmentID")
+	secret := r.Header.Get("X-Registration-Token")
+	if !validUUID(registrationID) || !validUUID(appointmentID) || !validToken(secret) {
+		fail(w, http.StatusNotFound, "Appointment not found.")
+		return
+	}
+	tx, err := s.beginBookingTx(r.Context())
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	defer tx.Rollback(r.Context())
+	result, err := tx.Exec(r.Context(), `UPDATE app_private.appointment a SET status=CASE WHEN EXISTS(SELECT 1 FROM app_private.consultation_order o WHERE o.appointment_id=a.id AND o.status IN ('paid','partially_refunded')) THEN 'refund_required' ELSE 'cancelled' END,hold_expires_at=NULL,updated_at=now()
+		FROM app_private.consultation_registration r
+		WHERE a.id=$1 AND a.registration_id=$2 AND r.id=a.registration_id AND r.token_hash=$3
+		AND a.status IN ('awaiting_payment','pending_admin','paid_pending_admin')`, appointmentID, registrationID, tokenHash(secret))
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	if result.RowsAffected() == 0 {
+		fail(w, http.StatusNotFound, "Active appointment request not found.")
+		return
+	}
+	if err = tx.Commit(r.Context()); err != nil {
+		serverError(w, err)
+		return
+	}
+	respond(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (s *Server) CreateAdminAppointment(w http.ResponseWriter, r *http.Request) {
@@ -523,6 +755,10 @@ func (s *Server) CreateAdminAppointment(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) ListAppointments(w http.ResponseWriter, r *http.Request) {
+	if err := s.expireHolds(r.Context()); err != nil {
+		serverError(w, err)
+		return
+	}
 	a := Current(r.Context())
 	where := ""
 	args := []any{}
@@ -531,9 +767,10 @@ func (s *Server) ListAppointments(w http.ResponseWriter, r *http.Request) {
 		args = append(args, a.ID)
 	}
 	rows, err := s.pool.Query(r.Context(), `SELECT a.id,a.registration_id,r.child_name,a.doctor_id,d.name,a.starts_at,a.ends_at,a.mode,a.status,
-			a.requested_by::text,coalesce(a.decided_by::text,''),a.created_at
-		FROM app_private.appointment a JOIN app_private.consultation_registration r ON r.id=a.registration_id
-		JOIN app_private.staff_account d ON d.id=a.doctor_id`+where+` ORDER BY a.starts_at DESC,a.id DESC`, args...)
+			coalesce(o.status,'unpaid'),a.requested_by::text,coalesce(a.decided_by::text,''),a.hold_expires_at,a.created_at,r.guardian_name,r.phone,coalesce(o.id,''),coalesce(o.payment_id,''),
+        coalesce((SELECT f.provider_id FROM app_private.consultation_refund f WHERE f.order_id=o.id),''),o.amount_paise,coalesce(o.refunded_paise,0)
+        FROM app_private.appointment a JOIN app_private.consultation_registration r ON r.id=a.registration_id
+		JOIN app_private.staff_account d ON d.id=a.doctor_id LEFT JOIN app_private.consultation_order o ON o.appointment_id=a.id`+where+` ORDER BY a.starts_at DESC,a.id DESC`, args...)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -542,7 +779,7 @@ func (s *Server) ListAppointments(w http.ResponseWriter, r *http.Request) {
 	items := make([]Appointment, 0)
 	for rows.Next() {
 		var value Appointment
-		if err := rows.Scan(&value.ID, &value.RegistrationID, &value.ChildName, &value.DoctorID, &value.DoctorName, &value.StartsAt, &value.EndsAt, &value.Mode, &value.Status, &value.RequestedBy, &value.DecidedBy, &value.CreatedAt); err != nil {
+		if err := rows.Scan(&value.ID, &value.RegistrationID, &value.ChildName, &value.DoctorID, &value.DoctorName, &value.StartsAt, &value.EndsAt, &value.Mode, &value.Status, &value.PaymentStatus, &value.RequestedBy, &value.DecidedBy, &value.HoldExpiresAt, &value.CreatedAt, &value.GuardianName, &value.Phone, &value.OrderID, &value.PaymentID, &value.RefundID, &value.AmountPaise, &value.RefundedPaise); err != nil {
 			serverError(w, err)
 			return
 		}
@@ -574,7 +811,7 @@ func (s *Server) DecideAppointment(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "Choose confirm, reject, cancel or reschedule.")
 		return
 	}
-	tx, err := s.pool.Begin(r.Context())
+	tx, err := s.beginBookingTx(r.Context())
 	if err != nil {
 		serverError(w, err)
 		return
@@ -582,11 +819,12 @@ func (s *Server) DecideAppointment(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(r.Context())
 	var appointment Appointment
 	err = tx.QueryRow(r.Context(), `SELECT a.id,a.registration_id,r.child_name,a.doctor_id,d.name,a.starts_at,a.ends_at,a.mode,a.status,
-		a.requested_by::text,coalesce(a.decided_by::text,''),a.created_at
-		FROM app_private.appointment a JOIN app_private.consultation_registration r ON r.id=a.registration_id
-		JOIN app_private.staff_account d ON d.id=a.doctor_id WHERE a.id=$1 FOR UPDATE OF a,r`, id).Scan(
+		coalesce(o.status,'unpaid'),a.requested_by::text,coalesce(a.decided_by::text,''),a.hold_expires_at,a.created_at,r.guardian_name,r.phone,coalesce(o.id,''),coalesce(o.payment_id,''),
+        coalesce((SELECT f.provider_id FROM app_private.consultation_refund f WHERE f.order_id=o.id),''),o.amount_paise,coalesce(o.refunded_paise,0)
+        FROM app_private.appointment a JOIN app_private.consultation_registration r ON r.id=a.registration_id
+		JOIN app_private.staff_account d ON d.id=a.doctor_id LEFT JOIN app_private.consultation_order o ON o.appointment_id=a.id WHERE a.id=$1 FOR UPDATE OF a,r`, id).Scan(
 		&appointment.ID, &appointment.RegistrationID, &appointment.ChildName, &appointment.DoctorID, &appointment.DoctorName,
-		&appointment.StartsAt, &appointment.EndsAt, &appointment.Mode, &appointment.Status, &appointment.RequestedBy, &appointment.DecidedBy, &appointment.CreatedAt)
+		&appointment.StartsAt, &appointment.EndsAt, &appointment.Mode, &appointment.Status, &appointment.PaymentStatus, &appointment.RequestedBy, &appointment.DecidedBy, &appointment.HoldExpiresAt, &appointment.CreatedAt, &appointment.GuardianName, &appointment.Phone, &appointment.OrderID, &appointment.PaymentID, &appointment.RefundID, &appointment.AmountPaise, &appointment.RefundedPaise)
 	if errors.Is(err, pgx.ErrNoRows) {
 		fail(w, http.StatusNotFound, "Appointment not found.")
 		return
@@ -595,15 +833,35 @@ func (s *Server) DecideAppointment(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	if (body.Action == "confirm" || body.Action == "reject") && appointment.Status != "pending_admin" {
+	if appointment.Status == "awaiting_payment" && appointment.HoldExpiresAt != nil && !appointment.HoldExpiresAt.After(time.Now()) {
+		if _, err = tx.Exec(r.Context(), `UPDATE app_private.appointment SET status='expired',updated_at=now() WHERE id=$1 AND status='awaiting_payment'`, id); err != nil {
+			serverError(w, err)
+			return
+		}
+		fail(w, http.StatusConflict, "This appointment hold has expired. Choose another time.")
+		return
+	}
+	if (body.Action == "confirm" || body.Action == "reject") && appointment.Status != "pending_admin" && appointment.Status != "paid_pending_admin" && appointment.Status != "awaiting_payment" {
 		fail(w, http.StatusConflict, "Only pending appointments can be confirmed or rejected.")
 		return
+	}
+	if body.Action == "confirm" || body.Action == "reschedule" {
+		var paymentStatus string
+		err = tx.QueryRow(r.Context(), `SELECT status FROM app_private.consultation_order WHERE appointment_id=$1`, appointment.ID).Scan(&paymentStatus)
+		if errors.Is(err, pgx.ErrNoRows) || (err == nil && paymentStatus != "paid") {
+			fail(w, http.StatusConflict, "Payment must be captured before this appointment can be confirmed.")
+			return
+		}
+		if err != nil {
+			serverError(w, err)
+			return
+		}
 	}
 	if body.Action == "reschedule" && appointment.Status != "confirmed" {
 		fail(w, http.StatusConflict, "Only confirmed appointments can be rescheduled.")
 		return
 	}
-	if body.Action == "cancel" && appointment.Status != "pending_admin" && appointment.Status != "confirmed" {
+	if body.Action == "cancel" && appointment.Status != "pending_admin" && appointment.Status != "awaiting_payment" && appointment.Status != "paid_pending_admin" && appointment.Status != "confirmed" {
 		fail(w, http.StatusConflict, "This appointment has already been decided.")
 		return
 	}
@@ -611,6 +869,9 @@ func (s *Server) DecideAppointment(w http.ResponseWriter, r *http.Request) {
 		status := "rejected"
 		if body.Action == "cancel" {
 			status = "cancelled"
+		}
+		if appointment.PaymentStatus == "paid" || appointment.PaymentStatus == "partially_refunded" {
+			status = "refund_required"
 		}
 		_, err = tx.Exec(r.Context(), `UPDATE app_private.appointment SET status=$2,decided_by=$3,updated_at=now() WHERE id=$1`, id, status, Current(r.Context()).ID)
 		if err == nil && body.Action == "cancel" && appointment.Status == "confirmed" {
@@ -631,6 +892,10 @@ func (s *Server) DecideAppointment(w http.ResponseWriter, r *http.Request) {
 		}
 		if err != nil {
 			fail(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !startsAt.After(time.Now()) {
+			fail(w, 400, "Choose a future appointment time.")
 			return
 		}
 		if err = validInterval(startsAt, endsAt); err != nil {
@@ -654,7 +919,7 @@ func (s *Server) DecideAppointment(w http.ResponseWriter, r *http.Request) {
 			serverError(w, chooseErr)
 			return
 		}
-		_, err = tx.Exec(r.Context(), `UPDATE app_private.appointment SET doctor_id=$2,starts_at=$3,ends_at=$4,status='confirmed',decided_by=$5,updated_at=now() WHERE id=$1`, id, chosen, startsAt, endsAt, Current(r.Context()).ID)
+		_, err = tx.Exec(r.Context(), `UPDATE app_private.appointment SET doctor_id=$2,starts_at=$3,ends_at=$4,status='confirmed',hold_expires_at=NULL,decided_by=$5,updated_at=now() WHERE id=$1`, id, chosen, startsAt, endsAt, Current(r.Context()).ID)
 		if err == nil {
 			_, err = tx.Exec(r.Context(), `UPDATE app_private.consultation_registration SET assigned_doctor_id=$2,status='scheduled',updated_at=now() WHERE id=$1`, appointment.RegistrationID, chosen)
 		}
@@ -680,14 +945,24 @@ func (s *Server) CancelFamilyAppointment(w http.ResponseWriter, r *http.Request)
 		fail(w, http.StatusNotFound, "Appointment not found.")
 		return
 	}
-	result, err := s.pool.Exec(r.Context(), `UPDATE app_private.appointment a SET status='cancelled',updated_at=now()
-		FROM app_private.consultation_registration r WHERE a.id=$1 AND a.registration_id=r.id AND r.guardian_id=$2 AND a.status='pending_admin'`, id, CurrentGuardian(r.Context()).ID)
+	tx, err := s.beginBookingTx(r.Context())
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	defer tx.Rollback(r.Context())
+	result, err := tx.Exec(r.Context(), `UPDATE app_private.appointment a SET status=CASE WHEN EXISTS(SELECT 1 FROM app_private.consultation_order o WHERE o.appointment_id=a.id AND o.status IN ('paid','partially_refunded')) THEN 'refund_required' ELSE 'cancelled' END,hold_expires_at=NULL,updated_at=now()
+		FROM app_private.consultation_registration r WHERE a.id=$1 AND a.registration_id=r.id AND r.guardian_id=$2 AND ($3='' OR r.id::text=$3) AND a.status IN ('awaiting_payment','pending_admin','paid_pending_admin')`, id, CurrentGuardian(r.Context()).ID, CurrentGuardian(r.Context()).RegistrationID)
 	if err != nil {
 		serverError(w, err)
 		return
 	}
 	if result.RowsAffected() == 0 {
-		fail(w, http.StatusNotFound, "Pending appointment not found.")
+		fail(w, http.StatusNotFound, "Active appointment request not found.")
+		return
+	}
+	if err = tx.Commit(r.Context()); err != nil {
+		serverError(w, err)
 		return
 	}
 	respond(w, http.StatusOK, map[string]bool{"ok": true})

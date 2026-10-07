@@ -4,8 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConsultationForm } from "./consultation-form";
 import {
   createCheckoutOrder,
+  createPublicAppointment,
   getPublicSettings,
   getRegistrationStatus,
+  listPublicAvailability,
+  listPublicDoctors,
   registerConsultation,
   verifyCheckout,
 } from "@/lib/api";
@@ -16,6 +19,9 @@ vi.mock("@/lib/api", () => ({
   getRegistrationStatus: vi.fn(),
   registerConsultation: vi.fn(),
   createCheckoutOrder: vi.fn(),
+  createPublicAppointment: vi.fn(),
+  listPublicAvailability: vi.fn(),
+  listPublicDoctors: vi.fn(),
   verifyCheckout: vi.fn(),
 }));
 vi.mock("@/lib/checkout", () => ({ loadCheckout: vi.fn() }));
@@ -47,6 +53,13 @@ describe("consultation intake", () => {
     });
     vi.mocked(registerConsultation).mockResolvedValue({
       id: "test-registration",
+    });
+    vi.mocked(listPublicDoctors).mockResolvedValue([{id:"doctor-1",name:"Doctor One"}]);
+    vi.mocked(listPublicAvailability).mockResolvedValue([
+      { doctor_id: "doctor-1", doctor_name: "Doctor One", starts_at: "2099-10-05T04:30:00Z", ends_at: "2099-10-05T05:00:00Z" },
+    ]);
+    vi.mocked(createPublicAppointment).mockResolvedValue({
+      id: "appointment-1", status: "awaiting_payment", hold_expires_at: "2099-10-05T05:15:00Z",
     });
   });
   it("stores the requested fields with optional email and never requires checkout", async () => {
@@ -115,6 +128,7 @@ describe("consultation intake", () => {
       currency: "INR",
       checkout_available: true,
     });
+    vi.mocked(getRegistrationStatus).mockResolvedValue({ id: "test-registration", payment_status: "unpaid", appointment_id: "appointment-1", appointment_status: "awaiting_payment" });
     vi.mocked(createCheckoutOrder).mockResolvedValue({
       order_id: "order_test",
       amount_paise: 12345,
@@ -147,6 +161,10 @@ describe("consultation intake", () => {
     vi.mocked(loadCheckout).mockResolvedValue(Checkout);
     render(<ConsultationForm />);
     await completeForm();
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2099-10-05" } });
+    await userEvent.click(await screen.findByRole("button", { name: "Find available times" }));
+    await userEvent.click(await screen.findByRole("button", { name: /Available consultation/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Continue to payment" }));
     await userEvent.click(
       await screen.findByRole("button", { name: /pay.*for consultation/i }),
     );

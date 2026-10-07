@@ -67,6 +67,16 @@ export interface CheckoutConfirmation {
   razorpay_payment_id: string;
   razorpay_signature: string;
 }
+export interface PublicRegistrationStatus {
+  id: string;
+  payment_status: PaymentStatus;
+  appointment_id?: string | null;
+  appointment_status?: AppointmentStatus | null;
+  doctor_name?: string | null;
+  appointment_starts_at?: string | null;
+  appointment_ends_at?: string | null;
+  hold_expires_at?: string | null;
+}
 export interface IntakeInput {
   guardian_name: string;
   child_name: string;
@@ -77,16 +87,22 @@ export interface IntakeInput {
 }
 
 export interface GuardianAccount {
+  registration_id?: string;
   id: string;
   name: string;
   email: string;
   active: boolean;
 }
 export type AppointmentStatus =
+  | "awaiting_payment"
   | "pending_admin"
+  | "paid_pending_admin"
   | "confirmed"
   | "rejected"
-  | "cancelled";
+  | "expired"
+  | "cancelled"
+  | "refund_required"
+  | "refunded";
 export type AppointmentMode = "time_range" | "specific_doctor";
 export interface AvailabilityBlock {
   id: string;
@@ -104,6 +120,13 @@ export interface FreeInterval {
   ends_at: string;
 }
 export interface Appointment {
+  guardian_name?: string;
+  phone?: string;
+  order_id?: string;
+  payment_id?: string;
+  refund_id?: string;
+  amount_paise?: number | null;
+  refunded_paise?: number;
   id: string;
   registration_id: string;
   child_name: string;
@@ -113,6 +136,7 @@ export interface Appointment {
   ends_at: string;
   mode: AppointmentMode;
   status: AppointmentStatus;
+  payment_status: PaymentStatus;
   requested_by: string;
   decided_by: string;
   created_at: string;
@@ -143,6 +167,7 @@ export interface FamilyRegistration {
   appointment_status: AppointmentStatus | null;
   appointment_starts_at: string | null;
   appointment_ends_at: string | null;
+  appointment_hold_expires_at: string | null;
   book1_release_id: string | null;
   book1_status: BookReleaseStatus | null;
   book2_release_id: string | null;

@@ -185,6 +185,14 @@ func TestRazorpayHTTPContract(t *testing.T) {
 				t.Error("wrong order body")
 			}
 			fmt.Fprint(w, `{"id":"order_test123","amount":12345,"currency":"INR"}`)
+		case "/payments/pay_test123/refund":
+			var body struct {
+				Amount int `json:"amount"`
+			}
+			if r.Method != "POST" || r.Header.Get("X-Refund-Idempotency") != "00000000-0000-4000-8000-000000000001" || json.NewDecoder(r.Body).Decode(&body) != nil || body.Amount != 12345 {
+				t.Error("invalid idempotent refund request")
+			}
+			fmt.Fprint(w, `{"id":"rfnd_test123","payment_id":"pay_test123","amount":12345}`)
 		case "/payments/pay_test123":
 			if r.Method != "GET" || r.ContentLength != 0 {
 				t.Error("payment lookup must be a GET without a body")
@@ -202,6 +210,9 @@ func TestRazorpayHTTPContract(t *testing.T) {
 	}
 	if payment, err := g.FetchPayment(context.Background(), "pay_test123"); err != nil || !payment.Captured {
 		t.Fatalf("payment: %v %v", payment, err)
+	}
+	if id, err := g.RefundPayment(context.Background(), "pay_test123", 12345, "00000000-0000-4000-8000-000000000001"); err != nil || id != "rfnd_test123" {
+		t.Fatalf("refund: %s %v", id, err)
 	}
 	if _, err := g.FetchPayment(context.Background(), "pay_../../other"); err == nil {
 		t.Fatal("path traversal accepted")

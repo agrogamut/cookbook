@@ -2,6 +2,7 @@ package portal
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +18,7 @@ var (
 	errRegistrationNotFound = errors.New("registration not found")
 	errCheckoutUnavailable  = errors.New("checkout unavailable")
 	errPaymentAlreadyExists = errors.New("payment already exists")
+	errBookingRequired      = errors.New("active booking required")
 )
 
 func (s *Server) createOrderFor(ctx context.Context, id, guardianID, secret string) (GatewayOrder, error) {
@@ -27,13 +29,16 @@ func (s *Server) createOrderFor(ctx context.Context, id, guardianID, secret stri
 	if !settings.CheckoutAvailable {
 		return GatewayOrder{}, errCheckoutUnavailable
 	}
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.beginBookingTx(ctx)
 	if err != nil {
 		return GatewayOrder{}, err
 	}
 	defer tx.Rollback(ctx)
 	var registrationID string
 	if guardianID != "" {
+		if !guardianAllows(ctx, id) {
+			return GatewayOrder{}, errRegistrationNotFound
+		}
 		err = tx.QueryRow(ctx, `SELECT id FROM app_private.consultation_registration WHERE id=$1 AND guardian_id=$2 FOR UPDATE`, id, guardianID).Scan(&registrationID)
 	} else {
 		err = tx.QueryRow(ctx, `SELECT id FROM app_private.consultation_registration WHERE id=$1 AND token_hash=$2 FOR UPDATE`, id, tokenHash(secret)).Scan(&registrationID)
@@ -44,17 +49,28 @@ func (s *Server) createOrderFor(ctx context.Context, id, guardianID, secret stri
 	if err != nil {
 		return GatewayOrder{}, err
 	}
+	var appointmentID sql.NullString
+	if err = tx.QueryRow(ctx, `SELECT id::text FROM app_private.appointment
+		WHERE registration_id=$1 AND (
+			status IN ('pending_admin','paid_pending_admin','confirmed') OR
+			(status='awaiting_payment' AND (hold_expires_at IS NULL OR hold_expires_at > now()))
+		)
+		ORDER BY created_at DESC,id DESC LIMIT 1`, registrationID).Scan(&appointmentID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return GatewayOrder{}, fmt.Errorf("find appointment hold: %w", err)
+	}
+	if !appointmentID.Valid {
+		return GatewayOrder{}, errBookingRequired
+	}
 	var order GatewayOrder
 	var status string
-	err = tx.QueryRow(ctx, `SELECT id,amount_paise,currency,status FROM app_private.consultation_order WHERE registration_id=$1`, id).Scan(&order.ID, &order.Amount, &order.Currency, &status)
+	err = tx.QueryRow(ctx, `SELECT id,amount_paise,currency,status FROM app_private.consultation_order WHERE appointment_id=$1`, appointmentID.String).Scan(&order.ID, &order.Amount, &order.Currency, &status)
 	if errors.Is(err, pgx.ErrNoRows) {
-		order, err = s.options.Gateway.CreateOrder(ctx, id, *settings.AmountPaise, settings.Currency)
+		order, err = s.options.Gateway.CreateOrder(ctx, appointmentID.String, *settings.AmountPaise, settings.Currency)
 		if err != nil {
-			slog.Error("create checkout order", "error", err)
-			return GatewayOrder{}, err
+			return GatewayOrder{}, fmt.Errorf("create checkout order: %w", err)
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO app_private.consultation_order(id,registration_id,amount_paise,currency) VALUES ($1,$2,$3,$4)`, order.ID, id, order.Amount, order.Currency)
-	} else if err == nil && (status == "paid" || status == "partially_refunded" || status == "refunded" || status == "authorized") {
+		_, err = tx.Exec(ctx, `INSERT INTO app_private.consultation_order(id,registration_id,amount_paise,currency,appointment_id) VALUES ($1,$2,$3,$4,$5)`, order.ID, id, order.Amount, order.Currency, appointmentID.String)
+	} else if err == nil && (settled(status) || status == "authorized") {
 		return GatewayOrder{}, errPaymentAlreadyExists
 	}
 	if err != nil {
@@ -79,6 +95,10 @@ func (s *Server) CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	if errors.Is(err, errCheckoutUnavailable) {
 		fail(w, 503, "Online payment is currently unavailable. Your registration is saved.")
+		return
+	}
+	if errors.Is(err, errBookingRequired) {
+		fail(w, 409, "Choose an available appointment time before paying. Your previous hold may have expired.")
 		return
 	}
 	if errors.Is(err, errPaymentAlreadyExists) {
@@ -107,7 +127,7 @@ func (s *Server) VerifyPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var orderID string
-	err := s.pool.QueryRow(r.Context(), `SELECT o.id FROM app_private.consultation_order o JOIN app_private.consultation_registration r ON r.id=o.registration_id WHERE r.id=$1 AND r.token_hash=$2`, id, tokenHash(secret)).Scan(&orderID)
+	err := s.pool.QueryRow(r.Context(), `SELECT o.id FROM app_private.consultation_order o JOIN app_private.consultation_registration r ON r.id=o.registration_id WHERE r.id=$1 AND r.token_hash=$2 AND o.id=$3`, id, tokenHash(secret), b.OrderID).Scan(&orderID)
 	if notFound(w, err) {
 		return
 	}
@@ -148,6 +168,10 @@ func (s *Server) CreateFamilyOrder(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusServiceUnavailable, "Online payment is currently unavailable. Your registration is saved.")
 		return
 	}
+	if errors.Is(err, errBookingRequired) {
+		fail(w, 409, "Choose an available appointment time before paying. Your previous hold may have expired.")
+		return
+	}
 	if errors.Is(err, errPaymentAlreadyExists) {
 		fail(w, http.StatusConflict, "A payment already exists for this consultation. Refresh its payment status.")
 		return
@@ -161,6 +185,10 @@ func (s *Server) CreateFamilyOrder(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) VerifyFamilyPayment(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
+	if !guardianAllows(r.Context(), id) {
+		fail(w, 404, "Registration not found.")
+		return
+	}
 	if !validUUID(id) {
 		fail(w, http.StatusNotFound, "Registration not found.")
 		return
@@ -176,7 +204,7 @@ func (s *Server) VerifyFamilyPayment(w http.ResponseWriter, r *http.Request) {
 	var orderID string
 	err := s.pool.QueryRow(r.Context(), `SELECT o.id FROM app_private.consultation_order o
 		JOIN app_private.consultation_registration r ON r.id=o.registration_id
-		WHERE r.id=$1 AND r.guardian_id=$2`, id, CurrentGuardian(r.Context()).ID).Scan(&orderID)
+		WHERE r.id=$1 AND r.guardian_id=$2 AND o.id=$3`, id, CurrentGuardian(r.Context()).ID, b.OrderID).Scan(&orderID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		fail(w, http.StatusNotFound, "Registration not found.")
 		return
@@ -249,14 +277,15 @@ func (s *Server) applyPayment(ctx context.Context, p Payment, eventID string) er
 	if !validProviderID(p.ID, "pay_") || !validProviderID(p.OrderID, "order_") {
 		return errors.New("invalid payment identifiers")
 	}
-	tx, err := s.pool.Begin(ctx)
+	tx, err := s.beginBookingTx(ctx)
 	if err != nil {
 		return fmt.Errorf("begin payment update: %w", err)
 	}
 	defer tx.Rollback(ctx)
 	var amount, refunded int
 	var currency, oldState, oldPaymentID string
-	err = tx.QueryRow(ctx, `SELECT amount_paise,currency,status,coalesce(payment_id,''),refunded_paise FROM app_private.consultation_order WHERE id=$1 FOR UPDATE`, p.OrderID).Scan(&amount, &currency, &oldState, &oldPaymentID, &refunded)
+	var appointmentID sql.NullString
+	err = tx.QueryRow(ctx, `SELECT amount_paise,currency,status,coalesce(payment_id,''),refunded_paise,appointment_id::text FROM app_private.consultation_order WHERE id=$1 FOR UPDATE`, p.OrderID).Scan(&amount, &currency, &oldState, &oldPaymentID, &refunded, &appointmentID)
 	if err != nil {
 		return fmt.Errorf("find payment order: %w", err)
 	}
@@ -284,6 +313,32 @@ func (s *Server) applyPayment(ctx context.Context, p Payment, eventID string) er
 		paid_at=CASE WHEN $3 IN ('paid','partially_refunded','refunded') THEN coalesce(paid_at,now()) ELSE paid_at END,updated_at=now() WHERE id=$1`, p.OrderID, p.ID, state, p.AmountRefunded)
 	if err != nil {
 		return fmt.Errorf("update payment state: %w", err)
+	}
+	if appointmentID.Valid && state == "paid" {
+		if _, err = tx.Exec(ctx, `UPDATE app_private.appointment SET status='paid_pending_admin',hold_expires_at=NULL,updated_at=now()
+			WHERE id=$1 AND (status='pending_admin' OR (status='awaiting_payment' AND hold_expires_at>now()))`, appointmentID.String); err != nil {
+			return fmt.Errorf("advance appointment after payment: %w", err)
+		}
+		if _, err = tx.Exec(ctx, `UPDATE app_private.appointment SET status='refund_required',hold_expires_at=NULL,updated_at=now()
+			WHERE id=$1 AND status IN ('awaiting_payment','expired','cancelled','rejected')`, appointmentID.String); err != nil {
+			return fmt.Errorf("flag expired appointment payment: %w", err)
+		}
+	}
+	if appointmentID.Valid && (state == "refunded" || state == "partially_refunded") {
+		bookingStatus := "refunded"
+		if state == "partially_refunded" {
+			bookingStatus = "refund_required"
+		}
+		if _, err = tx.Exec(ctx, `UPDATE app_private.appointment SET status=$2,hold_expires_at=NULL,updated_at=now() WHERE id=$1`, appointmentID.String, bookingStatus); err != nil {
+			return fmt.Errorf("close appointment after refund: %w", err)
+		}
+	}
+	if appointmentID.Valid && (state == "refunded" || state == "partially_refunded") {
+		if _, err = tx.Exec(ctx, `UPDATE app_private.consultation_registration r SET assigned_doctor_id=NULL,status='cancelled',updated_at=now()
+            FROM app_private.appointment a WHERE a.id=$1 AND r.id=a.registration_id
+            AND NOT EXISTS (SELECT 1 FROM app_private.appointment newer WHERE newer.registration_id=r.id AND newer.status='confirmed')`, appointmentID.String); err != nil {
+			return fmt.Errorf("clear refunded appointment assignment: %w", err)
+		}
 	}
 	return tx.Commit(ctx)
 }

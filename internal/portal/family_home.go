@@ -11,41 +11,43 @@ import (
 )
 
 type FamilyRegistration struct {
-	ID                  string     `json:"id"`
-	ChildName           string     `json:"child_name"`
-	DateOfBirth         string     `json:"date_of_birth"`
-	RegistrationStatus  string     `json:"registration_status"`
-	PaymentStatus       string     `json:"payment_status"`
-	AmountPaise         *int       `json:"amount_paise"`
-	Currency            string     `json:"currency"`
-	DoctorName          string     `json:"doctor_name"`
-	AppointmentID       *string    `json:"appointment_id"`
-	AppointmentStatus   *string    `json:"appointment_status"`
-	AppointmentStartsAt *time.Time `json:"appointment_starts_at"`
-	AppointmentEndsAt   *time.Time `json:"appointment_ends_at"`
-	Book1ReleaseID      *string    `json:"book1_release_id"`
-	Book1Status         *string    `json:"book1_status"`
-	Book2ReleaseID      *string    `json:"book2_release_id"`
-	Book2Status         *string    `json:"book2_status"`
-	CreatedAt           time.Time  `json:"created_at"`
+	ID                       string     `json:"id"`
+	ChildName                string     `json:"child_name"`
+	DateOfBirth              string     `json:"date_of_birth"`
+	RegistrationStatus       string     `json:"registration_status"`
+	PaymentStatus            string     `json:"payment_status"`
+	AmountPaise              *int       `json:"amount_paise"`
+	Currency                 string     `json:"currency"`
+	DoctorName               string     `json:"doctor_name"`
+	AppointmentID            *string    `json:"appointment_id"`
+	AppointmentStatus        *string    `json:"appointment_status"`
+	AppointmentStartsAt      *time.Time `json:"appointment_starts_at"`
+	AppointmentEndsAt        *time.Time `json:"appointment_ends_at"`
+	AppointmentHoldExpiresAt *time.Time `json:"appointment_hold_expires_at"`
+	Book1ReleaseID           *string    `json:"book1_release_id"`
+	Book1Status              *string    `json:"book1_status"`
+	Book2ReleaseID           *string    `json:"book2_release_id"`
+	Book2Status              *string    `json:"book2_status"`
+	CreatedAt                time.Time  `json:"created_at"`
 }
 
 const familyRegistrationQuery = `
 	SELECT r.id,r.child_name,to_char(r.date_of_birth,'YYYY-MM-DD'),r.status,
-		coalesce(o.status,'unpaid'),o.amount_paise,coalesce(o.currency,'INR'),
+		coalesce(o.status,'unpaid'),coalesce(o.amount_paise,(SELECT amount_paise FROM app_private.consultation_settings WHERE singleton)),coalesce(o.currency,'INR'),
 		coalesce(d.name,''),
-		a.id,a.status,a.starts_at,a.ends_at,
+		a.id,a.status,a.starts_at,a.ends_at,a.hold_expires_at,
 		b1.id,b1.status,b2.id,b2.status,r.created_at
 	FROM app_private.consultation_registration r
-	LEFT JOIN app_private.consultation_order o ON o.registration_id=r.id
-	LEFT JOIN app_private.staff_account d ON d.id=r.assigned_doctor_id
 	LEFT JOIN LATERAL (
-		SELECT a.id,a.status,a.starts_at,a.ends_at
+		SELECT a.id,a.status,a.starts_at,a.ends_at,a.hold_expires_at,a.doctor_id
 		FROM app_private.appointment a
 		WHERE a.registration_id=r.id
 		ORDER BY a.created_at DESC,a.id DESC
 		LIMIT 1
 	) a ON true
+    LEFT JOIN app_private.staff_account d ON d.id=coalesce(a.doctor_id,r.assigned_doctor_id)
+    LEFT JOIN app_private.consultation_order o ON o.registration_id=r.id AND
+        (o.appointment_id=a.id OR (a.id IS NULL AND o.appointment_id IS NULL))
 	LEFT JOIN LATERAL (
 		SELECT b.id,b.status
 		FROM app_private.book_release b
@@ -60,15 +62,16 @@ const familyRegistrationQuery = `
 		ORDER BY b.generated_at DESC,b.id DESC
 		LIMIT 1
 	) b2 ON true
-	WHERE r.guardian_id=$1`
+	WHERE r.guardian_id=$1 AND ($2='' OR r.id::text=$2)`
 
 func scanFamilyRegistration(row interface{ Scan(...any) error }) (FamilyRegistration, error) {
 	var value FamilyRegistration
 	var appointmentID, appointmentStatus, book1ID, book1Status, book2ID, book2Status sql.NullString
+	var appointmentHoldExpiresAt sql.NullTime
 	if err := row.Scan(
 		&value.ID, &value.ChildName, &value.DateOfBirth, &value.RegistrationStatus,
 		&value.PaymentStatus, &value.AmountPaise, &value.Currency, &value.DoctorName,
-		&appointmentID, &appointmentStatus, &value.AppointmentStartsAt, &value.AppointmentEndsAt,
+		&appointmentID, &appointmentStatus, &value.AppointmentStartsAt, &value.AppointmentEndsAt, &appointmentHoldExpiresAt,
 		&book1ID, &book1Status, &book2ID, &book2Status, &value.CreatedAt,
 	); err != nil {
 		return value, err
@@ -78,6 +81,9 @@ func scanFamilyRegistration(row interface{ Scan(...any) error }) (FamilyRegistra
 	}
 	if appointmentStatus.Valid {
 		value.AppointmentStatus = &appointmentStatus.String
+	}
+	if appointmentHoldExpiresAt.Valid {
+		value.AppointmentHoldExpiresAt = &appointmentHoldExpiresAt.Time
 	}
 	if book1ID.Valid {
 		value.Book1ReleaseID = &book1ID.String
@@ -95,7 +101,11 @@ func scanFamilyRegistration(row interface{ Scan(...any) error }) (FamilyRegistra
 }
 
 func (s *Server) ListFamilyRegistrations(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.pool.Query(r.Context(), familyRegistrationQuery+` ORDER BY r.created_at DESC,r.id DESC`, CurrentGuardian(r.Context()).ID)
+	if err := s.expireHolds(r.Context()); err != nil {
+		serverError(w, err)
+		return
+	}
+	rows, err := s.pool.Query(r.Context(), familyRegistrationQuery+` ORDER BY r.created_at DESC,r.id DESC`, CurrentGuardian(r.Context()).ID, CurrentGuardian(r.Context()).RegistrationID)
 	if err != nil {
 		serverError(w, err)
 		return
@@ -118,13 +128,17 @@ func (s *Server) ListFamilyRegistrations(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) FamilyRegistrationStatus(w http.ResponseWriter, r *http.Request) {
+	if err := s.expireHolds(r.Context()); err != nil {
+		serverError(w, err)
+		return
+	}
 	id := chi.URLParam(r, "id")
 	if !validUUID(id) {
 		fail(w, http.StatusNotFound, "Registration not found.")
 		return
 	}
 	var value FamilyRegistration
-	row := s.pool.QueryRow(r.Context(), familyRegistrationQuery+` AND r.id=$2`, CurrentGuardian(r.Context()).ID, id)
+	row := s.pool.QueryRow(r.Context(), familyRegistrationQuery+` AND r.id=$3`, CurrentGuardian(r.Context()).ID, CurrentGuardian(r.Context()).RegistrationID, id)
 	var err error
 	value, err = scanFamilyRegistration(row)
 	if errors.Is(err, pgx.ErrNoRows) {

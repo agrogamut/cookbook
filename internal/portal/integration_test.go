@@ -96,6 +96,19 @@ func (g *testGateway) FetchPayment(_ context.Context, id string) (Payment, error
 	}
 	return g.payment, nil
 }
+func (g *testGateway) RefundPayment(_ context.Context, id string, amount int, key string) (string, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.payment.ID != id {
+		return "", fmt.Errorf("unknown test payment")
+	}
+	g.payment.AmountRefunded = amount
+	if amount == g.payment.Amount {
+		g.payment.Status = "refunded"
+	}
+	return "rfnd_" + tokenHash(key)[:16], nil
+}
+
 func (g *testGateway) set(p Payment) { g.mu.Lock(); defer g.mu.Unlock(); g.payment = p }
 
 func portalRequest(handler http.Handler, method, path string, body any, cookie *http.Cookie, registrationToken string) *httptest.ResponseRecorder {
@@ -171,6 +184,7 @@ func TestPortalPersistenceAndAuthorization(t *testing.T) {
 			pool.Exec(ctx, `DELETE FROM public.child_profile WHERE child_id=$1`, registrationID)
 		}
 		for _, a := range actors {
+			pool.Exec(ctx, `DELETE FROM app_private.doctor_availability WHERE doctor_id=$1`, a.ID)
 			pool.Exec(ctx, `DELETE FROM app_private.staff_account WHERE id=$1`, a.ID)
 		}
 	}()
@@ -248,6 +262,11 @@ func TestPortalPersistenceAndAuthorization(t *testing.T) {
 	expectCode(t, portalRequest(router, "PUT", "/api/admin/settings", map[string]any{"amount_paise": 12345, "payments_enabled": true}, admin, ""), 200)
 	publicPath := "/api/public/registrations/" + registrationID
 	expectCode(t, portalRequest(router, "POST", publicPath+"/order", map[string]string{}, nil, token()), 404)
+	expectCode(t, portalRequest(router, "POST", publicPath+"/order", map[string]string{}, nil, input.Token), 409)
+	slotStart := time.Now().Add(48 * time.Hour).Truncate(time.Minute)
+	slotEnd := slotStart.Add(time.Hour)
+	expectCode(t, portalRequest(router, "POST", "/api/availability", map[string]string{"doctor_id": actors[1].ID, "starts_at": slotStart.Format(time.RFC3339), "ends_at": slotEnd.Format(time.RFC3339)}, admin, ""), 200)
+	expectCode(t, portalRequest(router, "POST", publicPath+"/appointment", map[string]string{"doctor_id": actors[1].ID, "starts_at": slotStart.Format(time.RFC3339), "ends_at": slotEnd.Format(time.RFC3339)}, nil, input.Token), 201)
 	var wait sync.WaitGroup
 	responses := make(chan *httptest.ResponseRecorder, 2)
 	for range 2 {

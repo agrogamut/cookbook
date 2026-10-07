@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -149,7 +150,7 @@ const registrationSelect = `SELECT r.id, r.guardian_name, r.child_name, to_char(
 	r.created_at, coalesce(o.status,'unpaid'), o.amount_paise, coalesce(o.currency,'INR'), coalesce(o.payment_id,''), coalesce(o.id,''), coalesce(o.refunded_paise,0)`
 const registrationFrom = ` FROM app_private.consultation_registration r
 	LEFT JOIN app_private.staff_account d ON d.id=r.assigned_doctor_id
-	LEFT JOIN app_private.consultation_order o ON o.registration_id=r.id `
+	LEFT JOIN LATERAL (SELECT o.* FROM app_private.consultation_order o WHERE o.registration_id=r.id ORDER BY o.created_at DESC,o.id DESC LIMIT 1) o ON true `
 
 func scanRegistration(row interface{ Scan(...any) error }) (Registration, error) {
 	var v Registration
@@ -257,7 +258,7 @@ func (s *Server) UpdateRegistration(w http.ResponseWriter, r *http.Request) {
 		fail(w, 403, "Only an administrator can change registration details or assignments.")
 		return
 	}
-	tx, err := s.pool.Begin(r.Context())
+	tx, err := s.beginBookingTx(r.Context())
 	if err != nil {
 		serverError(w, err)
 		return
@@ -338,6 +339,11 @@ func (s *Server) UpdateRegistration(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) PublicRegistration(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if err := s.expireHolds(r.Context()); err != nil {
+		serverError(w, err)
+		return
+	}
 	id := chi.URLParam(r, "id")
 	secret := r.Header.Get("X-Registration-Token")
 	if !validUUID(id) || !validToken(secret) {
@@ -345,9 +351,35 @@ func (s *Server) PublicRegistration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var status string
-	err := s.pool.QueryRow(r.Context(), `SELECT coalesce(o.status,'unpaid') FROM app_private.consultation_registration r LEFT JOIN app_private.consultation_order o ON o.registration_id=r.id WHERE r.id=$1 AND r.token_hash=$2`, id, tokenHash(secret)).Scan(&status)
+	var appointmentID, appointmentStatus, doctorName sql.NullString
+	var startsAt, endsAt, holdExpiresAt sql.NullTime
+	err := s.pool.QueryRow(r.Context(), `SELECT coalesce(o.status,'unpaid'),a.id::text,a.status,a.starts_at,a.ends_at,a.hold_expires_at,coalesce(d.name,'')
+		FROM app_private.consultation_registration r
+				LEFT JOIN LATERAL (
+			SELECT id,status,doctor_id,starts_at,ends_at,hold_expires_at
+			FROM app_private.appointment WHERE registration_id=r.id ORDER BY created_at DESC,id DESC LIMIT 1
+		) a ON true
+        LEFT JOIN app_private.consultation_order o ON o.registration_id=r.id AND
+            (o.appointment_id=a.id OR (a.id IS NULL AND o.appointment_id IS NULL))
+        LEFT JOIN app_private.staff_account d ON d.id=a.doctor_id
+		WHERE r.id=$1 AND r.token_hash=$2`, id, tokenHash(secret)).Scan(&status, &appointmentID, &appointmentStatus, &startsAt, &endsAt, &holdExpiresAt, &doctorName)
 	if notFound(w, err) {
 		return
 	}
-	respond(w, 200, map[string]string{"id": id, "payment_status": status})
+	value := map[string]any{"id": id, "payment_status": status, "appointment_id": nil, "appointment_status": nil, "doctor_name": nil, "appointment_starts_at": nil, "appointment_ends_at": nil, "hold_expires_at": nil}
+	if appointmentID.Valid {
+		value["appointment_id"] = appointmentID.String
+		value["appointment_status"] = appointmentStatus.String
+		value["doctor_name"] = doctorName.String
+		if startsAt.Valid {
+			value["appointment_starts_at"] = startsAt.Time
+		}
+		if endsAt.Valid {
+			value["appointment_ends_at"] = endsAt.Time
+		}
+		if holdExpiresAt.Valid {
+			value["hold_expires_at"] = holdExpiresAt.Time
+		}
+	}
+	respond(w, 200, value)
 }

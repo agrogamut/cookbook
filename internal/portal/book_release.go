@@ -66,7 +66,7 @@ func (s *Server) ListBookReleases(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.pool.Query(r.Context(), `SELECT b.id,b.registration_id,r.child_name,b.book,b.status,
 		b.generated_by::text,coalesce(b.approved_by::text,''),b.generated_at,b.decided_at,octet_length(b.pdf)
 		FROM app_private.book_release b JOIN app_private.consultation_registration r ON r.id=b.registration_id
-		WHERE ($1='admin' OR r.assigned_doctor_id=$2) AND ($3='' OR b.registration_id=$3)
+		WHERE ($1='admin' OR r.assigned_doctor_id=$2) AND ($3='' OR b.registration_id::text=$3)
 		ORDER BY b.generated_at DESC,b.id DESC`, a.Role, a.ID, registrationID)
 	if err != nil {
 		serverError(w, err)
@@ -167,7 +167,7 @@ func (s *Server) FamilyBookDownload(w http.ResponseWriter, r *http.Request) {
 	var book, childName string
 	err := s.pool.QueryRow(r.Context(), `SELECT b.pdf,b.book,r.child_name
 		FROM app_private.book_release b JOIN app_private.consultation_registration r ON r.id=b.registration_id
-		WHERE b.id=$1 AND b.status='approved' AND r.guardian_id=$2`, id, CurrentGuardian(r.Context()).ID).Scan(&pdf, &book, &childName)
+		WHERE b.id=$1 AND b.status='approved' AND r.guardian_id=$2 AND ($3='' OR r.id::text=$3)`, id, CurrentGuardian(r.Context()).ID, CurrentGuardian(r.Context()).RegistrationID).Scan(&pdf, &book, &childName)
 	if errors.Is(err, pgx.ErrNoRows) {
 		fail(w, http.StatusNotFound, "Book release not found.")
 		return

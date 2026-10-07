@@ -129,6 +129,7 @@ type PaymentGateway interface {
 	PublicKey() string
 	CreateOrder(context.Context, string, int, string) (GatewayOrder, error)
 	FetchPayment(context.Context, string) (Payment, error)
+	RefundPayment(context.Context, string, int, string) (string, error)
 	VerifyCheckout(string, string, string) bool
 	VerifyWebhook([]byte, string) bool
 }
@@ -143,6 +144,10 @@ func NewRazorpay(keyID, secret, webhookSecret string) *Razorpay {
 func (g *Razorpay) Enabled() bool     { return g.KeyID != "" && g.Secret != "" && g.WebhookSecret != "" }
 func (g *Razorpay) PublicKey() string { return g.KeyID }
 func (g *Razorpay) call(ctx context.Context, method, path string, body, out any) error {
+	return g.callWithKey(ctx, method, path, body, out, "")
+}
+
+func (g *Razorpay) callWithKey(ctx context.Context, method, path string, body, out any, key string) error {
 	if !g.Enabled() {
 		return ErrUnavailable
 	}
@@ -160,6 +165,9 @@ func (g *Razorpay) call(ctx context.Context, method, path string, body, out any)
 	}
 	req.SetBasicAuth(g.KeyID, g.Secret)
 	req.Header.Set("Content-Type", "application/json")
+	if key != "" {
+		req.Header.Set("X-Refund-Idempotency", key)
+	}
 	resp, err := g.HTTP.Do(req)
 	if err != nil {
 		return fmt.Errorf("payment service request: %w", err)
@@ -172,6 +180,22 @@ func (g *Razorpay) call(ctx context.Context, method, path string, body, out any)
 		return fmt.Errorf("decode payment response: %w", err)
 	}
 	return nil
+}
+
+func (g *Razorpay) RefundPayment(ctx context.Context, paymentID string, amount int, key string) (string, error) {
+	if !validProviderID(paymentID, "pay_") || amount <= 0 || !validUUID(key) {
+		return "", errors.New("invalid refund request")
+	}
+	var value struct {
+		ID        string `json:"id"`
+		PaymentID string `json:"payment_id"`
+		Amount    int    `json:"amount"`
+	}
+	err := g.callWithKey(ctx, "POST", "/payments/"+url.PathEscape(paymentID)+"/refund", map[string]any{"amount": amount}, &value, key)
+	if err == nil && (!validProviderID(value.ID, "rfnd_") || value.PaymentID != paymentID || value.Amount != amount) {
+		err = errors.New("payment service returned a mismatched refund")
+	}
+	return value.ID, err
 }
 func (g *Razorpay) CreateOrder(ctx context.Context, receipt string, amount int, currency string) (GatewayOrder, error) {
 	var order GatewayOrder

@@ -126,3 +126,28 @@
     @apply bg-background text-foreground;
   }
 }
+
+.family-surface {
+  color-scheme: light;
+  --background: #fff;
+  --foreground: #58293b;
+  --card: #fff;
+  --card-foreground: #58293b;
+  --popover: #fff;
+  --popover-foreground: #58293b;
+  --primary: #c31352;
+  --primary-foreground: #fff;
+  --secondary: #fff0f4;
+  --secondary-foreground: #58293b;
+  --muted: #fff0f4;
+  --muted-foreground: #815b69;
+  --accent: #fce4ec;
+  --accent-foreground: #58293b;
+  --border: #e7c8d3;
+  --input: #e7c8d3;
+  --ring: #c31352;
+  --destructive: #b42318;
+  color: var(--foreground);
+}
+.family-surface [data-slot="input"] { background: white; color: #58293b; }
+.family-surface [data-slot="button"][data-variant="outline"] { background: white; }

@@ -2,6 +2,7 @@ package portal
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -17,10 +18,11 @@ import (
 const guardianSessionCookie = "madamgy_guardian"
 
 type Guardian struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Email  string `json:"email"`
-	Active bool   `json:"active"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Email          string `json:"email"`
+	Active         bool   `json:"active"`
+	RegistrationID string `json:"registration_id,omitempty"`
 }
 
 func (s *Server) ListGuardians(w http.ResponseWriter, r *http.Request) {
@@ -82,11 +84,12 @@ func (s *Server) RequireGuardian(next http.Handler) http.Handler {
 		}
 		var g Guardian
 		err := s.pool.QueryRow(r.Context(), `
-			SELECT a.id, a.name, a.email, a.active
+			SELECT a.id, a.name, CASE WHEN s.registration_id IS NULL THEN a.email ELSE coalesce(r.email,'') END, a.active,coalesce(s.registration_id::text,'')
 			FROM app_private.guardian_session s
 			JOIN app_private.guardian_account a ON a.id=s.guardian_id
-			WHERE s.token_hash=$1 AND s.expires_at > now() AND a.active`, tokenHash(value)).
-			Scan(&g.ID, &g.Name, &g.Email, &g.Active)
+			LEFT JOIN app_private.consultation_registration r ON r.id=s.registration_id AND r.guardian_id=a.id
+			WHERE s.token_hash=$1 AND s.expires_at > now() AND a.active AND (s.registration_id IS NULL OR r.id IS NOT NULL)`, tokenHash(value)).
+			Scan(&g.ID, &g.Name, &g.Email, &g.Active, &g.RegistrationID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			s.setGuardianCookie(w, "", -1)
 			fail(w, http.StatusUnauthorized, "Your family session ended. Sign in again.")
@@ -221,6 +224,87 @@ func (s *Server) GuardianLogin(w http.ResponseWriter, r *http.Request) {
 	respond(w, http.StatusOK, g)
 }
 
+// GuardianChildAccess is the account-free family entry point. The registration
+// token is the private second factor, so a name and birth date alone can never
+// open a child's records.
+func (s *Server) GuardianChildAccess(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ChildName   string `json:"child_name"`
+		DateOfBirth string `json:"date_of_birth"`
+		Token       string `json:"token"`
+	}
+	if !decode(w, r, &body) {
+		return
+	}
+	body.ChildName = strings.Join(strings.Fields(body.ChildName), " ")
+	body.DateOfBirth = strings.TrimSpace(body.DateOfBirth)
+	body.Token = strings.TrimSpace(body.Token)
+	if !validName(body.ChildName) || !validToken(body.Token) {
+		fail(w, http.StatusUnauthorized, "The child details or private token are incorrect.")
+		return
+	}
+	if _, err := time.Parse("2006-01-02", body.DateOfBirth); err != nil {
+		fail(w, http.StatusUnauthorized, "The child details or private token are incorrect.")
+		return
+	}
+	tx, err := s.pool.Begin(r.Context())
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	defer tx.Rollback(r.Context())
+	var registrationID string
+	var guardianID sql.NullString
+	var guardianName, guardianEmail sql.NullString
+	err = tx.QueryRow(r.Context(), `SELECT id,guardian_id::text,guardian_name,coalesce(email,'')
+		FROM app_private.consultation_registration
+		WHERE lower(regexp_replace(btrim(child_name),'\s+',' ','g'))=lower($1) AND date_of_birth=$2 AND token_hash=$3
+		FOR UPDATE`, body.ChildName, body.DateOfBirth, tokenHash(body.Token)).Scan(&registrationID, &guardianID, &guardianName, &guardianEmail)
+	if errors.Is(err, pgx.ErrNoRows) {
+		fail(w, http.StatusUnauthorized, "The child details or private token are incorrect.")
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	if !guardianID.Valid {
+		guardianID.String = ""
+		err = tx.QueryRow(r.Context(), `INSERT INTO app_private.guardian_account(id,name,email)
+			VALUES (gen_random_uuid(),$1,'access+' || $2 || '@family.invalid')
+			RETURNING id::text`, guardianName.String, registrationID).Scan(&guardianID.String)
+		guardianID.Valid = err == nil
+		if err == nil {
+			_, err = tx.Exec(r.Context(), `UPDATE app_private.consultation_registration SET guardian_id=$2,updated_at=now() WHERE id=$1`, registrationID, guardianID.String)
+		}
+	}
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	var active bool
+	if err = tx.QueryRow(r.Context(), `SELECT active FROM app_private.guardian_account WHERE id=$1`, guardianID.String).Scan(&active); err != nil {
+		serverError(w, err)
+		return
+	}
+	if !active {
+		fail(w, 401, "The child details or private token are incorrect.")
+		return
+	}
+	g := Guardian{ID: guardianID.String, Name: guardianName.String, Email: guardianEmail.String, Active: true, RegistrationID: registrationID}
+	v := token()
+	if _, err = tx.Exec(r.Context(), `INSERT INTO app_private.guardian_session(token_hash,guardian_id,registration_id,expires_at) VALUES ($1,$2,$3,$4)`, tokenHash(v), g.ID, registrationID, time.Now().Add(sessionLifetime)); err != nil {
+		serverError(w, err)
+		return
+	}
+	if err = tx.Commit(r.Context()); err != nil {
+		serverError(w, err)
+		return
+	}
+	s.setGuardianCookie(w, v, int(sessionLifetime.Seconds()))
+	respond(w, http.StatusOK, g)
+}
+
 func (s *Server) GuardianLogout(w http.ResponseWriter, r *http.Request) {
 	if _, err := s.pool.Exec(r.Context(), `DELETE FROM app_private.guardian_session WHERE token_hash=$1`, tokenHash(guardianRequestToken(r))); err != nil {
 		serverError(w, err)
@@ -241,6 +325,10 @@ type familyRegistrationInput struct {
 }
 
 func (s *Server) CreateFamilyRegistration(w http.ResponseWriter, r *http.Request) {
+	if CurrentGuardian(r.Context()).RegistrationID != "" {
+		fail(w, 403, "Sign in with your family account to manage other registrations.")
+		return
+	}
 	var body familyRegistrationInput
 	if !decode(w, r, &body) {
 		return
@@ -281,6 +369,10 @@ func (s *Server) CreateFamilyRegistration(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) AttachFamilyRegistration(w http.ResponseWriter, r *http.Request) {
+	if CurrentGuardian(r.Context()).RegistrationID != "" {
+		fail(w, 403, "Sign in with your family account to manage other registrations.")
+		return
+	}
 	id := chi.URLParam(r, "id")
 	if id != "" && !validUUID(id) {
 		fail(w, http.StatusNotFound, "Registration not found.")

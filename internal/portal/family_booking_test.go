@@ -49,6 +49,8 @@ func TestFamilyBookingReleaseAndRoleBoundaries(t *testing.T) {
 	}
 	defer func() {
 		pool.Exec(ctx, `DELETE FROM app_private.appointment WHERE requested_by IN ($1,$2) OR decided_by IN ($1,$2)`, admin.ID, doctorOne.ID)
+		pool.Exec(ctx, `DELETE FROM app_private.payment_event WHERE order_id IN (SELECT id FROM app_private.consultation_order WHERE registration_id IN (SELECT id FROM app_private.consultation_registration WHERE guardian_id IN ($1,$2)))`, familyOne.ID, familyTwo.ID)
+		pool.Exec(ctx, `DELETE FROM app_private.consultation_order WHERE registration_id IN (SELECT id FROM app_private.consultation_registration WHERE guardian_id IN ($1,$2))`, familyOne.ID, familyTwo.ID)
 		pool.Exec(ctx, `DELETE FROM app_private.doctor_availability WHERE doctor_id IN ($1,$2)`, doctorOne.ID, doctorTwo.ID)
 		pool.Exec(ctx, `DELETE FROM public.child_profile WHERE child_id IN (SELECT child_id FROM app_private.consultation_registration WHERE guardian_id IN ($1,$2))`, familyOne.ID, familyTwo.ID)
 		pool.Exec(ctx, `DELETE FROM app_private.consultation_registration WHERE guardian_id IN ($1,$2)`, familyOne.ID, familyTwo.ID)
@@ -115,6 +117,11 @@ func TestFamilyBookingReleaseAndRoleBoundaries(t *testing.T) {
 	if !isPgError(execOverlapAppointment(ctx, pool, registrationThree, doctorTwo.ID, start.Add(time.Hour), start.Add(2*time.Hour), admin.ID), "23P01") {
 		t.Fatal("database did not reject overlapping appointment")
 	}
+	expectCode(t, portalRequest(router, "POST", "/api/admin/appointments/"+appointmentOne+"/decision", map[string]string{"action": "confirm"}, adminCookie, ""), 409)
+	if _, err := pool.Exec(ctx, `INSERT INTO app_private.consultation_order(id,registration_id,amount_paise,currency,status,appointment_id)
+		VALUES ($1,$2,1000,'INR','paid',$3)`, "order_"+token()[:20], registrationOne, appointmentOne); err != nil {
+		t.Fatal(err)
+	}
 
 	// A specific-doctor request uses doctor one, whose earlier confirmed appointment does not overlap.
 	specific := map[string]string{"registration_id": registrationTwo, "doctor_id": doctorOne.ID, "starts_at": start.Add(time.Hour).Format(time.RFC3339), "ends_at": start.Add(2 * time.Hour).Format(time.RFC3339)}
@@ -152,7 +159,7 @@ func TestFamilyBookingReleaseAndRoleBoundaries(t *testing.T) {
 		FROM app_private.appointment a JOIN app_private.consultation_registration r ON r.id=a.registration_id WHERE a.id=$1`, appointmentOne).Scan(&appointmentStatus, &assignedAfterDeactivation); err != nil {
 		t.Fatal(err)
 	}
-	if appointmentStatus != "cancelled" || assignedAfterDeactivation != "" {
+	if appointmentStatus != "refund_required" || assignedAfterDeactivation != "" {
 		t.Fatalf("doctor deactivation left active booking state: appointment=%s assignment=%s", appointmentStatus, assignedAfterDeactivation)
 	}
 

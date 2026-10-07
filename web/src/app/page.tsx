@@ -103,7 +103,7 @@ export default function LandingPage() {
               <h3>Connect with your doctor</h3>
               <p>
                 The team assigns a doctor and contacts you to arrange your
-                consultation. Online payment is optional.
+                consultation. Payment secures the requested appointment time.
               </p>
             </li>
             <li>

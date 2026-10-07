@@ -6,8 +6,9 @@ import type {
 } from "./types";
 import type {
   StaffAccount, Registration, RegistrationList, ConsultationSettings, PublicSettings,
-  CheckoutOrder, CheckoutConfirmation, IntakeInput, PaymentStatus, GuardianAccount,
+  CheckoutOrder, CheckoutConfirmation, IntakeInput, GuardianAccount,
   AvailabilityBlock, FreeInterval, Appointment, BookRelease, FamilyRegistration,
+  PublicRegistrationStatus,
 } from "./portal-types";
 
 /** Resolve the API base URL, tolerating an address given without a scheme.
@@ -58,9 +59,13 @@ export const signOut = () => request<{ ok: boolean }>("/api/auth/logout", { meth
 export const changePassword = (current_password: string, password: string) => request<{ ok: boolean }>("/api/auth/password", { method: "POST", body: JSON.stringify({ current_password, password }) });
 export const getPublicSettings = () => request<PublicSettings>("/api/public/settings");
 export const registerConsultation = (input: IntakeInput) => request<{ id: string }>("/api/public/registrations", { method: "POST", body: JSON.stringify(input) });
-export const getRegistrationStatus = (id: string, token: string) => request<{ id: string; payment_status: PaymentStatus }>(`/api/public/registrations/${encodeURIComponent(id)}`, { headers: { "X-Registration-Token": token } });
+export const getRegistrationStatus = (id: string, token: string) => request<PublicRegistrationStatus>(`/api/public/registrations/${encodeURIComponent(id)}`, { headers: { "X-Registration-Token": token } });
+export const listPublicDoctors = () => request<{ id: string; name: string }[]>("/api/public/doctors");
+export const listPublicAvailability = (date: string, doctorID = "") => request<FreeInterval[]>(`/api/public/availability?date=${encodeURIComponent(date)}${doctorID ? `&doctor_id=${encodeURIComponent(doctorID)}` : ""}`);
+export const createPublicAppointment = (id: string, token: string, input: { doctor_id?: string; starts_at: string; ends_at: string }) => request<{ id: string; status: string; hold_expires_at: string }>(`/api/public/registrations/${encodeURIComponent(id)}/appointment`, { method: "POST", headers: { "X-Registration-Token": token }, body: JSON.stringify({ registration_id: id, ...input }) });
+export const cancelPublicAppointment = (id: string, appointmentID: string, token: string) => request<{ ok: boolean }>(`/api/public/registrations/${encodeURIComponent(id)}/appointment/${encodeURIComponent(appointmentID)}/cancel`, { method: "POST", headers: { "X-Registration-Token": token }, body: "{}" });
 export const createCheckoutOrder = (id: string, token: string) => request<CheckoutOrder>(`/api/public/registrations/${encodeURIComponent(id)}/order`, { method: "POST", headers: { "X-Registration-Token": token }, body: "{}" });
-export const verifyCheckout = (id: string, token: string, result: CheckoutConfirmation) => request<{ id: string; payment_status: PaymentStatus }>(`/api/public/registrations/${encodeURIComponent(id)}/verify`, { method: "POST", headers: { "X-Registration-Token": token }, body: JSON.stringify(result) });
+export const verifyCheckout = (id: string, token: string, result: CheckoutConfirmation) => request<PublicRegistrationStatus>(`/api/public/registrations/${encodeURIComponent(id)}/verify`, { method: "POST", headers: { "X-Registration-Token": token }, body: JSON.stringify(result) });
 export const listRegistrations = (query: URLSearchParams) => request<RegistrationList>(`/api/registrations?${query}`);
 export async function listAllRegistrations(): Promise<Registration[]> {
   const items: Registration[] = [];
@@ -84,6 +89,7 @@ export const attachRegistrationToGuardian = (registrationID: string, guardianID:
 
 export const familySignUp = (name: string, email: string, password: string) => request<GuardianAccount>("/api/family/auth/register", { method: "POST", body: JSON.stringify({ name, email, password }) });
 export const familySignIn = (email: string, password: string) => request<GuardianAccount>("/api/family/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
+export const familyChildAccess = (child_name: string, date_of_birth: string, token: string) => request<GuardianAccount>("/api/family/auth/access", { method: "POST", body: JSON.stringify({ child_name, date_of_birth, token }) });
 export const familySignOut = () => request<{ ok: boolean }>("/api/family/auth/logout", { method: "POST", body: "{}" });
 export const familyMe = () => request<GuardianAccount>("/api/family/auth/me");
 export const listFamilyRegistrations = () => request<FamilyRegistration[]>("/api/family/registrations");
@@ -105,6 +111,7 @@ export const saveAvailability = (input: { id?: string; doctor_id?: string; start
 export const revokeAvailability = (id: string) => request<{ ok: boolean }>(`/api/availability/${encodeURIComponent(id)}`, { method: "DELETE" });
 export const listAppointments = () => request<Appointment[]>("/api/appointments");
 export const createAdminAppointment = (input: { registration_id: string; doctor_id: string; starts_at: string; ends_at: string }) => request<{ id: string; status: string }>("/api/admin/appointments", { method: "POST", body: JSON.stringify(input) });
+export const refundAppointment = (id: string) => request<{ refund_id: string; message: string }>(`/api/admin/appointments/${encodeURIComponent(id)}/refund`, { method: "POST", body: "{}" });
 export const decideAppointment = (id: string, input: { action: "confirm" | "reject" | "cancel" | "reschedule"; doctor_id?: string; starts_at?: string; ends_at?: string }) => request<{ ok: boolean }>(`/api/admin/appointments/${encodeURIComponent(id)}/decision`, { method: "POST", body: JSON.stringify(input) });
 export const listBookReleases = (registrationID = "") => request<BookRelease[]>(`/api/book-releases${registrationID ? `?registration_id=${encodeURIComponent(registrationID)}` : ""}`);
 export const decideBookRelease = (id: string, action: "approve" | "reject") => request<{ status: string }>(`/api/admin/book-releases/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ action }) });
