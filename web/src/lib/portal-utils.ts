@@ -2,6 +2,24 @@ import type { PaymentStatus } from "./portal-types";
 
 const indiaTimeZone = "Asia/Kolkata";
 
+export const registrationReceiptKey = "madamgy.consultation.receipt";
+
+export function rememberedRegistrationToken(): string {
+  try {
+    const receipt = JSON.parse(sessionStorage.getItem(registrationReceiptKey) ?? "null");
+    return typeof receipt?.token === "string" && /^[a-f0-9]{64}$/.test(receipt.token)
+      ? receipt.token
+      : "";
+  } catch {
+    return "";
+  }
+}
+
+export function subscribeToRegistrationReceipt(notify: () => void) {
+  window.addEventListener("storage", notify);
+  return () => window.removeEventListener("storage", notify);
+}
+
 function indiaParts(value: Date) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: indiaTimeZone,
@@ -22,6 +40,21 @@ export function indiaCalendarDate(now = new Date()): Date {
 
 export function calendarDayValue(date: Date): string {
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+}
+
+export function formatDayFirstDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : "";
+}
+
+export function parseDayFirstDate(value: string): string | null {
+  const match = /^(\d{2})\/?(\d{2})\/?(\d{4})$/.exec(value);
+  if (!match || ![8, 10].includes(value.length)) return null;
+  const iso = `${match[3]}-${match[2]}-${match[1]}`;
+  const date = new Date(`${iso}T00:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === iso
+    ? iso
+    : null;
 }
 
 export function indiaTimeValue(value: string): string {

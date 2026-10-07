@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/date-input";
 import { Label } from "@/components/ui/label";
 import { listPublicDoctors } from "@/lib/api";
 import {
@@ -125,14 +126,13 @@ export function AppointmentWizard({
         </div>
         <div className="space-y-2">
           <Label htmlFor="booking-date">Date</Label>
-          <Input
+          <DateInput
             id="booking-date"
-            type="date"
             min={today}
             value={date}
             disabled={busy || loading}
-            onChange={(e) => {
-              setDate(e.target.value);
+            onValueChange={(value) => {
+              setDate(value);
               reset();
             }}
           />

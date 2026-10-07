@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Check, LockKeyhole } from "lucide-react";
 import { AppointmentWizard, type BookingChoice } from "./appointment-wizard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/date-input";
 import { Label } from "@/components/ui/label";
 import {
   cancelPublicAppointment,
@@ -23,6 +25,7 @@ import {
   money,
   newRegistrationToken,
   paymentLabels,
+  registrationReceiptKey,
 } from "@/lib/portal-utils";
 import { useHoldClock } from "@/lib/use-hold-clock";
 import { loadCheckout } from "@/lib/checkout";
@@ -32,7 +35,7 @@ import type {
 } from "@/lib/portal-types";
 
 type Receipt = { id: string; token: string } & PublicRegistrationStatus;
-const receiptKey = "madamgy.consultation.receipt";
+const receiptKey = registrationReceiptKey;
 const emptyForm = {
   guardian_name: "",
   child_name: "",
@@ -290,13 +293,9 @@ export function ConsultationForm() {
           <strong>{paymentLabels[receipt.payment_status]}</strong>
         </div>
         <p className="receipt-reference">Reference: {receipt.id}</p>
-        <p className="field-hint">
-          Save this private token to open your child’s portal with their full
-          name and date of birth:{" "}
-          <code className="block break-all rounded-md border p-2 mt-2">
-            {receipt.token}
-          </code>
-        </p>
+        <Button asChild variant="outline">
+          <Link href="/family/login">Open family portal</Link>
+        </Button>
         {receipt.appointment_id && (
           <div className="receipt-row">
             <span>Appointment</span>
@@ -372,7 +371,9 @@ export function ConsultationForm() {
         ) : receipt.appointment_id &&
           receipt.appointment_status === "awaiting_payment" ? (
           <p className="payment-intro">
-            Complete payment before the hold expires to keep this time.
+            {settings?.checkout_available
+              ? "Complete payment before the hold expires to keep this time."
+              : "Online payment is not available right now. Please contact the team before this hold expires."}
           </p>
         ) : (
           <p className="payment-intro">
@@ -380,7 +381,9 @@ export function ConsultationForm() {
               ? "Your payment is awaiting confirmation. Check its status shortly."
               : receipt.payment_status === "refunded"
                 ? "This consultation payment has been refunded. Contact the team about any further payment."
-                : "Online payment is not available right now. The team can discuss payment with you."}
+                : settings?.checkout_available
+                  ? "Choose an available consultation time above to continue to payment."
+                  : "Online payment is not available right now. The team can discuss payment with you."}
           </p>
         )}
         {receipt.appointment_id &&
@@ -454,14 +457,14 @@ export function ConsultationForm() {
           </div>
           <div>
             <Label htmlFor="child-dob">Child’s date of birth</Label>
-            <Input
+            <DateInput
               id="child-dob"
-              type="date"
               required
               min="1900-01-01"
               max={today}
               aria-describedby="child-age"
-              {...field("date_of_birth")}
+              value={form.date_of_birth}
+              onValueChange={(date_of_birth) => setForm((current) => ({ ...current, date_of_birth }))}
             />
             <p id="child-age" className="field-hint" aria-live="polite">
               {age

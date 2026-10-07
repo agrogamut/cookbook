@@ -2,7 +2,8 @@ import { expect, test } from "@playwright/test";
 import path from "node:path";
 import fs from "node:fs/promises";
 
-const evidence = path.resolve("../docs/evidence/consultation-flow");
+const evidence = path.resolve(process.env.PORTAL_EVIDENCE_DIR ?? "../docs/evidence/consultation-flow");
+const dayFirst = (iso: string) => iso.split("-").reverse().join("/");
 test("register, hold, pay, confirm, access and download", async ({
   page,
   request,
@@ -14,6 +15,10 @@ test("register, hold, pay, confirm, access and download", async ({
   await fs.mkdir(evidence, { recursive: true });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/family/login");
+  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Private registration token")).toHaveCount(0);
+  await page.evaluate((fixture) => sessionStorage.setItem("madamgy.consultation.receipt", JSON.stringify({ id: fixture.registration_id, token: fixture.token })), fixture);
 
   for (const width of [360, 768, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
@@ -29,25 +34,31 @@ test("register, hold, pay, confirm, access and download", async ({
       fullPage: true,
     });
   }
+  await page.evaluate(() => sessionStorage.removeItem("madamgy.consultation.receipt"));
   await page.goto("/");
   await page.getByLabel("Guardian’s name").fill("Browser Guardian");
   await page
     .getByLabel("Child’s name", { exact: true })
     .fill("New Browser Child");
-  await page.getByLabel("Child’s date of birth").fill("2022-05-01");
+  await page.getByLabel("Child’s date of birth").fill("01/05/2022");
   await page.getByLabel("Phone number").fill("9876543210");
   await page
     .getByRole("button", { name: "Request a consultation", exact: true })
     .click();
   await expect(page.getByText("Your request is with us.")).toBeVisible();
+  await expect(page.getByText(/private token/i)).toHaveCount(0);
+  await page.locator("#consultation").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(evidence, "registration-receipt.png"), fullPage: true });
   await expect(
     page.getByRole("button", { name: /Pay .*for consultation/ }),
   ).toHaveCount(0);
   await page
     .getByLabel("Doctor", { exact: true })
     .selectOption(fixture.doctor_id);
-  await page.getByLabel("Date", { exact: true }).fill(fixture.date);
+  await page.getByLabel("Date", { exact: true }).fill(dayFirst(fixture.date));
+  const availability = page.waitForRequest((request) => request.url().includes("/api/public/availability?"));
   await page.getByRole("button", { name: "Find available times" }).click();
+  expect(new URL((await availability).url()).searchParams.get("date")).toBe(fixture.date);
   await page
     .getByRole("button", { name: /Test Doctor A:/ })
     .first()
@@ -62,7 +73,6 @@ test("register, hold, pay, confirm, access and download", async ({
   await page.screenshot({
     path: path.join(evidence, "held-appointment.png"),
     fullPage: true,
-    mask: [page.locator("#consultation code")],
   });
 
   // Only the external checkout script is substituted. All application calls use the real API and database.
@@ -124,14 +134,47 @@ test("register, hold, pay, confirm, access and download", async ({
   });
 
   await page.goto("/family/login");
+  await expect(page.getByLabel("Private registration token")).toHaveCount(0);
+  await page.getByLabel("Child’s full name").fill("New Browser Child");
+  await page.getByLabel("Child’s date of birth").fill("02/05/2022");
+  await page.getByRole("button", { name: "Open family portal" }).click();
+  await expect(page.locator("main").getByRole("alert")).toContainText("These details could not be verified.");
+  await page.getByLabel("Child’s date of birth").fill("01/05/2022");
+  await page.getByRole("button", { name: "Open family portal" }).click();
+  await expect(page).toHaveURL(/\/family$/);
+  await expect(page.getByText("New Browser Child", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "Create a family account", exact: true }).click();
+  const familyEmail = `browser-family-${Date.now()}@example.invalid`;
+  const familyPassword = "browser-family-password-123";
+  await page.getByLabel("Your name", { exact: true }).fill("Browser Guardian");
+  await page.getByLabel("Email", { exact: true }).fill(familyEmail);
+  await page.getByLabel("Password", { exact: true }).fill(familyPassword);
+  await page.getByRole("button", { name: "Create account", exact: true }).click();
+  await expect(page).toHaveURL(/\/family$/);
+  await expect(page.getByText("New Browser Child", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/family\/login$/);
+  await page.evaluate(() => sessionStorage.removeItem("madamgy.consultation.receipt"));
+  await page.goto("/family/login");
+  await page.getByLabel("Email", { exact: true }).fill(familyEmail);
+  await page.getByLabel("Password", { exact: true }).fill(familyPassword);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/family$/);
+  await expect(page.getByText("New Browser Child", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Private registration token")).toHaveCount(0);
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/family\/login$/);
+
+  // The next sign-in belongs to a different test family with a separate registration.
+  await page.evaluate((fixture) => sessionStorage.setItem("madamgy.consultation.receipt", JSON.stringify({ id: fixture.registration_id, token: fixture.token })), fixture);
+  await page.goto("/family/login");
   await page.getByLabel("Child’s full name").fill("Browser Child");
-  await page.getByLabel("Child’s date of birth").fill("2022-05-02");
-  await page.getByLabel("Private registration token").fill(fixture.token);
+  await page.getByLabel("Child’s date of birth").fill("02/05/2022");
   await page.getByRole("button", { name: "Open family portal" }).click();
   await expect(page.locator("main").getByRole("alert")).toHaveText(
-    "The child details or private token are incorrect.",
+    "These details could not be verified. Check the child name and date of birth, or sign in with your family account.",
   );
-  await page.getByLabel("Child’s date of birth").fill("2022-05-01");
+  await page.getByLabel("Child’s date of birth").fill("01/05/2022");
   await page.getByRole("button", { name: "Open family portal" }).click();
   await expect(page).toHaveURL(/\/family$/);
   await expect(page.getByText("Browser Child", { exact: true })).toBeVisible();
@@ -153,8 +196,15 @@ test("register, hold, pay, confirm, access and download", async ({
     fullPage: true,
   });
   await page.getByRole("button", { name: "Book a consultation" }).click();
-  await page.getByLabel("Date", { exact: true }).fill(fixture.date);
+  await page.getByLabel("Date", { exact: true }).fill(dayFirst(fixture.date));
+  await page.getByRole("button", { name: "Open calendar" }).click();
+  await expect(page.getByRole("grid")).toBeVisible();
+  await page.screenshot({ path: path.join(evidence, "booking-calendar.png"), fullPage: true });
+  await page.keyboard.press("Escape");
+  await expect(page.getByLabel("Date", { exact: true })).toHaveValue(dayFirst(fixture.date));
   await page.getByRole("button", { name: "Find available times" }).click();
+  await expect(page.getByRole("button", { name: /Available consultation/ }).first()).toBeVisible();
+  await page.screenshot({ path: path.join(evidence, "booking-date-format.png"), fullPage: true });
   await page
     .getByRole("button", { name: /Available consultation/ })
     .first()

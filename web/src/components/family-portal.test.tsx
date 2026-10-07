@@ -38,6 +38,7 @@ describe("FamilyRegistrationCard", () => {
     expect(screen.queryByRole("button", { name: /download/i })).toBeNull();
     expect(screen.getByText("Book 1: pending admin")).toBeInTheDocument();
     expect(screen.getByText("Book 2: rejected")).toBeInTheDocument();
+    expect(screen.getByText("Date of birth: 01/05/2022")).toBeInTheDocument();
   });
 
   it("requires a new time before payment after a rejected request", () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -14,6 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/date-input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
@@ -36,7 +37,14 @@ import {
 } from "@/lib/api";
 import { useHoldClock } from "@/lib/use-hold-clock";
 import { loadCheckout } from "@/lib/checkout";
-import { errorMessage, money } from "@/lib/portal-utils";
+import {
+  calendarDate,
+  errorMessage,
+  formatDayFirstDate,
+  money,
+  rememberedRegistrationToken,
+  subscribeToRegistrationReceipt,
+} from "@/lib/portal-utils";
 import type { FamilyRegistration } from "@/lib/portal-types";
 
 function displayInstant(value: string | null) {
@@ -50,6 +58,10 @@ function displayInstant(value: string | null) {
 
 function statusText(value: string | null | undefined) {
   return value ? value.replaceAll("_", " ") : "not available";
+}
+
+function useSavedRegistrationToken() {
+  return useSyncExternalStore(subscribeToRegistrationReceipt, rememberedRegistrationToken, () => "");
 }
 
 export function FamilyRegistrationCard({
@@ -79,7 +91,7 @@ export function FamilyRegistrationCard({
               {registration.child_name}
             </CardTitle>
             <CardDescription>
-              Date of birth: {registration.date_of_birth}
+              Date of birth: {formatDayFirstDate(registration.date_of_birth)}
             </CardDescription>
           </div>
           <Badge variant="outline">{registration.registration_status}</Badge>
@@ -204,7 +216,7 @@ export function FamilyPortal() {
   const [childName, setChildName] = useState("");
   const [dob, setDob] = useState("");
   const [phone, setPhone] = useState("");
-  const [token, setToken] = useState("");
+  const savedToken = useSavedRegistrationToken();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -366,8 +378,7 @@ export function FamilyPortal() {
     setBusy(true);
     setError("");
     try {
-      await attachFamilyRegistration(token);
-      setToken("");
+      await attachFamilyRegistration(savedToken);
       await refresh();
     } catch (e) {
       setError(errorMessage(e));
@@ -422,6 +433,12 @@ export function FamilyPortal() {
             <AlertDescription>{message}</AlertDescription>
           </Alert>
         )}
+        {scoped && (
+          <p className="mb-4 text-sm">
+            <Link href="/family/register" className="underline">Create a family account</Link>{" "}
+            to return from another browser or device.
+          </p>
+        )}
         {!scoped && (
           <section className="grid gap-4 md:grid-cols-2">
             <Card>
@@ -441,12 +458,13 @@ export function FamilyPortal() {
                     onChange={(e) => setChildName(e.target.value)}
                   />
                   <Label htmlFor="family-dob">Date of birth</Label>
-                  <Input
+                  <DateInput
                     id="family-dob"
-                    type="date"
                     required
+                    min="1900-01-01"
+                    max={calendarDate()}
                     value={dob}
-                    onChange={(e) => setDob(e.target.value)}
+                    onValueChange={setDob}
                   />
                   <Label htmlFor="family-phone">Phone</Label>
                   <Input
@@ -468,23 +486,15 @@ export function FamilyPortal() {
               <CardHeader>
                 <CardTitle>Attach an existing request</CardTitle>
                 <CardDescription>
-                  Use the private token given with an earlier intake. Email is
-                  not used to merge accounts.
+                  {savedToken
+                    ? "Attach the registration saved in this browser to your family account."
+                    : "To link an earlier registration from another browser, contact the MadamGY team."}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <form className="space-y-3" onSubmit={attach}>
-                  <Label htmlFor="family-token">
-                    Private registration token
-                  </Label>
-                  <Input
-                    id="family-token"
-                    required
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                  />
-                  <Button disabled={busy} variant="outline">
-                    Attach request
+                  <Button disabled={busy || !savedToken} variant="outline">
+                    Attach saved request
                   </Button>
                 </form>
               </CardContent>
@@ -528,31 +538,38 @@ export function FamilyPortal() {
 
 export function FamilyAuth({ mode }: { mode: "login" | "register" }) {
   const router = useRouter();
+  const savedToken = useSavedRegistrationToken();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [childName, setChildName] = useState("");
   const [dob, setDob] = useState("");
-  const [token, setToken] = useState("");
   const [accountLogin, setAccountLogin] = useState(false);
+  const [accountCreated, setAccountCreated] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const childAccess = mode === "login" && Boolean(savedToken) && !accountLogin;
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError("");
     try {
-      if (mode === "login" && !accountLogin)
-        await familyChildAccess(childName, dob, token);
+      if (childAccess)
+        await familyChildAccess(childName, dob, savedToken);
       else if (mode === "login") await familySignIn(email, password);
-      else await familySignUp(name, email, password);
+      else {
+        if (!accountCreated) {
+          await familySignUp(name, email, password);
+          setAccountCreated(true);
+        }
+        if (savedToken) await attachFamilyRegistration(savedToken);
+      }
       router.replace("/family");
     } catch (e) {
       setError(errorMessage(e));
       setBusy(false);
     }
   }
-  const childAccess = mode === "login" && !accountLogin;
   return (
     <main className="family-surface min-h-screen bg-[#fff7f9] px-4 py-10 text-[#58293b]">
       <div className="mx-auto w-full max-w-md">
@@ -580,10 +597,10 @@ export function FamilyAuth({ mode }: { mode: "login" | "register" }) {
             </CardTitle>
             <CardDescription>
               {childAccess
-                ? "Use the child’s exact details and the private token from your registration."
+                ? "Use the child’s full name and date of birth. This browser remembers your registration."
                 : mode === "login"
-                  ? "Manage consultations and approved files."
-                  : "Create an account to manage more than one child."}
+                  ? "Sign in with your family account to manage consultations and approved files."
+                  : "Save your registration to an account and return from any browser or device."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -604,27 +621,14 @@ export function FamilyAuth({ mode }: { mode: "login" | "register" }) {
                     <Label htmlFor="family-child-dob">
                       Child’s date of birth
                     </Label>
-                    <Input
+                    <DateInput
                       id="family-child-dob"
-                      type="date"
                       required
+                      min="1900-01-01"
+                      max={calendarDate()}
                       value={dob}
-                      onChange={(e) => setDob(e.target.value)}
+                      onValueChange={setDob}
                     />
-                  </div>
-                  <div>
-                    <Label htmlFor="family-access-token">
-                      Private registration token
-                    </Label>
-                    <Input
-                      id="family-access-token"
-                      required
-                      value={token}
-                      onChange={(e) => setToken(e.target.value)}
-                    />
-                    <p className="mt-1 text-xs text-[#815b69]">
-                      This extra check keeps files private.
-                    </p>
                   </div>
                 </>
               ) : (
@@ -635,6 +639,7 @@ export function FamilyAuth({ mode }: { mode: "login" | "register" }) {
                       <Input
                         id="family-name"
                         required
+                        disabled={accountCreated}
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                       />
@@ -646,6 +651,7 @@ export function FamilyAuth({ mode }: { mode: "login" | "register" }) {
                       id="family-email"
                       type="email"
                       required
+                      disabled={accountCreated}
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                     />
@@ -658,6 +664,7 @@ export function FamilyAuth({ mode }: { mode: "login" | "register" }) {
                       minLength={12}
                       maxLength={256}
                       required
+                      disabled={accountCreated}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                     />
@@ -679,17 +686,25 @@ export function FamilyAuth({ mode }: { mode: "login" | "register" }) {
                     ? "Open family portal"
                     : mode === "login"
                       ? "Sign in"
-                      : "Create account"}
+                      : accountCreated
+                        ? "Retry linking registration"
+                        : "Create account"}
               </Button>
             </form>
-            {mode === "login" && (
+            {accountCreated && error && (
+              <p className="mt-4 text-sm">
+                Your account was created. Retry linking your saved registration, or{" "}
+                <Link href="/family" className="underline">continue to your account</Link>.
+              </p>
+            )}
+            {mode === "login" && savedToken && (
               <button
                 type="button"
                 className="mt-4 w-full text-sm text-[#a33b5f] underline"
                 onClick={() => setAccountLogin((value) => !value)}
               >
                 {accountLogin
-                  ? "Use child details and private token"
+                  ? "Use child details"
                   : "Use email and password instead"}
               </button>
             )}

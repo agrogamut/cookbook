@@ -228,6 +228,7 @@ func (s *Server) GuardianLogin(w http.ResponseWriter, r *http.Request) {
 // token is the private second factor, so a name and birth date alone can never
 // open a child's records.
 func (s *Server) GuardianChildAccess(w http.ResponseWriter, r *http.Request) {
+	const accessError = "These details could not be verified. Check the child name and date of birth, or sign in with your family account."
 	var body struct {
 		ChildName   string `json:"child_name"`
 		DateOfBirth string `json:"date_of_birth"`
@@ -240,11 +241,11 @@ func (s *Server) GuardianChildAccess(w http.ResponseWriter, r *http.Request) {
 	body.DateOfBirth = strings.TrimSpace(body.DateOfBirth)
 	body.Token = strings.TrimSpace(body.Token)
 	if !validName(body.ChildName) || !validToken(body.Token) {
-		fail(w, http.StatusUnauthorized, "The child details or private token are incorrect.")
+		fail(w, http.StatusUnauthorized, accessError)
 		return
 	}
 	if _, err := time.Parse("2006-01-02", body.DateOfBirth); err != nil {
-		fail(w, http.StatusUnauthorized, "The child details or private token are incorrect.")
+		fail(w, http.StatusUnauthorized, accessError)
 		return
 	}
 	tx, err := s.pool.Begin(r.Context())
@@ -261,7 +262,7 @@ func (s *Server) GuardianChildAccess(w http.ResponseWriter, r *http.Request) {
 		WHERE lower(regexp_replace(btrim(child_name),'\s+',' ','g'))=lower($1) AND date_of_birth=$2 AND token_hash=$3
 		FOR UPDATE`, body.ChildName, body.DateOfBirth, tokenHash(body.Token)).Scan(&registrationID, &guardianID, &guardianName, &guardianEmail)
 	if errors.Is(err, pgx.ErrNoRows) {
-		fail(w, http.StatusUnauthorized, "The child details or private token are incorrect.")
+		fail(w, http.StatusUnauthorized, accessError)
 		return
 	}
 	if err != nil {
@@ -288,7 +289,7 @@ func (s *Server) GuardianChildAccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !active {
-		fail(w, 401, "The child details or private token are incorrect.")
+		fail(w, 401, accessError)
 		return
 	}
 	g := Guardian{ID: guardianID.String, Name: guardianName.String, Email: guardianEmail.String, Active: true, RegistrationID: registrationID}
@@ -389,28 +390,21 @@ func (s *Server) AttachFamilyRegistration(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var attachedID string
-	if id != "" {
-		err := s.pool.QueryRow(r.Context(), `UPDATE app_private.consultation_registration SET guardian_id=$2,updated_at=now()
-			WHERE id=$1 AND token_hash=$3 AND guardian_id IS NULL RETURNING id`, id, CurrentGuardian(r.Context()).ID, tokenHash(body.Token)).Scan(&attachedID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			fail(w, http.StatusNotFound, "Registration not found or already attached.")
-			return
-		}
-		if err != nil {
-			serverError(w, err)
-			return
-		}
-	} else {
-		err := s.pool.QueryRow(r.Context(), `UPDATE app_private.consultation_registration SET guardian_id=$1,updated_at=now()
-			WHERE token_hash=$2 AND guardian_id IS NULL RETURNING id`, CurrentGuardian(r.Context()).ID, tokenHash(body.Token)).Scan(&attachedID)
-		if errors.Is(err, pgx.ErrNoRows) {
-			fail(w, http.StatusNotFound, "Registration not found or already attached.")
-			return
-		}
-		if err != nil {
-			serverError(w, err)
-			return
-		}
+	// Child access creates an account without password credentials. Only that
+	// exact placeholder may be upgraded; a different family account keeps ownership.
+	err := s.pool.QueryRow(r.Context(), `UPDATE app_private.consultation_registration r SET guardian_id=$1,updated_at=now()
+		WHERE r.token_hash=$2 AND ($3::text='' OR r.id::text=$3)
+		AND (r.guardian_id IS NULL OR r.guardian_id=$1 OR EXISTS (
+			SELECT 1 FROM app_private.guardian_account g WHERE g.id=r.guardian_id AND g.active
+			AND g.email='access+' || r.id::text || '@family.invalid'
+		)) RETURNING r.id`, CurrentGuardian(r.Context()).ID, tokenHash(body.Token), id).Scan(&attachedID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		fail(w, http.StatusNotFound, "Registration not found or already attached to another family account.")
+		return
+	}
+	if err != nil {
+		serverError(w, err)
+		return
 	}
 	respond(w, http.StatusOK, map[string]string{"id": attachedID})
 }

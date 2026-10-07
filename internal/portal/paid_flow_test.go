@@ -256,6 +256,57 @@ func TestConcurrentPublicSlotRequests(t *testing.T) {
 	}
 }
 
+func TestSavedRegistrationUpgradeKeepsFamilyOwnership(t *testing.T) {
+	f := newPaidFixture(t)
+	ctx := context.Background()
+	id, secret := f.register(t, "Upgrade Child")
+	w := portalRequest(f.router, "POST", "/api/family/auth/access", map[string]string{
+		"child_name": "Upgrade Child", "date_of_birth": "2022-05-01", "token": secret,
+	}, nil, "")
+	expectCode(t, w, 200)
+	childCookie := w.Result().Cookies()[0]
+	accounts := make([]Guardian, 0, 2)
+	cookies := make([]*http.Cookie, 0, 2)
+	for range 2 {
+		g, err := f.server.ProvisionGuardian(ctx, "Upgrade Guardian", "upgrade-"+token()[:12]+"@example.invalid", "test-password-only-123")
+		if err != nil {
+			t.Fatal(err)
+		}
+		accounts = append(accounts, g)
+		w := portalRequest(f.router, "POST", "/api/family/auth/login", map[string]string{"email": g.Email, "password": "test-password-only-123"}, nil, "")
+		expectCode(t, w, 200)
+		cookies = append(cookies, w.Result().Cookies()[0])
+	}
+	t.Cleanup(func() {
+		for _, account := range accounts {
+			if _, err := f.pool.Exec(ctx, `DELETE FROM app_private.guardian_account WHERE id=$1`, account.ID); err != nil {
+				t.Error(err)
+			}
+		}
+	})
+	path := "/api/family/registrations/attach"
+	body := map[string]string{"token": secret}
+	expectCode(t, portalRequest(f.router, "POST", path, body, childCookie, ""), 403)
+	expectCode(t, portalRequest(f.router, "POST", path, map[string]string{"token": token()}, cookies[0], ""), 404)
+	expectCode(t, portalRequest(f.router, "POST", path, body, cookies[0], ""), 200)
+	expectCode(t, portalRequest(f.router, "POST", "/api/family/registrations/"+id+"/attach", body, cookies[0], ""), 200)
+	expectCode(t, portalRequest(f.router, "GET", "/api/family/registrations", nil, childCookie, ""), 401)
+	expectCode(t, portalRequest(f.router, "POST", path, body, cookies[1], ""), 404)
+	items := decodeResponse[[]FamilyRegistration](t, portalRequest(f.router, "GET", "/api/family/registrations", nil, cookies[0], ""))
+	if len(items) != 1 || items[0].ID != id {
+		t.Fatal("account upgrade lost the registration")
+	}
+	blockedID, blockedSecret := f.register(t, "Blocked Upgrade Child")
+	w = portalRequest(f.router, "POST", "/api/family/auth/access", map[string]string{
+		"child_name": "Blocked Upgrade Child", "date_of_birth": "2022-05-01", "token": blockedSecret,
+	}, nil, "")
+	expectCode(t, w, 200)
+	if _, err := f.pool.Exec(ctx, `UPDATE app_private.guardian_account SET active=false WHERE id=(SELECT guardian_id FROM app_private.consultation_registration WHERE id=$1)`, blockedID); err != nil {
+		t.Fatal(err)
+	}
+	expectCode(t, portalRequest(f.router, "POST", path, map[string]string{"token": blockedSecret}, cookies[0], ""), 404)
+}
+
 func TestBookingMigrationPreservesLegacyPayment(t *testing.T) {
 	f := newPaidFixture(t)
 	ctx := context.Background()

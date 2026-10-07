@@ -33,7 +33,7 @@ async function completeForm() {
   );
   await userEvent.type(screen.getByLabelText("Child’s name"), "Test Child");
   fireEvent.change(screen.getByLabelText("Child’s date of birth"), {
-    target: { value: "2023-02-28" },
+    target: { value: "28/02/2023" },
   });
   await userEvent.type(screen.getByLabelText("Phone number"), "+919876543210");
   await userEvent.click(
@@ -79,6 +79,8 @@ describe("consultation intake", () => {
       }),
     );
     expect(createCheckoutOrder).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Save this private token/)).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open family portal" })).toHaveAttribute("href", "/family/login");
     expect(screen.getByText("Unpaid")).toBeInTheDocument();
     expect(
       sessionStorage.getItem("madamgy.consultation.receipt"),
@@ -161,7 +163,9 @@ describe("consultation intake", () => {
     vi.mocked(loadCheckout).mockResolvedValue(Checkout);
     render(<ConsultationForm />);
     await completeForm();
-    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2099-10-05" } });
+    expect(screen.getByText("Choose an available consultation time above to continue to payment.")).toBeInTheDocument();
+    expect(screen.queryByText(/Online payment is not available/)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "05/10/2099" } });
     await userEvent.click(await screen.findByRole("button", { name: "Find available times" }));
     await userEvent.click(await screen.findByRole("button", { name: /Available consultation/ }));
     await userEvent.click(screen.getByRole("button", { name: "Continue to payment" }));
