@@ -42,16 +42,18 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: { "Content-Type": "application/json", ...init?.headers },
   });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({ error: res.statusText }));
-    throw new ApiError(res.status, body.error ?? res.statusText);
-  }
+  if (!res.ok) throw await requestError(res);
   return res.json() as Promise<T>;
 }
 
 async function requestError(res: Response): Promise<ApiError> {
-  const body = await res.json().catch(() => ({ error: res.statusText }));
-  return new ApiError(res.status, body.error ?? res.statusText);
+  const body: unknown = await res.json().catch(() => null);
+  if (body && typeof body === "object" && "error" in body &&
+      typeof body.error === "string" && body.error.trim()) {
+    return new ApiError(res.status, body.error);
+  }
+  // Proxies can return HTML or no body, and HTTP/2 has no status text.
+  return new ApiError(res.status, `Request failed (HTTP ${res.status}). Please try again.`);
 }
 
 export const signIn = (email: string, password: string) => request<StaffAccount>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });

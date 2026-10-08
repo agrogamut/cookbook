@@ -8,14 +8,16 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 
 export function StaffLogin() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const router = useRouter();
-  async function submit(event: React.FormEvent) {
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
+    // Read autofilled controls before disabling them for the pending request.
+    const data = new FormData(event.currentTarget);
+    const email = String(data.get("email") ?? "");
+    const password = String(data.get("password") ?? "");
     setBusy(true);
     setError("");
     try {
@@ -28,18 +30,17 @@ export function StaffLogin() {
     }
   }
   return (
-    <form onSubmit={submit} className="space-y-5">
+    <form onSubmit={submit} noValidate className="space-y-5">
       <div className="space-y-2">
         <Label htmlFor="staff-email">Email</Label>
         <Input
           className="bg-white text-[#58293b]"
           id="staff-email"
+          name="email"
           type="email"
           autoComplete="username"
           required
           maxLength={254}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
           disabled={busy}
         />
       </div>
@@ -48,12 +49,11 @@ export function StaffLogin() {
         <Input
           className="bg-white text-[#58293b]"
           id="staff-password"
+          name="password"
           type="password"
           autoComplete="current-password"
           required
           maxLength={256}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
           disabled={busy}
         />
       </div>

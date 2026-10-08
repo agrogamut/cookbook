@@ -1,5 +1,25 @@
-import { describe, it, expect } from "vitest";
-import { resolveBaseUrl } from "./api";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { request, resolveBaseUrl } from "./api";
+
+describe("request errors", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("preserves the server's error message", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ error: "Request origin is not allowed." }, { status: 403 })));
+    await expect(request("/api/auth/login")).rejects.toMatchObject({
+      status: 403,
+      message: "Request origin is not allowed.",
+    });
+  });
+
+  it.each(["", "<html>Bad Gateway</html>", "null", "{}", '{"error":""}', '{"error":"   "}', '{"error":{}}'])("provides a useful fallback for body %j", async (body) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(body, { status: 502 })));
+    await expect(request("/api/auth/login")).rejects.toMatchObject({
+      status: 502,
+      message: expect.stringContaining("HTTP 502"),
+    });
+  });
+});
 
 // A scheme-less base url is the failure worth pinning: fetch() reads it as a relative path,
 // so every API call would go to the console's own origin and return the app's own 404 page
