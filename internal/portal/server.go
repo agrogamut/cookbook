@@ -276,10 +276,6 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, "Enter an email address and password.")
 		return
 	}
-	if !s.limits.allow("email:"+tokenHash(body.Email), 10) {
-		fail(w, 429, "Too many sign-in attempts. Try again in a minute.")
-		return
-	}
 	tx, err := s.pool.Begin(r.Context())
 	if err != nil {
 		serverError(w, err)
@@ -338,7 +334,7 @@ func (s *Server) Routes(r chi.Router) {
 	r.Post("/api/payments/webhook", s.Webhook)
 	r.Group(func(r chi.Router) {
 		r.Use(s.BrowserWrite)
-		r.With(s.Limit("login", 30)).Post("/api/auth/login", s.Login)
+		r.Post("/api/auth/login", s.Login)
 		r.With(s.Limit("family-signup", 5)).Post("/api/family/auth/register", s.GuardianSignup)
 		r.With(s.Limit("family-login", 10)).Post("/api/family/auth/login", s.GuardianLogin)
 		r.With(s.Limit("family-access", 10)).Post("/api/family/auth/access", s.GuardianChildAccess)
