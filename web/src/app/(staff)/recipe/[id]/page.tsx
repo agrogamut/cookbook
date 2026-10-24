@@ -8,7 +8,14 @@ import { PageHeader } from "@/components/page-header";
 import { safeHref } from "@/lib/utils";
 
 export default async function RecipeDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  const { id: parameter } = await params;
+  let id: string;
+  try {
+    // The pinned Next runtime supplies URI-encoded dynamic parameters.
+    id = decodeURIComponent(parameter);
+  } catch {
+    notFound();
+  }
 
   let detail;
   try {
