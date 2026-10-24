@@ -132,6 +132,13 @@ func TestActivationDelivery(t *testing.T) {
 	if !reflect.DeepEqual(snapshot, digestTables(t, pool, true)) {
 		t.Fatal("provider importer changed case source rows")
 	}
+	current, err := Parse(ctx, correction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Run("analyzed ingredient lookup", func(t *testing.T) {
+		assertIngredientLookup(t, pool, current, archive.SHA256)
+	})
 	for _, sql := range []string{`UPDATE case_source_recipe_revision SET fields=fields`, `DELETE FROM case_source_ingredient_meaning`} {
 		if _, err := pool.Exec(ctx, sql); err == nil {
 			t.Fatal("immutable projection accepted mutation")
