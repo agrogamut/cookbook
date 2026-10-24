@@ -181,10 +181,12 @@ func renderBlocks(blocks []Block, language, pPr string, width int, images *image
 		}
 		b.WriteString("</w:tblGrid>")
 		for i, row := range t.Rows {
-			b.WriteString("<w:tr>")
+			// Avoid header-only continuations when Writer splits short nested rows.
+			b.WriteString("<w:tr><w:trPr><w:cantSplit/>")
 			if i == 0 && t.Header {
-				b.WriteString("<w:trPr><w:tblHeader/></w:trPr>")
+				b.WriteString("<w:tblHeader/>")
 			}
+			b.WriteString("</w:trPr>")
 			for _, v := range row {
 				b.WriteString(fmt.Sprintf(`<w:tc><w:tcPr><w:tcW w:w="%d" w:type="dxa"/></w:tcPr>`, colWidth))
 				b.WriteString(paragraph(Paragraph{Runs: []Run{{Text: v, Bold: i == 0 && t.Header}}}, language, pPr))

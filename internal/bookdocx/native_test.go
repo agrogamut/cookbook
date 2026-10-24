@@ -110,6 +110,9 @@ func TestNative(t *testing.T) {
 					t.Fatal(err)
 				}
 				text := command(t, "pdftotext", "-layout", stem+".pdf", "-")
+				if err := checkFixtureHeaders(text); err != nil {
+					t.Error(err)
+				}
 				for _, marker := range []string{fmt.Sprintf("SYNTHETIC-B%d-01", book), "SYN-RECIPE-0000", "SYN-RECIPE-0011", "12.50 g", "0.005 g", "SOURCE GAP"} {
 					if !strings.Contains(text, marker) {
 						t.Errorf("PDF lost marker %q", marker)
@@ -323,5 +326,40 @@ func TestContentColumnOracle(t *testing.T) {
 	}
 	if err := checkQuantityColumns(strings.ReplaceAll(good, `xMin="110"`, `xMin="40"`), 1); err == nil {
 		t.Fatal("collapsed columns accepted")
+	}
+}
+
+func checkFixtureHeaders(text string) error {
+	pending := false
+	for _, line := range strings.Split(text, "\n") {
+		if strings.Contains(line, "Fixture ID") && strings.Contains(line, "Exact quantity") {
+			if pending {
+				return fmt.Errorf("repeated fixture header without a data row")
+			}
+			pending = true
+		}
+		if strings.Contains(line, "SYN-RECIPE-") && pending {
+			return fmt.Errorf("fixture header has no data before the next entry: %s", strings.TrimSpace(line))
+		}
+		if strings.Contains(line, "SYN-ING-") || strings.Contains(line, "00042") && strings.Contains(line, "0.005 g") {
+			pending = false
+		}
+	}
+	if pending {
+		return fmt.Errorf("fixture header has no following data")
+	}
+	return nil
+}
+
+func TestContentHeaderOracle(t *testing.T) {
+	header := "Fixture ID    Exact quantity\n"
+	good := header + "SYN-ING-0000    12.50 g\n\f" + header + "00042    0.005 g\nSYN-RECIPE-0001\n"
+	if err := checkFixtureHeaders(good); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{header + "SYN-RECIPE-0001\n", header + "\f" + header + "00042 0.005 g\n", header} {
+		if err := checkFixtureHeaders(bad); err == nil {
+			t.Fatal("orphan header accepted")
+		}
 	}
 }

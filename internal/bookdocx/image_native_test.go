@@ -55,6 +55,9 @@ func TestNativeImages(t *testing.T) {
 					t.Fatal(err)
 				}
 				text := command(t, "pdftotext", "-layout", stem+".pdf", "-")
+				if err := checkFixtureHeaders(text); err != nil {
+					t.Error(err)
+				}
 				if !strings.Contains(text, "SYN-RECIPE-0011") || !strings.Contains(text, "0.005 g") {
 					t.Fatal("image insertion lost long content")
 				}
