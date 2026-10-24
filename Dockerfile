@@ -20,6 +20,7 @@ COPY internal/ ./internal/
 ENV CGO_ENABLED=0
 RUN go build -o /out/server ./cmd/server && \
     go build -o /out/import ./cmd/import && \
+    go build -o /out/import-cases ./cmd/import-cases && \
     go build -o /out/staff-admin ./cmd/staff-admin && \
     go clean -cache
 
@@ -55,11 +56,12 @@ RUN cd /usr/share/fonts/bookdocx && sha256sum -c SHA256SUMS \
 # other way to run it against a deployed database: staff accounts are provisioned, never
 # self-registered, so without this binary a fresh deployment has nobody who can sign in and
 # no route to creating them. It is a one-off job's start command, never the entrypoint.
-COPY --from=build /out/server /out/import /out/staff-admin /usr/local/bin/
+COPY --from=build /out/server /out/import /out/import-cases /out/staff-admin /usr/local/bin/
 
 # The provider's 14 workbooks are the source of truth and are committed to the repository, so
 # the importer reads them from the image rather than needing a volume or a download.
 COPY data/provider/ /app/data/provider/
+COPY data/case-source/ /app/data/case-source/
 
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
