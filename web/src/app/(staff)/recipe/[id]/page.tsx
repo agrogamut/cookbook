@@ -33,8 +33,10 @@ export default async function RecipeDetailPage({ params }: { params: Promise<{ i
       <PageHeader
         title={method.recipe_id}
         description={`${method.recipe_name} · ${method.region_culture}`}
-        meta={<Badge variant="outline">{method.provider_review_status}</Badge>}
       />
+      <Badge variant="outline" className="max-w-full rounded-md whitespace-normal break-words text-left">
+        {method.provider_review_status}
+      </Badge>
 
       <Tabs defaultValue="provider">
         <TabsList>
