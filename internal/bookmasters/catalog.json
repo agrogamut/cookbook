@@ -1,0 +1,50 @@
+[
+  {
+    "book": 1,
+    "language": "bn",
+    "version": "v1",
+    "path": "masters/v1/book1-bn.docx",
+    "sha256": "6ecb9a89f356d6c3bb6472f50d0bb592bc8d324c8965130b1bfd79bfbee7bd70",
+    "original_name": "attachment-7634046580d59d5fbb4413da9ea06fe8.docx"
+  },
+  {
+    "book": 1,
+    "language": "en",
+    "version": "v1",
+    "path": "masters/v1/book1-en.docx",
+    "sha256": "04ac1c951c0600fc77918a761b39314281822f08e889e96dcaa0ece333376dc7",
+    "original_name": "attachment-5bfa59e817bef946f3a6a6f498a2c7a9.docx"
+  },
+  {
+    "book": 1,
+    "language": "hi",
+    "version": "v1",
+    "path": "masters/v1/book1-hi.docx",
+    "sha256": "685083a537341614c85c158d241d97d0c1a01e2225f58e3eaea4ff208ffbd7cf",
+    "original_name": "attachment-81db827ab301f70665202d0b19b17b5e.docx"
+  },
+  {
+    "book": 2,
+    "language": "bn",
+    "version": "v1",
+    "path": "masters/v1/book2-bn.docx",
+    "sha256": "f51a2aceae03df027a8ca456e82de20bceb95cb14c7557dc7e9dc3cc5932603d",
+    "original_name": "attachment-38d3336b975ee5752ecc98fc6a5e4b71.docx"
+  },
+  {
+    "book": 2,
+    "language": "en",
+    "version": "v1",
+    "path": "masters/v1/book2-en.docx",
+    "sha256": "4cdb351dd8b51b3026f46c33660bbb5430e8176f8c091879c979b5e0b3d53731",
+    "original_name": "attachment-262414cd2557aed3d59956d12c4203c1.docx"
+  },
+  {
+    "book": 2,
+    "language": "hi",
+    "version": "v1",
+    "path": "masters/v1/book2-hi.docx",
+    "sha256": "12a7ea7cde8c032d8d2bb4a3dca45e93ed9c2b8652db84371d19521b7f672d38",
+    "original_name": "attachment-03f530e3a07fb1791cf7343c02cde015.docx"
+  }
+]
