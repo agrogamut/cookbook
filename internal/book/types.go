@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/madamgy/recipie/internal/aidraft"
+	"github.com/madamgy/recipie/internal/casesource"
 )
 
 // Omission scope markers. An assembler reports two different things through one skip slice:
@@ -498,9 +499,12 @@ type CreditRow struct {
 // Bengali name for that ingredient_id -- never a transliteration, which this project has no
 // verified source for and would be an invented value.
 type IngredientLine struct {
-	Name     string `json:"name"`
-	Bengali  string `json:"bengali_name,omitempty"`
-	Quantity string `json:"quantity,omitempty"`
+	Name            string `json:"name"`
+	Bengali         string `json:"bengali_name,omitempty"`
+	Quantity        string `json:"quantity,omitempty"`
+	SourceOrdinal   int    `json:"source_ordinal,omitempty"`
+	SourceID        string `json:"source_id,omitempty"`
+	SourceMeaningID string `json:"source_meaning_id,omitempty"`
 }
 
 // RecipeCard mirrors the recipe_card definition in MadamGY_Book2_JSON_Schema_V1.json. Its
@@ -516,22 +520,26 @@ type IngredientLine struct {
 // row as loaded rather than an invented number, and GAP-024 records that the provider does
 // not version recipes.
 type RecipeCard struct {
-	RecipeID         string           `json:"recipe_id"`
-	RecipeVersion    string           `json:"recipe_version"`
-	Title            string           `json:"title"`
-	MealCategoryID   string           `json:"meal_category_id"`
-	AgeStageIDs      []string         `json:"age_stage_ids"`
-	SelectionReasons []string         `json:"selection_reasons"`
-	NutritionTags    []string         `json:"nutrition_tags,omitempty"`
-	PrepTimeMinutes  *int             `json:"prep_time_minutes"`
-	CookTimeMinutes  *int             `json:"cook_time_minutes"`
-	CostBand         *string          `json:"cost_band"`
-	Ingredients      []IngredientLine `json:"ingredients"`
-	MethodSteps      []string         `json:"method_steps"`
-	TextureServing   *string          `json:"texture_serving"`
-	Serving          string           `json:"serving"`
-	Safety           string           `json:"safety"`
-	ReviewStatus     string           `json:"review_status"`
+	SourceCandidateID string               `json:"source_candidate_id,omitempty"`
+	SourceRevision    *casesource.Citation `json:"source_revision,omitempty"`
+	SourceFields      map[string]string    `json:"source_fields,omitempty"`
+	StorageRule       string               `json:"storage_rule,omitempty"`
+	RecipeID          string               `json:"recipe_id"`
+	RecipeVersion     string               `json:"recipe_version"`
+	Title             string               `json:"title"`
+	MealCategoryID    string               `json:"meal_category_id"`
+	AgeStageIDs       []string             `json:"age_stage_ids"`
+	SelectionReasons  []string             `json:"selection_reasons"`
+	NutritionTags     []string             `json:"nutrition_tags,omitempty"`
+	PrepTimeMinutes   *int                 `json:"prep_time_minutes"`
+	CookTimeMinutes   *int                 `json:"cook_time_minutes"`
+	CostBand          *string              `json:"cost_band"`
+	Ingredients       []IngredientLine     `json:"ingredients"`
+	MethodSteps       []string             `json:"method_steps"`
+	TextureServing    *string              `json:"texture_serving"`
+	Serving           string               `json:"serving"`
+	Safety            string               `json:"safety"`
+	ReviewStatus      string               `json:"review_status"`
 	// MethodIsProviderBoilerplate marks the 6-unique-texts problem (GAP-001) on the card
 	// itself, so a reader is told the steps are generic rather than discovering it.
 	MethodIsProviderBoilerplate bool `json:"method_is_provider_boilerplate"`
@@ -567,15 +575,7 @@ type RecipeCard struct {
 	// Nutrition is nil for a recipe with no recomputed row. See RecipeNutrition.
 	Nutrition *RecipeNutrition `json:"nutrition,omitempty"`
 
-	// Source distinguishes a real, provider-authored recipe from one Gemini invented as a
-	// last-resort fallback when a chapter fell short of its target after the real corpus was
-	// exhausted (see internal/book/invented.go). "provider" for every card loaded by
-	// loadRecipeCards; "ai-invented" is set only by the fallback path (and persisted the same
-	// way in ai_recipe when the recipe is stored for reuse). Never left empty, but never read
-	// by recipe.html either -- the printed page reads identically whichever this is, and this
-	// field exists for the JSON API and the operator console's fact-check pass, the surface
-	// where "we fact-check everything manually before signing" needs something to check
-	// against.
+	// Source and SourceRevision retain the selected corpus and immutable source locator.
 	Source string `json:"source"`
 
 	// ModificationNote is a short feeding note for a clinical condition the family's

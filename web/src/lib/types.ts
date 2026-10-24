@@ -49,6 +49,8 @@ export interface ExclusionReason {
 
 export interface RankedRecipe {
   recipe_id: string;
+  source_recipe_id?: string;
+  source_revision?: { archive_sha256: string; member_sha256: string; workbook: string; case: number; sheet: string; row: number; recipe_id: string };
   recipe_name: string;
   region_culture: string;
   meal_type: string;
@@ -78,11 +80,11 @@ export interface RankedRecipe {
    *  Like age_in_band, this is the operator's signal and appears on no printed page. A family
    *  is given no indication which corpus a recipe came from, so the console is the only place
    *  the distinction is visible before a book is signed. */
-  source: "provider" | "ai";
-  nutrition_score: number;
-  ranked_score: number;
+  source: "provider" | "ai" | "case_source";
+  nutrition_score: number | null;
+  ranked_score: number | null;
   scored_axes: string;
-  value_kind: "derived";
+  value_kind: "derived" | "unavailable";
 }
 
 export interface EngineResult {
@@ -172,7 +174,30 @@ export interface RecipeNutritionRecomputed {
 
 export interface RecipeDetail {
   method: RecipeMethodCard;
-  nutrition: RecipeNutritionRecomputed;
+  nutrition: RecipeNutritionRecomputed | null;
+  nutrition_gap?: string;
+  case_source?: {
+    candidate_id: string;
+    source: {
+      archive_sha256: string;
+      member_sha256: string;
+      workbook: string;
+      case: number;
+      sheet: string;
+      row: number;
+      recipe_id: string;
+    };
+    fields: Record<string, string>;
+    serving_grams: string;
+    ingredients: {
+      ordinal: number;
+      meaning_id: string;
+      raw_id: string;
+      raw_name: string;
+      raw_grams: string;
+      grams: string;
+    }[];
+  };
 }
 
 // Every field here is optional-nullable except ingredient_id/english_name/food_group/

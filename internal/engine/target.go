@@ -127,6 +127,12 @@ func rankByTarget(ctx context.Context, pool *pgxpool.Pool, targetCode string, ca
 	if err := rows.Err(); err != nil {
 		return nil, models.StepResult{}, fmt.Errorf("engine: rank by target rows: %w", err)
 	}
+	rows.Close()
+	source, err := sourceRanked(ctx, pool, candidateIDs)
+	if err != nil {
+		return nil, models.StepResult{}, err
+	}
+	out = append(out, source...)
 
 	return out, models.StepResult{
 		Step: 5, Name: "Nutrition target", Kind: "ranker",

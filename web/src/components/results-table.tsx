@@ -27,8 +27,8 @@ export function ResultsTable({ recipes }: { recipes: RankedRecipe[] }) {
         {recipes.map((r) => (
           <TableRow key={r.recipe_id}>
             <TableCell>
-              <Link href={`/recipe/${r.recipe_id}`} className="font-mono text-xs underline underline-offset-2">
-                {r.recipe_id}
+              <Link href={`/recipe/${encodeURIComponent(r.recipe_id)}`} className="font-mono text-xs underline underline-offset-2">
+                {r.source_recipe_id ?? r.recipe_id}
               </Link>
               <div className="text-sm">{r.recipe_name}</div>
             </TableCell>
@@ -56,13 +56,14 @@ export function ResultsTable({ recipes }: { recipes: RankedRecipe[] }) {
                 badge, for the same reason "outside" does above: the badge marks the row that
                 warrants a look, not the ordinary case. */}
             <TableCell className="text-xs">
-              {r.source === "ai" ? (
+              {r.source === "case_source" ? <span>case source</span> : r.source === "ai" ? (
                 <Badge variant="secondary" className="font-mono text-[10px]">ai corpus</Badge>
               ) : (
                 <span className="text-muted-foreground">provider</span>
               )}
             </TableCell>
             <TableCell className="text-right">
+              {r.value_kind === "unavailable" || r.nutrition_score === null ? <span className="text-xs">Unavailable</span> : (
               <div className="flex items-center justify-end gap-2">
                 <span className="font-mono text-xs">{r.nutrition_score.toFixed(3)}</span>
                 <ProvenanceChip
@@ -70,8 +71,10 @@ export function ResultsTable({ recipes }: { recipes: RankedRecipe[] }) {
                   explanation={`Scored axes: ${r.scored_axes}. sum(weight * normalised axis) / sum(weight), normalised within the ${r.age_group} age band.`}
                 />
               </div>
+              )}
             </TableCell>
             <TableCell className="text-right">
+              {r.value_kind === "unavailable" || r.ranked_score === null ? <span className="text-xs">Unscored</span> : (
               <div className="flex items-center justify-end gap-2">
                 <span className="font-mono text-xs">{r.ranked_score.toFixed(3)}</span>
                 <ProvenanceChip
@@ -79,6 +82,7 @@ export function ResultsTable({ recipes }: { recipes: RankedRecipe[] }) {
                   explanation='Nutrition score, then adjusted by whichever of the step 7 (region), 9 (availability), 10 (budget) and 12 (near-duplicate) rankers applied -- each adjustment is a small nudge (roughly +/-0.02 to +/-0.05), never large enough to override the nutrition ranking. See "Why this result" for exactly which steps ran and what each did to this recipe.'
                 />
               </div>
+              )}
             </TableCell>
           </TableRow>
         ))}

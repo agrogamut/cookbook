@@ -221,13 +221,13 @@ func TestImport(t *testing.T) {
 		t.Fatal("provider importer changed case source staging")
 	}
 	beforeRollback := digestTables(t, pool, false)
-	for _, direction := range []string{"down", "up"} {
-		sql, err := os.ReadFile("../db/migrations/0045_case_source_staging." + direction + ".sql")
+	for _, migration := range []string{"0046_case_source_activation.down", "0045_case_source_staging.down", "0045_case_source_staging.up", "0046_case_source_activation.up"} {
+		sql, err := os.ReadFile("../db/migrations/" + migration + ".sql")
 		if err != nil {
 			t.Fatal(err)
 		}
 		if _, err := pool.Exec(ctx, string(sql)); err != nil {
-			t.Fatalf("migration %s: %v", direction, err)
+			t.Fatalf("migration %s: %v", migration, err)
 		}
 	}
 	if !reflect.DeepEqual(beforeRollback, digestTables(t, pool, false)) {

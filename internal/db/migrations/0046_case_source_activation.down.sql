@@ -1,0 +1,10 @@
+DROP VIEW engine_candidate_ingredient;
+ALTER VIEW engine_candidate_ingredient_existing RENAME TO engine_candidate_ingredient;
+DROP VIEW engine_candidate;
+ALTER VIEW engine_candidate_existing RENAME TO engine_candidate;
+DROP VIEW case_source_recipe_ingredient;
+DROP VIEW case_source_active_recipe;
+DROP TABLE case_source_recipe_current;
+DROP TABLE case_source_recipe_revision;
+DROP TABLE case_source_ingredient_meaning;
+ALTER TABLE case_source_row DROP CONSTRAINT case_source_row_identity;

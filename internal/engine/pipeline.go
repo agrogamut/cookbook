@@ -30,6 +30,13 @@ func Run(ctx context.Context, pool *pgxpool.Pool, p models.ChildProfile) (models
 		return models.EngineResult{}, err
 	}
 	steps = append(steps, step1)
+	ids, sourceEligibility, err := sourceStep(ctx, pool, p, ids)
+	if err != nil {
+		return models.EngineResult{}, err
+	}
+	if sourceEligibility != nil {
+		steps = append(steps, *sourceEligibility)
+	}
 
 	ids, step2, unscreened, err := allergyFilter(ctx, pool, p, ids)
 	if err != nil {

@@ -60,7 +60,7 @@ export default async function RecipeDetailPage({ params }: { params: Promise<{ i
 
       <Separator />
 
-      <section>
+      {nutrition ? <section>
         <h2 className="mb-2 font-mono text-sm">Nutrition, provider vs. recomputed</h2>
         <ProvenanceChip
           source={nutrition.fully_verified ? "ifct" : "provider"}
@@ -103,7 +103,28 @@ export default async function RecipeDetailPage({ params }: { params: Promise<{ i
             </tr>
           </tbody>
         </table>
-      </section>
+      </section> : <p className="text-sm">{detail.nutrition_gap ?? "Verified nutrition is unavailable."}</p>}
+      {detail.case_source && (
+        <section className="space-y-3 text-xs">
+          <h2 className="font-mono text-sm">Source revision</h2>
+          <p>{detail.case_source.source.workbook}, {detail.case_source.source.sheet}, row {detail.case_source.source.row}</p>
+          <p className="break-all font-mono">Archive: {detail.case_source.source.archive_sha256}</p>
+          <p className="break-all font-mono">Member: {detail.case_source.source.member_sha256}</p>
+          <p>Collection membership does not establish eligibility for a child. Original source estimates and review text are retained below.</p>
+          <table className="w-full text-left">
+            <thead><tr><th>Ordinal</th><th>Raw ID</th><th>Source name</th><th>Grams</th></tr></thead>
+            <tbody>{detail.case_source.ingredients.map((ingredient) => (
+              <tr key={ingredient.ordinal}><td>{ingredient.ordinal}</td><td className="font-mono">{ingredient.raw_id}</td><td>{ingredient.raw_name}</td><td className="font-mono">{ingredient.grams}</td></tr>
+            ))}</tbody>
+          </table>
+          <table className="w-full text-left">
+            <thead><tr><th>Source field</th><th>Original value</th></tr></thead>
+            <tbody>{Object.entries(detail.case_source.fields).map(([field, value]) => (
+              <tr key={field}><td className="align-top font-mono">{field}</td><td className="whitespace-pre-wrap">{value}</td></tr>
+            ))}</tbody>
+          </table>
+        </section>
+      )}
     </div>
   );
 }

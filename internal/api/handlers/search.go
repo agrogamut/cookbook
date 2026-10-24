@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/madamgy/recipie/internal/casesource"
 	"github.com/madamgy/recipie/internal/engine"
 	"github.com/madamgy/recipie/internal/models"
 )
@@ -34,5 +35,42 @@ func (h *Handlers) Search(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "search failed: "+err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, result)
+	var sourceIDs []string
+	for _, recipe := range result.Recipes {
+		if recipe.Source == casesource.CandidateSource {
+			sourceIDs = append(sourceIDs, recipe.RecipeID)
+		}
+	}
+	sources, err := casesource.Recipes(r.Context(), h.pool, sourceIDs)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "source provenance lookup failed: "+err.Error())
+		return
+	}
+	byID := map[string]casesource.Citation{}
+	for _, source := range sources {
+		byID[source.CandidateID] = source.Citation
+	}
+	recipes := make([]searchRecipe, 0, len(result.Recipes))
+	for _, recipe := range result.Recipes {
+		row := searchRecipe{RankedRecipe: recipe, NutritionScore: &recipe.NutritionScore, RankedScore: &recipe.RankedScore}
+		if source, ok := byID[recipe.RecipeID]; ok {
+			row.NutritionScore = nil
+			row.RankedScore = nil
+			row.SourceRecipeID = source.RecipeID
+			row.SourceRevision = &source
+		}
+		recipes = append(recipes, row)
+	}
+	writeJSON(w, http.StatusOK, struct {
+		models.EngineResult
+		Recipes []searchRecipe `json:"recipes"`
+	}{EngineResult: result, Recipes: recipes})
+}
+
+type searchRecipe struct {
+	models.RankedRecipe
+	NutritionScore *float64             `json:"nutrition_score"`
+	RankedScore    *float64             `json:"ranked_score"`
+	SourceRecipeID string               `json:"source_recipe_id,omitempty"`
+	SourceRevision *casesource.Citation `json:"source_revision,omitempty"`
 }

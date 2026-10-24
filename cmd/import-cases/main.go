@@ -23,6 +23,7 @@ func run() error {
 	archive := flag.String("archive", "data/case-source/3ae4477c943f672c4912ae532c1096dfc7da351d9aea9414bf03e523799797e2.zip", "case source ZIP")
 	databaseURL := flag.String("database-url", "", "explicit staging database connection; no environment fallback")
 	check := flag.Bool("check", false, "validate source bytes without connecting to a database")
+	activate := flag.Bool("activate", false, "add retained source revisions to the collection; eligibility remains profile-specific")
 	flag.Parse()
 	if !*check && *databaseURL == "" {
 		return fmt.Errorf("-database-url is required for staging import")
@@ -57,5 +58,12 @@ func run() error {
 	}
 	fmt.Printf("archive=%s inserted=%t workbooks=%d recipes=%d audits=%d occurrences=%d\n",
 		r.ArchiveSHA256, r.Inserted, r.Workbooks, r.Recipes, r.Audits, r.Occurrences)
+	if *activate {
+		a, err := casesource.Activate(ctx, pool, r.ArchiveSHA256)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("archive=%s revisions_added=%d current_changed=%d\n", a.ArchiveSHA256, a.RevisionsAdded, a.CurrentChanged)
+	}
 	return nil
 }

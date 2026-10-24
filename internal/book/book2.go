@@ -33,35 +33,8 @@ var methodStepPattern = regexp.MustCompile(`\d+\)\s*`)
 // number regardless of how many real survivors the engine returned.
 const maxRecipesPerSection = 10
 
-// mainMealCategories restricts Book 2 to the three chapters with real recipe_master.meal_type
-// coverage -- Breakfast, Lunch, Dinner (MC-01, MC-03, MC-06) -- rather than attempting all
-// seven meal_category_target rows. This is a project policy decision, not provider data.
-//
-// meal_category_recipe_map (migration 0016) deliberately leaves the other four meal_type
-// values unmapped pending a provider ruling (GAP-023): Snack, School Tiffin and Recovery Meal
-// have no counterpart in meal_category_target at all, so Mid-morning, Tiffin/school snack,
-// Evening snack and Supper/bedtime (MC-02, MC-04, MC-05, MC-07) always start with zero real
-// candidates, for every child, in every region -- not a symptom of any one region's corpus
-// being thin. Left unrestricted, every one of those four chapters needs 100% AI-invented
-// content: real, live testing against a Google Form intake (2026-08-26, see CLAUDE.md) measured
-// this costing 11m7s end to end on real recipes for a single request, most of it serial
-// Gemini calls one invented recipe at a time, some of which hit a transient upstream 503 and
-// left a chapter short by design rather than by bug. Restricting to the three mapped chapters
-// means every printed recipe traces to a real corpus row and removes that latency and
-// reliability cost entirely, at the cost of a shorter book: up to 30 recipes (3 chapters x
-// maxRecipesPerSection) rather than up to 70.
-//
-// This does not touch topUpInvented itself, which still exists and is still exercised (see
-// internal/book/invented_test.go) for the narrower, still-real case of a mapped chapter -- one
-// of these three -- where a specific child's own age/allergy/diet/clinical filters happen to
-// exclude every real candidate. That is a per-child edge case within a real chapter, not a
-// whole chapter with structurally zero coverage; the two are different problems and only the
-// second one is what mainMealCategories closes off.
-//
-// Revisit this once the provider rules on the three unmapped meal_type values (GAP-023) and/or
-// topUpInvented gets bounded concurrency (see printTimeout's own comment in
-// internal/api/router.go) -- either change makes the excluded four chapters cheap and reliable
-// enough to reconsider.
+// mainMealCategories retains the existing corpus chapters. Additional exact source
+// meal categories are selected independently with the same per-category bound.
 var mainMealCategories = map[string]bool{"MC-01": true, "MC-03": true, "MC-06": true}
 
 // mealCategory is one row of meal_category_target, with default_target_recipes parsed to an
@@ -69,9 +42,10 @@ var mainMealCategories = map[string]bool{"MC-01": true, "MC-03": true, "MC-06": 
 // code cannot parse is treated the same as an over-target value -- capped to
 // maxRecipesPerSection rather than left uncapped, per the policy above.
 type mealCategory struct {
-	ID     string
-	Name   string
-	Target int
+	ID         string
+	Name       string
+	Target     int
+	SourceOnly bool
 }
 
 // AssembleOption configures optional dependencies AssembleBook2 does not require to run.
@@ -177,7 +151,8 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 	sections := []MealSection{}
 
 	for _, cat := range categories {
-		if !mainMealCategories[cat.ID] {
+		cat.SourceOnly = !mainMealCategories[cat.ID]
+		if cat.SourceOnly && len(mapped[cat.ID]) == 0 {
 			// mainMealCategories's own doc comment has the full reasoning; the short version
 			// for an operator reading this list is that it is a scope decision, not a data
 			// gap -- unlike every other skip entry, retrying or fixing an input on this child
@@ -591,7 +566,11 @@ func loadMealCategories(ctx context.Context, pool *pgxpool.Pool) ([]mealCategory
 	rows, err := pool.Query(ctx, `
 		SELECT meal_category_id, meal_category, coalesce(default_target_recipes, '')
 		FROM meal_category_target
-		ORDER BY meal_category_id`)
+		UNION ALL
+		SELECT DISTINCT 'CS:' || (r.fields->>'Meal_Type'), r.fields->>'Meal_Type', '10'
+		FROM case_source_active_recipe r
+		WHERE NOT EXISTS (SELECT 1 FROM meal_category_target m WHERE m.meal_category=r.fields->>'Meal_Type')
+		ORDER BY 1`)
 	if err != nil {
 		return nil, fmt.Errorf("query meal categories: %w", err)
 	}
@@ -620,7 +599,10 @@ func loadMealCategories(ctx context.Context, pool *pgxpool.Pool) ([]mealCategory
 // this map has no mapped meal_type at all -- GAP-023 -- and is distinct from a category that
 // is mapped but whose recipes were all filtered out by this particular child's profile.
 func loadMealCategoryRecipeIDs(ctx context.Context, pool *pgxpool.Pool) (map[string][]string, error) {
-	rows, err := pool.Query(ctx, `SELECT meal_category_id, recipe_id FROM meal_category_recipe`)
+	rows, err := pool.Query(ctx, `SELECT meal_category_id, recipe_id FROM meal_category_recipe
+	    UNION ALL
+	    SELECT coalesce(m.meal_category_id,'CS:' || (r.fields->>'Meal_Type')),r.candidate_id FROM case_source_active_recipe r
+	    LEFT JOIN meal_category_target m ON m.meal_category=r.fields->>'Meal_Type'`)
 	if err != nil {
 		return nil, fmt.Errorf("query meal category recipe map: %w", err)
 	}
@@ -750,6 +732,14 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 	if err := rows.Err(); err != nil {
 		return nil, nil, fmt.Errorf("recipe card rows: %w", err)
 	}
+	rows.Close()
+	sourceCards, sourceOmissions, err := loadSourceCards(ctx, pool, ids, categoryID, cp)
+	if err != nil {
+		return nil, nil, fmt.Errorf("source recipe cards: %w", err)
+	}
+	for id, card := range sourceCards {
+		byRecipeID[id] = card
+	}
 
 	// Results land in their own slice, one per pendingMods entry by index -- never written
 	// into byRecipeID from inside a goroutine, since concurrent map writes are unsafe even
@@ -779,7 +769,7 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 	// slice rather than dropped -- a chapter that asked for twelve recipes and got eleven
 	// must say so, not just render eleven.
 	cards := make([]RecipeCard, 0, len(ids))
-	var skipped []string
+	skipped := append([]string{}, sourceOmissions...)
 	for _, id := range ids {
 		c, ok := byRecipeID[id]
 		if !ok {

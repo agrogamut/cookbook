@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/madamgy/recipie/internal/casesource"
 	"github.com/madamgy/recipie/internal/models"
 )
 
@@ -71,6 +72,10 @@ func sortWithinPartitions(out []models.RankedRecipe) {
 		iProvider, jProvider := out[i].Source != aiSource, out[j].Source != aiSource
 		if iProvider != jProvider {
 			return iProvider
+		}
+		iSource, jSource := out[i].Source == casesource.CandidateSource, out[j].Source == casesource.CandidateSource
+		if iSource != jSource {
+			return !iSource
 		}
 		return out[i].RankedScore > out[j].RankedScore
 	})

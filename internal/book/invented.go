@@ -41,6 +41,9 @@ func topUpInvented(ctx context.Context, pool *pgxpool.Pool, drafter aidraft.Draf
 	if cat.Target <= 0 || len(cards) >= cat.Target {
 		return cards, ""
 	}
+	if cat.SourceOnly {
+		return cards, fmt.Sprintf("%s: %d eligible source recipes selected against the %d-recipe bound; source prerequisites cannot be bypassed by fallback.", cat.Name, len(cards), cat.Target)
+	}
 	short := cat.Target - len(cards)
 	// excluded stops the same stored row filling two slots of the same chapter: each call
 	// into inventCard sees every id this call has already served, on top of whatever this
