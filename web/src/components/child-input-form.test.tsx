@@ -38,7 +38,7 @@ const storedProfile: StoredProfile = {
 };
 
 describe("ChildInputForm", () => {
-  it("submits the Bengali code selected from the two-language dropdown", async () => {
+  it.each([["Bengali", "bn", "{End}{ArrowUp}{Enter}"], ["Hindi", "hi", "{End}{Enter}"]])("submits the %s code from the supplied-master languages", async (label, code, keys) => {
     const onGenerate = vi.fn();
     const originalScroll = HTMLElement.prototype.scrollIntoView;
     HTMLElement.prototype.scrollIntoView = vi.fn();
@@ -48,11 +48,11 @@ describe("ChildInputForm", () => {
       expect(language).toHaveTextContent("English");
       language.focus();
       await userEvent.keyboard("{ArrowDown}");
-      expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["English", "Bengali"]);
-      await userEvent.keyboard("{End}{Enter}");
-      await waitFor(() => expect(language).toHaveTextContent("Bengali"));
+      expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["English", "Bengali", "Hindi"]);
+      await userEvent.keyboard(keys);
+      await waitFor(() => expect(language).toHaveTextContent(label));
       await userEvent.click(screen.getByRole("button", { name: "Generate both books" }));
-      expect(onGenerate).toHaveBeenCalledWith(expect.objectContaining({ language_id: "bn" }));
+      expect(onGenerate).toHaveBeenCalledWith(expect.objectContaining({ language_id: code }));
     } finally {
       HTMLElement.prototype.scrollIntoView = originalScroll;
     }

@@ -85,6 +85,7 @@ func specialCareConditionIDs(t *testing.T, h *Handlers) []string {
 // return 409 any more -- that status is gone from this API entirely.
 func TestASpecialCareChildGetsBooksOnEveryRoute(t *testing.T) {
 	r, h := booksRouter(t)
+	h.converter, h.converterErr = bindingRenderer{}, nil
 	const childID = "BOOK-TEST-BLOCKED-001"
 	cleanupChild(t, h, childID)
 
@@ -149,7 +150,7 @@ func TestASpecialCareChildGetsBooksOnEveryRoute(t *testing.T) {
 // does not compare against the PDF's text layer: PrintPDF adds Chrome's own repeating print
 // header carrying the provisional-data banner, which the preview instead carries once in
 // document flow, and that divergence is deliberate.
-func TestPreviewAndPdfShareTheSameHtml(t *testing.T) {
+func TestPreviewAndPdfCarryTheSameContent(t *testing.T) {
 	r, h := booksRouter(t)
 	const childID = "BOOK-TEST-PREVIEW-001"
 	cleanupChild(t, h, childID)
@@ -197,9 +198,8 @@ func TestPreviewAndPdfShareTheSameHtml(t *testing.T) {
 	if !ok {
 		t.Fatalf("renderBookHTML failed: %s", rebuildRec.Body.String())
 	}
-	if string(rebuiltHTML) != string(previewHTML) {
-		t.Fatal("BookPreview's HTTP body must be exactly what renderBookHTML produces, " +
-			"the same bytes BookDownload feeds to PrintPDF")
+	if pdfText(t, previewPDF(t, string(rebuiltHTML))) != pdfText(t, previewPDF(t, string(previewHTML))) {
+		t.Fatal("independent previews changed the recorded book content")
 	}
 
 	if !bookBrowserOnPath() {
@@ -268,8 +268,8 @@ func TestBookSetPreviewReturnsBothBooks(t *testing.T) {
 		// for the provisional banner instead; that banner is gone (2026-08-24 -- approval is
 		// a physical signature now, not a document-level claim), so the marker changed but
 		// the property under test -- "this went through the real render path" -- did not.
-		if !strings.Contains(doc, `<body class="book`) {
-			t.Fatalf("%s does not look like a real rendered document: %.80q", name, doc)
+		if !strings.Contains(pdfText(t, previewPDF(t, doc)), s.DisplayName) {
+			t.Fatalf("%s is missing the recorded child", name)
 		}
 	}
 	if body.Book1 == body.Book2 {

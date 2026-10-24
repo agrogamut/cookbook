@@ -85,13 +85,6 @@ type ChildSummary struct {
 	// product default, not a claim about the family's own spoken language, and a real
 	// language_id captured on intake still overrides it and prints verbatim.
 	//
-	// Since bookLanguage was wired in (translate.go), this field's own value also decides
-	// what language the page itself prints in: Metadata.Language is bookLanguage(languageID),
-	// "bn" for a Bengali/Bangla intake and "en" otherwise, and TranslateHTML runs a Bengali
-	// page's already-rendered English text through Gemini before it is printed. A stored
-	// language_id of, say, "Hindi" still prints on this line as stored -- it is not one of the
-	// two Metadata.Language recognises, so the page itself renders in English while honestly
-	// naming a different spoken language on the child's own profile row.
 	Sex      string `json:"sex,omitempty"`
 	Language string `json:"language,omitempty"`
 	// Photo is the cover portrait, when one was supplied. A pointer because most books have

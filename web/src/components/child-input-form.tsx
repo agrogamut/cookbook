@@ -118,12 +118,9 @@ function PhotoRow({
   );
 }
 
-// storedLanguage folds a stored free-text language_id onto the two codes the dropdown
-// offers, mirroring internal/book's bookLanguage: only bn/bengali/bangla is Bengali,
-// anything else prints English. Without it a record saved before this field was a
-// dropdown would load showing nothing at all.
 function storedLanguage(id: string | undefined): string {
   if (!id) return "";
+  if (["hi", "hindi"].includes(id.trim().toLowerCase())) return "hi";
   return ["bn", "bengali", "bangla"].includes(id.trim().toLowerCase()) ? "bn" : "en";
 }
 
@@ -467,15 +464,12 @@ export function ChildInputForm({
               </div>
               <div className={field}>
                 <Label htmlFor="g-lang">Language</Label>
-                {/* Two options because two are what the renderer has: internal/book's
-                    bookLanguage resolves "bn" to Bengali and everything else, unset
-                    included, to English. A free-text box offered languages no book
-                    can print. */}
                 <Select value={language} onValueChange={setLanguage}>
                   <SelectTrigger id="g-lang" className="w-full"><SelectValue placeholder="English" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="en">English</SelectItem>
                     <SelectItem value="bn">Bengali</SelectItem>
+                    <SelectItem value="hi">Hindi</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -703,7 +697,7 @@ export function ChildInputForm({
             <AccordionContent className="space-y-2">
               <PhotoRow
                 id="g-photo" label="Front cover"
-                hint="The child. Prints full-bleed on Book 1's cover."
+                hint="Child photograph in Book 1's identity module, fitted without cropping."
                 photo={photo} caption={caption} error={photoError}
                 onFile={(f) => readPhotoInto(f, setPhoto, setPhotoError)}
                 onCaption={setCaption}
@@ -711,7 +705,7 @@ export function ChildInputForm({
               />
               <PhotoRow
                 id="g-parents-photo" label="Back cover"
-                hint="Typically the parents. Prints full-bleed on Book 1's closing page."
+                hint="Parent photograph in Book 1's closing module, fitted without cropping."
                 photo={parentsPhoto} caption={parentsCaption} error={parentsPhotoError}
                 onFile={(f) => readPhotoInto(f, setParentsPhoto, setParentsPhotoError)}
                 onCaption={setParentsCaption}
@@ -719,7 +713,7 @@ export function ChildInputForm({
               />
               <PhotoRow
                 id="g-rx-photo" label="Prescription"
-                hint="A prescription already written and signed on paper. Replaces the blank form on the Prescription page: this attaches a real document, it does not generate one."
+                hint="An existing prescription scan, appended to Book 1 as a separately numbered annex. The template's prescription and signature fields stay blank."
                 photo={prescriptionPhoto} caption={prescriptionCaption} error={prescriptionPhotoError}
                 onFile={(f) => readPhotoInto(f, setPrescriptionPhoto, setPrescriptionPhotoError)}
                 onCaption={setPrescriptionCaption}

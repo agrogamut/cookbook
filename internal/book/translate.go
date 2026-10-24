@@ -27,17 +27,16 @@ const translateBatchSize = 25
 // asking for "Bengali" than for "bn".
 var targetLanguageName = map[string]string{
 	"bn": "Bengali",
+	"hi": "Hindi",
 }
 
-// bookLanguage turns a profile's free-text LanguageID into the short code this package's
-// rendering and translation pipeline branches on. Only "bn"/"bengali"/"bangla" (any casing)
-// selects Bengali; everything else, including an unset field, stays "en" -- the same default
-// ChildSummary.Language has always used, now also deciding what language the page itself
-// prints in rather than only what the child's profile line names.
+// bookLanguage selects the supplied master language, defaulting to English.
 func bookLanguage(languageID string) string {
 	switch strings.ToLower(strings.TrimSpace(languageID)) {
 	case "bn", "bengali", "bangla":
 		return "bn"
+	case "hi", "hindi":
+		return "hi"
 	default:
 		return "en"
 	}

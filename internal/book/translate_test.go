@@ -115,7 +115,8 @@ func TestBookLanguageRecognisesBengaliAnyCasing(t *testing.T) {
 	cases := map[string]string{
 		"":          "en",
 		"English":   "en",
-		"Hindi":     "en",
+		"Hindi":     "hi",
+		"hi":        "hi",
 		"bn":        "bn",
 		"BN":        "bn",
 		"Bengali":   "bn",

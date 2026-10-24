@@ -1,11 +1,17 @@
 package book
 
 import (
+	"bytes"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"html/template"
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"strings"
+
+	_ "golang.org/x/image/webp"
 )
 
 // ErrBadPhoto means the uploaded image was rejected. Reported to the operator rather than
@@ -106,6 +112,16 @@ func ParsePhoto(dataURI, caption string) (*ChildPhoto, error) {
 	if len(decoded) > maxPhotoBytes {
 		return nil, fmt.Errorf("%w: image is %d bytes, over the %d byte limit",
 			ErrBadPhoto, len(decoded), maxPhotoBytes)
+	}
+	config, format, err := image.DecodeConfig(bytes.NewReader(decoded))
+	if err != nil || "image/"+format != mediaType {
+		return nil, fmt.Errorf("%w: image bytes do not match %s", ErrBadPhoto, mediaType)
+	}
+	if config.Width <= 0 || config.Height <= 0 || config.Width > 8192 || config.Height > 8192 || int64(config.Width)*int64(config.Height) > 16_000_000 {
+		return nil, fmt.Errorf("%w: image exceeds pixel bounds (8192 per axis, 16 million pixels)", ErrBadPhoto)
+	}
+	if _, _, err := image.Decode(bytes.NewReader(decoded)); err != nil {
+		return nil, fmt.Errorf("%w: image cannot be fully decoded: %v", ErrBadPhoto, err)
 	}
 
 	// Re-encoded from the bytes that were actually validated, so whitespace or a stray

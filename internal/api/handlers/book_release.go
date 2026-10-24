@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
-	"github.com/madamgy/recipie/internal/book"
 	"github.com/madamgy/recipie/internal/portal"
 )
 
@@ -58,26 +57,11 @@ func (h *Handlers) GenerateBookReleases(w http.ResponseWriter, r *http.Request) 
 	s.ChildID = childID
 	s.DisplayName = childName
 	s.DateOfBirth = dateOfBirth
-	resp, set, ok := h.renderSetWithPhotos(w, r, s, photo, parentsPhoto, prescriptionPhoto)
+	resp, _, ok := h.renderSetWithPhotos(w, r, s, photo, parentsPhoto, prescriptionPhoto)
 	if !ok {
 		return
 	}
-	pdfs, err := book.PrintPDFAll(r.Context(), []book.PrintJob{
-		{Name: "book1", HTML: []byte(resp.Book1), Metadata: set.Book1.Metadata},
-		{Name: "book2", HTML: []byte(resp.Book2), Metadata: set.Book2.Metadata},
-	})
-	if err != nil {
-		status := http.StatusInternalServerError
-		if errors.Is(err, book.ErrChromiumUnavailable) {
-			status = http.StatusServiceUnavailable
-		}
-		writeError(w, status, "the books could not be printed: "+err.Error())
-		return
-	}
-	if len(pdfs) != 2 {
-		writeError(w, http.StatusInternalServerError, "the books could not be printed")
-		return
-	}
+	pdfs := resp.pdfs
 	if err := portal.New(h.pool, portal.Options{}).SaveBookReleases(r.Context(), registrationID, childID, actor.ID, pdfs[0], pdfs[1]); err != nil {
 		writeError(w, http.StatusInternalServerError, "the book release could not be saved: "+err.Error())
 		return

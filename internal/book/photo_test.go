@@ -7,13 +7,12 @@ import (
 	"testing"
 )
 
-// A 1x1 PNG, the smallest real image, so the test exercises decoding rather than a string
-// that merely looks like base64.
-const onePixelPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+// A fully decodable PNG fixture.
+const onePixelPNG = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGOUC+hhYGBgYmBgYGBgAAALdAD+3y8XygAAAABJRU5ErkJggg=="
 
 func TestParsePhotoAcceptsRealImages(t *testing.T) {
-	for _, mt := range []string{"image/png", "image/jpeg", "image/webp"} {
-		got, err := ParsePhoto("data:"+mt+";base64,"+onePixelPNG, " family photo ")
+	for mt, encoded := range map[string]string{"image/png": onePixelPNG, "image/jpeg": "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAACAAIDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDh6KKK+iPEP//Z", "image/webp": "UklGRjgAAABXRUJQVlA4ICwAAADwAQCdASoCAAIAAUAmJaACdLoB+AAETAAA/vSIh/5Z8/hs49/996A3gYAAAA=="} {
+		got, err := ParsePhoto("data:"+mt+";base64,"+encoded, " family photo ")
 		if err != nil {
 			t.Fatalf("%s: %v", mt, err)
 		}
@@ -50,6 +49,8 @@ func TestParsePhotoRejects(t *testing.T) {
 		{"data that is not base64", "data:image/png;base64,!!!not base64!!!", "not valid base64"},
 		{"a uri with no comma", "data:image/png;base64", "no comma"},
 		{"a uri that is not base64-encoded", "data:image/png,rawbytes", "only base64"},
+		{"mislabeled image", "data:image/jpeg;base64," + onePixelPNG, "do not match"},
+		{"truncated image", "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("PNG")), "do not match"},
 		{"empty image data", "data:image/png;base64,", "empty"},
 	} {
 		t.Run(c.name, func(t *testing.T) {

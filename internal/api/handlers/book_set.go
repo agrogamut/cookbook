@@ -3,13 +3,12 @@ package handlers
 import (
 	"archive/zip"
 	"bytes"
-	"errors"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/madamgy/recipie/internal/aidraft"
 	"github.com/madamgy/recipie/internal/book"
 	"github.com/madamgy/recipie/internal/profile"
 )
@@ -23,22 +22,21 @@ import (
 // about one book's own corpus coverage. Every list is non-nil, so a client can render it
 // without a null check.
 type bookSetResponse struct {
-	ChildID string    `json:"child_id"`
-	AsOf    time.Time `json:"as_of"`
-	Book1   string    `json:"book1_html"`
-	Book2   string    `json:"book2_html"`
+	pdfs                [2][]byte
+	docx                [2][]byte
+	ChildID             string    `json:"child_id"`
+	AsOf                time.Time `json:"as_of"`
+	Book1               string    `json:"book1_html"`
+	Book2               string    `json:"book2_html"`
+	Book1TemplateSHA256 string    `json:"book1_template_sha256"`
+	Book2TemplateSHA256 string    `json:"book2_template_sha256"`
 
 	ProfileOmissions []string `json:"profile_omissions"`
 	Book1Omissions   []string `json:"book1_omissions"`
 	Book2Omissions   []string `json:"book2_omissions"`
 }
 
-// renderSet assembles both books and renders both to HTML.
-//
-// On any failure it writes the response itself and returns ok=false, always a 500. A set is
-// all-or-nothing: an assembly failure in either book fails the run rather than serving half
-// a deliverable an operator might mistake for the whole thing. Nothing withholds a book for
-// a clinical reason any more (SP1).
+// renderSet assembles one shared snapshot and converts both native masters.
 func (h *Handlers) renderSet(w http.ResponseWriter, r *http.Request, s profile.Stored) (bookSetResponse, book.Set, bool) {
 	return h.renderSetWithPhotos(w, r, s, nil, nil, nil)
 }
@@ -70,46 +68,56 @@ func (h *Handlers) renderSetWithPhotos(w http.ResponseWriter, r *http.Request, s
 		set.Book1.Metadata.PrescriptionPhoto = prescriptionPhoto
 	}
 
-	var buf1, buf2 bytes.Buffer
-	if err := book.RenderHTML(&buf1, book.Kind1, set.Book1.Metadata, set.Book1); err != nil {
-		writeError(w, http.StatusInternalServerError, "book1 render failed: "+err.Error())
+	if h.converterErr != nil {
+		writeError(w, http.StatusServiceUnavailable, "native document renderer unavailable: "+h.converterErr.Error())
 		return bookSetResponse{}, book.Set{}, false
 	}
-	if err := book.RenderHTML(&buf2, book.Kind2, set.Book2.Metadata, set.Book2); err != nil {
-		writeError(w, http.StatusInternalServerError, "book2 render failed: "+err.Error())
+	bindings := book.NativeBindings(s, set)
+	if err := book.NativePhotos(&bindings, set); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return bookSetResponse{}, book.Set{}, false
 	}
-
-	// Both books share one Metadata.Language (bookLanguage derives it from the same
-	// s.LanguageID for both), so this either translates both or neither -- a set that showed
-	// one book in Bengali and the other in English would read as broken, not bilingual.
-	book1HTML, book2HTML := buf1.Bytes(), buf2.Bytes()
-	if set.Book1.Metadata.Language == "bn" {
-		translated, err := book.TranslateHTML(aidraft.WithUsageBook(ctx, "book1"), book1HTML, h.drafter, "bn")
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "book1 translation failed: "+err.Error())
-			return bookSetResponse{}, book.Set{}, false
-		}
-		book1HTML = translated
+	if err := book.NativeIndices(ctx, h.pool, set, &bindings); err != nil {
+		writeError(w, http.StatusInternalServerError, "source indices failed: "+err.Error())
+		return bookSetResponse{}, book.Set{}, false
 	}
-	if set.Book2.Metadata.Language == "bn" {
-		translated, err := book.TranslateHTML(aidraft.WithUsageBook(ctx, "book2"), book2HTML, h.drafter, "bn")
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "book2 translation failed: "+err.Error())
-			return bookSetResponse{}, book.Set{}, false
-		}
-		book2HTML = translated
+	if err := book.LocalizeNative(ctx, &bindings, h.drafter); err != nil {
+		writeError(w, http.StatusInternalServerError, "dynamic localization failed: "+err.Error())
+		return bookSetResponse{}, book.Set{}, false
 	}
-
-	return bookSetResponse{
-		ChildID:          set.ChildID,
-		AsOf:             set.AsOf,
-		Book1:            string(book1HTML),
-		Book2:            string(book2HTML),
+	resp := bookSetResponse{ChildID: set.ChildID, AsOf: set.AsOf,
 		ProfileOmissions: set.ProfileOmissions,
-		Book1Omissions:   set.Book1Omissions,
-		Book2Omissions:   set.Book2Omissions,
-	}, set, true
+		Book1Omissions:   append(set.Book1Omissions, bindings.Omissions[0]...),
+		Book2Omissions:   append(set.Book2Omissions, bindings.Omissions[1]...)}
+	for i, request := range bindings.Books {
+		result, err := h.converter.Render(ctx, request)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("book%d native render failed: %v", i+1, err))
+			return bookSetResponse{}, book.Set{}, false
+		}
+		resp.pdfs[i], resp.docx[i] = result.PDF, result.DOCX
+		if i == 0 {
+			resp.Book1TemplateSHA256 = result.TemplateSHA256
+		} else {
+			resp.Book2TemplateSHA256 = result.TemplateSHA256
+		}
+		for _, omission := range result.Omissions {
+			message := omission.Module + ": " + omission.Reason
+			if i == 0 {
+				resp.Book1Omissions = append(resp.Book1Omissions, message)
+			} else {
+				resp.Book2Omissions = append(resp.Book2Omissions, message)
+			}
+		}
+	}
+	resp.pdfs[0], err = book.AppendPrescription(ctx, resp.pdfs[0], set.Book1)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "supplied prescription could not be retained: "+err.Error())
+		return bookSetResponse{}, book.Set{}, false
+	}
+	resp.Book1 = nativePDFPreview(resp.pdfs[0])
+	resp.Book2 = nativePDFPreview(resp.pdfs[1])
+	return resp, set, true
 }
 
 // BookSetPreview runs one generation and returns both of the child's books.
@@ -150,32 +158,10 @@ func (h *Handlers) BookSetDownload(w http.ResponseWriter, r *http.Request) {
 	h.writeBookZip(w, r, childID, resp, set)
 }
 
-// writeBookZip prints both books and serves them as one archive named for the child.
-//
-// Shared by the stored-profile route and the inline-generate route: the two differ only in
-// where the profile came from, and a second copy of the printing and archiving would be a
-// second place for the error mapping to drift.
+// writeBookZip packages the completed PDFs from the same generation run.
 func (h *Handlers) writeBookZip(w http.ResponseWriter, r *http.Request, name string, resp bookSetResponse, set book.Set) {
 
-	// One browser for both books. Launching Chromium is most of the cost of a print, and
-	// paying it twice overran the request budget on a small instance while passing every
-	// local test, where startup is a fraction of a second.
-	pdfs, err := book.PrintPDFAll(r.Context(), []book.PrintJob{
-		{Name: "book1", HTML: []byte(resp.Book1), Metadata: set.Book1.Metadata},
-		{Name: "book2", HTML: []byte(resp.Book2), Metadata: set.Book2.Metadata},
-	})
-	if err != nil {
-		// The same split the single-book download makes: a missing browser is an install
-		// problem an operator cannot fix by retrying, a failed print may be about this
-		// document. PrintPDFAll names the book that failed, since only one of the two may
-		// be at fault.
-		if errors.Is(err, book.ErrChromiumUnavailable) {
-			writeError(w, http.StatusServiceUnavailable, "pdf renderer unavailable: "+err.Error())
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "pdf render failed for "+err.Error())
-		return
-	}
+	pdfs := resp.pdfs
 
 	// Built in memory and written whole, so a print failure on the second book cannot leave
 	// a half-written archive already streamed to the operator with a 200 on it.
@@ -213,4 +199,8 @@ func (h *Handlers) writeBookZip(w http.ResponseWriter, r *http.Request, name str
 		fmt.Sprintf("attachment; filename=%q", name+"-books.zip"))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(archive.Bytes())
+}
+
+func nativePDFPreview(pdf []byte) string {
+	return `<!doctype html><html><head><meta charset="utf-8"><title>Book PDF</title></head><body style="margin:0"><iframe title="Generated book PDF" style="border:0;width:100%;height:100vh" src="data:application/pdf;base64,` + base64.StdEncoding.EncodeToString(pdf) + `"></iframe></body></html>`
 }

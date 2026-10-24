@@ -153,14 +153,9 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 	for _, cat := range categories {
 		cat.SourceOnly = !mainMealCategories[cat.ID]
 		if cat.SourceOnly && len(mapped[cat.ID]) == 0 {
-			// mainMealCategories's own doc comment has the full reasoning; the short version
-			// for an operator reading this list is that it is a scope decision, not a data
-			// gap -- unlike every other skip entry, retrying or fixing an input on this child
-			// cannot change the outcome, so the wording deliberately does not say GAP-023 or
-			// invite a retry.
 			skipped = append(skipped, omissionMealCategory+fmt.Sprintf(
-				"%s (%s) is out of scope for this book by project policy -- Book 2 covers "+
-					"Breakfast, Lunch and Dinner only", cat.ID, cat.Name))
+				"No recipes map to provider meal category %s (%s). Supplied-source meal categories "+
+					"are selected separately.", cat.ID, cat.Name))
 			continue
 		}
 		candidateIDs := mapped[cat.ID]

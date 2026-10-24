@@ -58,12 +58,13 @@ func TestGenerateProducesBothBooksWithoutAStoredProfile(t *testing.T) {
 			t.Fatalf("%s is not a rendered document", name)
 		}
 	}
-	if !strings.Contains(body.Book1, "Inline Child") {
+	text := pdfText(t, previewPDF(t, body.Book1))
+	if !strings.Contains(text, "Inline Child") {
 		t.Fatal("the book must carry the name that was typed in")
 	}
 	// The inline growth measurement has to reach the monitoring table, or supplying it was
 	// pointless -- this is the input with no stored counterpart to fall back on.
-	if !strings.Contains(body.Book1, "14.2 kg") || !strings.Contains(body.Book1, "Dr Sen") {
+	if !strings.Contains(text, "14.2") || !strings.Contains(text, "Dr Sen") {
 		t.Fatal("an inline growth measurement must print in the growth table")
 	}
 	// The same allergy disclosure the stored path makes.
@@ -128,11 +129,11 @@ func TestGenerateRequiresDateOfBirth(t *testing.T) {
 // here, together, since they are validated and embedded the same way and must both stay off
 // Book 2, a working recipe document with no photo upload of any kind.
 func TestGeneratePutsThePhotoOnBook1Cover(t *testing.T) {
-	const png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+	const png = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGOUC+hhYGBgYmBgYGBgAAALdAD+3y8XygAAAABJRU5ErkJggg=="
 	// A second, distinct PNG (a real 1x1 red pixel, not a copy of the fixture above) so a
 	// bytes.Contains match against it can only mean the parents' photo specifically, never a
 	// coincidental match against the child's photo or an embedded illustration.
-	const parentsPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
+	const parentsPNG = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGOcphHAwMDAxMDAwMDAAAANGAESBcDPUwAAAABJRU5ErkJggg=="
 	body := `{"display_name":"Photo Child","date_of_birth":"2022-05-01",
 	          "photo_data_uri":"data:image/png;base64,` + png + `","photo_caption":"With her mother",
 	          "parents_photo_data_uri":"data:image/png;base64,` + parentsPNG + `","parents_photo_caption":"Mum and dad"}`
@@ -148,37 +149,22 @@ func TestGeneratePutsThePhotoOnBook1Cover(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if !strings.Contains(got.Book1, "data:image/png;base64,"+png) {
-		t.Fatal("the photograph must be embedded in book 1")
+	book1, book2 := previewPDF(t, got.Book1), previewPDF(t, got.Book2)
+	if pdfImageCount(t, book1) < 2 {
+		t.Fatal("both uploaded portraits must be embedded in Book1")
 	}
-	if !strings.Contains(got.Book1, "With her mother") {
-		t.Fatal("the caption must print with the photograph")
+	if !strings.Contains(pdfText(t, book1), "With her mother") {
+		t.Fatal("child photo caption missing")
 	}
-	// The parents' photo belongs on Book 1's back cover, the same book as the child's own
-	// front-cover photo -- both are the child's own book, just its two different covers.
-	// Unlike the front-cover photo, end.html prints no caption line for the parents' photo
-	// (see book1/end.html), so the assertion here is scoped to the photo's own bytes, not a
-	// caption string -- matching what the back cover actually renders today.
-	if !strings.Contains(got.Book1, "data:image/png;base64,"+parentsPNG) {
-		t.Fatal("the parents' photograph must be embedded in book 1")
+	if pdfImageCount(t, book2) != 0 {
+		t.Fatal("portraits must not enter Book2")
 	}
-	// Book 2 is a recipe book; a portrait there is decoration on a working document. Book 2's
-	// own cover legitimately embeds PNG data URIs now -- the decorative corner illustrations
-	// and the kids-cooking hero image, all package-embedded and unrelated to any child (see
-	// internal/book/coverart.go) -- so the check has to be specific to the uploaded child
-	// photograph's own bytes, not "any PNG at all".
-	if strings.Contains(got.Book2, "data:image/png;base64,"+png) {
-		t.Fatal("the child's photograph must not appear in book 2")
-	}
-	if strings.Contains(got.Book2, "data:image/png;base64,"+parentsPNG) {
-		t.Fatal("the parents' photograph must not appear in book 2")
-	}
+
 }
 
-// An uploaded prescription photo is validated the same way the cover photos are, embedded
-// in Book 1 only, and replaces that page's blank form.
+// The supplied prescription follows the native template as a separately numbered annex.
 func TestGeneratePutsThePrescriptionPhotoOnBook1(t *testing.T) {
-	const rxPNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADElEQVQI12NgAAIAAAUAAen63NgAAAAASUVORK5CYII="
+	const rxPNG = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGMU0bBhYGBgYmBgYGBgAAAFogB8q5SvRgAAAABJRU5ErkJggg=="
 	body := `{"display_name":"Rx Child","date_of_birth":"2022-05-01",
 	          "prescription_photo_data_uri":"data:image/png;base64,` + rxPNG + `",
 	          "prescription_photo_caption":"Dr Sen, follow-up"}`
@@ -194,18 +180,18 @@ func TestGeneratePutsThePrescriptionPhotoOnBook1(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if !strings.Contains(got.Book1, "data:image/png;base64,"+rxPNG) {
-		t.Fatal("the prescription photograph must be embedded in book 1")
+	book1, book2 := previewPDF(t, got.Book1), previewPDF(t, got.Book2)
+	if pdfImageCount(t, book1) < 1 {
+		t.Fatal("supplied prescription must be embedded in final Book1")
 	}
-	if !strings.Contains(got.Book1, "Dr Sen, follow-up") {
-		t.Fatal("the prescription photo's caption must print")
+	text := pdfText(t, book1)
+	if !strings.Contains(text, "Dr Sen, follow-up") || !strings.Contains(text, "Rx Child") || !strings.Contains(text, "prescription annex") {
+		t.Fatal("supplied prescription caption or child missing")
 	}
-	if strings.Contains(got.Book1, "To be completed by the examining doctor") {
-		t.Fatal("with a prescription photo supplied, the blank form must not also print")
+	if pdfImageCount(t, book2) != 0 {
+		t.Fatal("prescription must not enter Book2")
 	}
-	if strings.Contains(got.Book2, "data:image/png;base64,"+rxPNG) {
-		t.Fatal("the prescription photograph must not appear in book 2")
-	}
+
 }
 
 // A declared special-care condition produces books like any other profile.
@@ -215,6 +201,7 @@ func TestGeneratePutsThePrescriptionPhotoOnBook1(t *testing.T) {
 // document. See docs/superpowers/specs/2026-09-05-direct-generation-design.md.
 func TestGenerateProducesBooksForEverySpecialCareCondition(t *testing.T) {
 	h := New(testPool(t), aidraft.Disabled)
+	h.converter, h.converterErr = bindingRenderer{}, nil
 	r := chi.NewRouter()
 	r.Post("/api/books/generate", h.BookGenerate)
 

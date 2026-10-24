@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -232,11 +231,7 @@ func (h *Handlers) BookGenerate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// BookGenerateOne runs one generation from inline inputs and prints a single book.
-//
-// The set is still assembled whole -- both books come from one profile read at one instant --
-// but only the requested half is printed. An operator who wants Book 2 alone should not wait
-// for Book 1's print.
+// BookGenerateOne returns one PDF from the complete shared book set.
 func (h *Handlers) BookGenerateOne(w http.ResponseWriter, r *http.Request) {
 	which := chi.URLParam(r, "book")
 	if which != "book1" && which != "book2" {
@@ -247,24 +242,14 @@ func (h *Handlers) BookGenerateOne(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	resp, set, ok := h.renderSetWithPhotos(w, r, s, photo, parentsPhoto, prescriptionPhoto)
+	resp, _, ok := h.renderSetWithPhotos(w, r, s, photo, parentsPhoto, prescriptionPhoto)
 	if !ok {
 		return
 	}
 
-	htmlDoc, meta := resp.Book1, set.Book1.Metadata
+	pdf := resp.pdfs[0]
 	if which == "book2" {
-		htmlDoc, meta = resp.Book2, set.Book2.Metadata
-	}
-
-	pdf, err := book.PrintPDF(r.Context(), []byte(htmlDoc), meta)
-	if err != nil {
-		if errors.Is(err, book.ErrChromiumUnavailable) {
-			writeError(w, http.StatusServiceUnavailable, "pdf renderer unavailable: "+err.Error())
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "pdf render failed for "+which+": "+err.Error())
-		return
+		pdf = resp.pdfs[1]
 	}
 
 	name := slugOrDefault(s.DisplayName, "book")
@@ -326,45 +311,19 @@ type printedSetResponse struct {
 	Book2PDF printedBook `json:"book2_print"`
 }
 
-// BookGeneratePrinted runs one generation and returns both books' HTML and both printed PDFs.
-//
-// The console's action. It used to call /generate and then generate/book1.pdf and
-// generate/book2.pdf, and each of those three requests assembled the whole set again -- every
-// Gemini drafting and translation call, three times per click, for one book set. Against a
-// per-day request quota on the drafting model that tripled what a click cost. One request,
-// one assembly, two prints of the same bytes also means the PDF on screen and the HTML beside
-// it can no longer come from two different drafting runs.
-//
-// A print failure does not fail the response. The set assembled, and its HTML genuinely
-// works as a preview, so each book's print result is reported next to it and the caller
-// decides; that is the same per-book independence the console had when the prints were two
-// settled requests. Assembly failure is still a 500, since then there is nothing to show.
+// BookGeneratePrinted returns both native PDFs and previews from one generation.
 func (h *Handlers) BookGeneratePrinted(w http.ResponseWriter, r *http.Request) {
 	s, photo, parentsPhoto, prescriptionPhoto, ok := h.decodeGenerate(w, r)
 	if !ok {
 		return
 	}
-	resp, set, ok := h.renderSetWithPhotos(w, r, s, photo, parentsPhoto, prescriptionPhoto)
+	resp, _, ok := h.renderSetWithPhotos(w, r, s, photo, parentsPhoto, prescriptionPhoto)
 	if !ok {
 		return
 	}
 
 	out := printedSetResponse{bookSetResponse: resp}
-	out.Book1PDF = printOne(r, "book1", resp.Book1, set.Book1.Metadata)
-	out.Book2PDF = printOne(r, "book2", resp.Book2, set.Book2.Metadata)
+	out.Book1PDF = printedBook{PDF: resp.pdfs[0]}
+	out.Book2PDF = printedBook{PDF: resp.pdfs[1]}
 	writeJSON(w, http.StatusOK, out)
-}
-
-func printOne(r *http.Request, which, htmlDoc string, meta book.Metadata) printedBook {
-	pdf, err := book.PrintPDF(r.Context(), []byte(htmlDoc), meta)
-	switch {
-	case err == nil:
-		return printedBook{PDF: pdf}
-	case errors.Is(err, book.ErrChromiumUnavailable):
-		return printedBook{Error: &printError{Kind: "unavailable",
-			Message: "pdf renderer unavailable: " + err.Error()}}
-	default:
-		return printedBook{Error: &printError{Kind: "print-failed",
-			Message: "pdf render failed for " + which + ": " + err.Error()}}
-	}
 }

@@ -113,11 +113,8 @@ func NewRouter(pool *pgxpool.Pool, drafter aidraft.Drafter, access ...*portal.Se
 		r.Get("/api/profile-matches", h.MatchProfiles)
 		// The set is the primary surface: one run, both books, one profile read. The
 		// per-book routes below remain for fetching one book directly.
-        // Generation from inline inputs: no child id, nothing persisted. This is what the
-        // console calls. The {childID} routes below serve a profile already in the database.
-        r.With(bookUsage).Post("/api/books/generate", h.BookGenerate)
-        r.With(security.RequireProfile, bookUsage).Get("/api/books/{childID}/preview", h.BookSetPreview)
-        r.With(security.RequireProfile, bookUsage).Get("/api/books/{childID}/{book}/preview", h.BookPreview)
+		// Generation from inline inputs: no child id, nothing persisted. This is what the
+		// console calls. The {childID} routes below serve a profile already in the database.
 	})
 
 	// Printing gets its own timeout. Launching a browser and laying out a 22-page book is
@@ -133,6 +130,9 @@ func NewRouter(pool *pgxpool.Pool, drafter aidraft.Drafter, access ...*portal.Se
 		r.Use(middleware.Timeout(printTimeout))
 		r.Use(security.BrowserWrite)
 		r.Use(security.RequireStaff)
+		r.Post("/api/books/generate", h.BookGenerate)
+		r.With(security.RequireProfile).Get("/api/books/{childID}/preview", h.BookSetPreview)
+		r.With(security.RequireProfile).Get("/api/books/{childID}/{book}/preview", h.BookPreview)
 		// The console's action: one assembly, both books' HTML and both printed PDFs.
 		r.Post("/api/books/generate.printed", h.BookGeneratePrinted)
 		r.Post("/api/registrations/{registrationID}/book-releases", h.GenerateBookReleases)

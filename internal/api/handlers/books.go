@@ -1,15 +1,12 @@
 package handlers
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/madamgy/recipie/internal/aidraft"
 	"github.com/madamgy/recipie/internal/book"
 	"github.com/madamgy/recipie/internal/profile"
 )
@@ -43,68 +40,23 @@ func (h *Handlers) loadBookProfile(w http.ResponseWriter, r *http.Request, child
 	return s, true
 }
 
-// renderBookHTML assembles and renders one book ("book1" or "book2") for the given stored
-// profile, as of now. It is the single source of the HTML both BookPreview and BookDownload
-// serve -- BookDownload feeds htmlDoc straight into book.PrintPDF, unmodified -- so there is
-// exactly one rendering of a book and no way for the preview and the print to disagree.
-//
-// On any failure it writes the response itself and returns ok=false, always a 500. There is
-// deliberately one failure path shared by both endpoints rather than two that could drift
-// apart.
-//
-// There is no 409 here any more. It used to be the clinician stop gate's status, and that
-// gate is gone (SP1: see docs/superpowers/specs/2026-09-05-direct-generation-design.md);
-// nothing about this child's clinical state refuses to produce a document. 503 for an
-// unavailable renderer and 500 for a failed print are untouched and still have to read
-// differently from each other.
+// renderBookHTML wraps the native PDF selected from one complete book set.
 func (h *Handlers) renderBookHTML(w http.ResponseWriter, r *http.Request, s profile.Stored, kind string) (htmlDoc []byte, meta book.Metadata, omissions []string, ok bool) {
-	ctx := r.Context()
-	asOf := time.Now().UTC()
-
-	var data any
-	var bookKind book.Kind
-	switch kind {
-	case "book1":
-		b1, dropped, err := book.AssembleBook1(ctx, h.pool, s, asOf, book.WithDrafter(h.drafter))
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "book1 assembly failed: "+err.Error())
-			return nil, book.Metadata{}, nil, false
-		}
-		data, meta, omissions, bookKind = b1, b1.Metadata, dropped, book.Kind1
-
-	case "book2":
-		b2, dropped, err := book.AssembleBook2(ctx, h.pool, s, asOf, book.WithDrafter(h.drafter))
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "book2 assembly failed: "+err.Error())
-			return nil, book.Metadata{}, nil, false
-		}
-		data, meta, omissions, bookKind = b2, b2.Metadata, dropped, book.Kind2
-
-	default:
+	if kind != "book1" && kind != "book2" {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("unknown book %q: must be book1 or book2", kind))
 		return nil, book.Metadata{}, nil, false
 	}
-
-	var buf bytes.Buffer
-	if err := book.RenderHTML(&buf, bookKind, meta, data); err != nil {
-		writeError(w, http.StatusInternalServerError, "render failed: "+err.Error())
+	resp, set, ok := h.renderSet(w, r, s)
+	if !ok {
 		return nil, book.Metadata{}, nil, false
 	}
-
-	htmlDoc = buf.Bytes()
-	if meta.Language == "bn" {
-		translated, err := book.TranslateHTML(aidraft.WithUsageBook(ctx, kind), htmlDoc, h.drafter, "bn")
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "translation failed: "+err.Error())
-			return nil, book.Metadata{}, nil, false
-		}
-		htmlDoc = translated
+	if kind == "book1" {
+		return []byte(resp.Book1), set.Book1.Metadata, omissionsFor(kind, resp), true
 	}
-	return htmlDoc, meta, omissions, true
+	return []byte(resp.Book2), set.Book2.Metadata, omissionsFor(kind, resp), true
 }
 
-// BookPreview returns the rendered book as HTML -- the same document BookDownload prints
-// from, so a reviewer approves the artifact that ships rather than a second rendering of it.
+// BookPreview embeds the completed native PDF in a standalone preview.
 func (h *Handlers) BookPreview(w http.ResponseWriter, r *http.Request) {
 	s, ok := h.loadBookProfile(w, r, chi.URLParam(r, "childID"))
 	if !ok {
@@ -121,29 +73,26 @@ func (h *Handlers) BookPreview(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(htmlDoc)
 }
 
-// BookDownload prints the same HTML BookPreview returns to PDF and serves it. 503, not 500,
-// when Chromium itself is unavailable: that is a broken dependency, not anything about this
-// child's data, and an operator must not read it as a reason to change the request.
+// BookDownload serves the completed native PDF without another print pass.
 func (h *Handlers) BookDownload(w http.ResponseWriter, r *http.Request) {
 	s, ok := h.loadBookProfile(w, r, chi.URLParam(r, "childID"))
 	if !ok {
 		return
 	}
 	kind := chi.URLParam(r, "book")
-	htmlDoc, meta, omissions, ok := h.renderBookHTML(w, r, s, kind)
+	if kind != "book1" && kind != "book2" {
+		writeError(w, http.StatusNotFound, "unknown book: must be book1 or book2")
+		return
+	}
+	resp, _, ok := h.renderSet(w, r, s)
 	if !ok {
 		return
 	}
-
-	pdf, err := book.PrintPDF(r.Context(), htmlDoc, meta)
-	if err != nil {
-		if errors.Is(err, book.ErrChromiumUnavailable) {
-			writeError(w, http.StatusServiceUnavailable, "pdf renderer unavailable: "+err.Error())
-			return
-		}
-		writeError(w, http.StatusInternalServerError, "pdf render failed: "+err.Error())
-		return
+	pdf := resp.pdfs[0]
+	if kind == "book2" {
+		pdf = resp.pdfs[1]
 	}
+	omissions := omissionsFor(kind, resp)
 
 	w.Header().Set(bookOmissionHeader, joinOmissions(omissions))
 	w.Header().Set("Content-Type", "application/pdf")
