@@ -23,6 +23,14 @@ type Entry struct {
 type Block struct {
 	Paragraph *Paragraph
 	Table     *Table
+	Image     *Image
+}
+type Image struct {
+	Data        []byte
+	MIMEType    string
+	Alt         string
+	WidthTwips  int
+	HeightTwips int
 }
 type Paragraph struct{ Runs []Run }
 type Run struct {
@@ -69,4 +77,11 @@ const (
 	MaxTableRows        = 1000
 	MaxDOCXBytes        = 16 << 20
 	MaxPDFBytes         = 64 << 20
+	MaxImageBytes       = 8 << 20
+	MaxTotalImageBytes  = 12 << 20
+	MaxImages           = 64
+	MaxImageDimension   = 8192
+	MaxImagePixels      = 16000000
+	MaxTotalImagePixels = 32000000
+	MaxImageTwips       = 7200
 )

@@ -6,7 +6,10 @@ import (
 	"unicode/utf8"
 )
 
-type budget struct{ text, blocks, entries, runs, cells int }
+type budget struct {
+	text, blocks, entries, runs, cells int
+	images                             *imageSet
+}
 
 func (b *budget) string(s string) error {
 	if len(s) > MaxStringBytes || !utf8.ValidString(s) {
@@ -30,8 +33,25 @@ func (b *budget) validateBlocks(blocks []Block) error {
 		return fmt.Errorf("too many blocks")
 	}
 	for _, block := range blocks {
-		if (block.Paragraph == nil) == (block.Table == nil) {
-			return fmt.Errorf("block must contain exactly one paragraph or table")
+		kinds := 0
+		for _, present := range []bool{block.Paragraph != nil, block.Table != nil, block.Image != nil} {
+			if present {
+				kinds++
+			}
+		}
+		if kinds != 1 {
+			return fmt.Errorf("block must contain exactly one paragraph, table or image")
+		}
+		if img := block.Image; img != nil {
+			if err := b.string(img.Alt); err != nil {
+				return err
+			}
+			if b.images == nil {
+				b.images = &imageSet{}
+			}
+			if err := b.images.add(img); err != nil {
+				return err
+			}
 		}
 		if p := block.Paragraph; p != nil {
 			b.runs += len(p.Runs)
@@ -140,11 +160,15 @@ func paragraph(p Paragraph, language, pPr string) string {
 	return b.String()
 }
 
-func renderBlocks(blocks []Block, language, pPr string, width int) string {
+func renderBlocks(blocks []Block, language, pPr string, width int, images *imageSet) string {
 	var b strings.Builder
 	for _, block := range blocks {
 		if p := block.Paragraph; p != nil {
 			b.WriteString(paragraph(*p, language, pPr))
+			continue
+		}
+		if block.Image != nil {
+			b.WriteString(images.drawing(pPr, width))
 			continue
 		}
 		t := block.Table
@@ -173,15 +197,15 @@ func renderBlocks(blocks []Block, language, pPr string, width int) string {
 	return b.String()
 }
 
-func moduleXML(m Module, language, pPr string, width int) []byte {
+func moduleXML(m Module, language, pPr string, width int, images *imageSet) []byte {
 	if m.Gap != "" {
 		return []byte(paragraph(Paragraph{Runs: []Run{{Text: m.Gap}}}, language, pPr))
 	}
 	var b strings.Builder
-	b.WriteString(renderBlocks(m.Blocks, language, pPr, width))
+	b.WriteString(renderBlocks(m.Blocks, language, pPr, width, images))
 	for _, e := range m.Entries {
 		b.WriteString(paragraph(Paragraph{Runs: []Run{{Text: e.ID, Bold: true}}}, language, pPr))
-		b.WriteString(renderBlocks(e.Blocks, language, pPr, width))
+		b.WriteString(renderBlocks(e.Blocks, language, pPr, width, images))
 	}
 	return []byte(b.String())
 }

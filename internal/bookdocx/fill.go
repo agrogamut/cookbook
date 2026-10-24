@@ -112,9 +112,13 @@ func fill(ctx context.Context, req Request, master []byte, m Manifest) (Document
 	if len(req.Modules) != len(m.Bindings) {
 		return Document{}, fmt.Errorf("template requires %d modules, got %d", len(m.Bindings), len(req.Modules))
 	}
-	budget := budget{}
+	images := &imageSet{ctx: ctx}
+	budget := budget{images: images}
 	var omissions []Omission
 	for _, b := range m.Bindings {
+		if err := ctx.Err(); err != nil {
+			return Document{}, err
+		}
 		mod, ok := req.Modules[b.Code]
 		if !ok {
 			return Document{}, fmt.Errorf("missing module %s (unknown keys are not accepted)", b.Code)
@@ -130,11 +134,25 @@ func fill(ctx context.Context, req Request, master []byte, m Manifest) (Document
 	if err != nil {
 		return Document{}, fmt.Errorf("open master: %w", err)
 	}
+	if err := images.prepare(zr); err != nil {
+		return Document{}, fmt.Errorf("image package: %w", err)
+	}
 	var out bytes.Buffer
 	zw := zip.NewWriter(&out)
 	for _, f := range zr.File {
 		if err := ctx.Err(); err != nil {
 			return Document{}, err
+		}
+		if data, ok := images.updated[f.Name]; ok {
+			h := f.FileHeader
+			w, err := zw.CreateHeader(&h)
+			if err != nil {
+				return Document{}, err
+			}
+			if _, err := w.Write(data); err != nil {
+				return Document{}, err
+			}
+			continue
 		}
 		modify := f.Name == "word/document.xml" || f.Name == "word/styles.xml" || f.Name == "word/stylesWithEffects.xml" || f.Name == "word/numbering.xml" || f.Name == "word/theme/theme1.xml" || strings.HasPrefix(f.Name, "word/header") || strings.HasPrefix(f.Name, "word/footer")
 		if !modify {
@@ -181,7 +199,7 @@ func fill(ctx context.Context, req Request, master []byte, m Manifest) (Document
 						pPr = string(data[props[0].start:props[0].end])
 					}
 				}
-				edits = append(edits, edit{start, cell.closeStart, moduleXML(req.Modules[m.Bindings[i].Code], req.Language, pPr, width)})
+				edits = append(edits, edit{start, cell.closeStart, moduleXML(req.Modules[m.Bindings[i].Code], req.Language, pPr, width, images)})
 			}
 			data, err = splice(data, edits)
 			if err != nil {
@@ -204,6 +222,18 @@ func fill(ctx context.Context, req Request, master []byte, m Manifest) (Document
 			return Document{}, err
 		}
 		if _, err = w.Write(data); err != nil {
+			return Document{}, err
+		}
+	}
+	for _, img := range images.items {
+		if err := ctx.Err(); err != nil {
+			return Document{}, err
+		}
+		w, err := zw.CreateHeader(&zip.FileHeader{Name: img.name, Method: zip.Deflate})
+		if err != nil {
+			return Document{}, err
+		}
+		if _, err := w.Write(img.data); err != nil {
 			return Document{}, err
 		}
 	}
