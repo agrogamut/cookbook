@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +23,18 @@ import (
 	"github.com/madamgy/recipie/internal/db"
 	"github.com/madamgy/recipie/internal/importer"
 )
+
+type nativeReleaseTranslator struct{ aidraft.Drafter }
+
+func (nativeReleaseTranslator) TranslateTexts(_ context.Context, req aidraft.TranslateRequest) (aidraft.TranslatedTexts, error) {
+	out := append([]string(nil), req.Texts...)
+	for i := range out {
+		if len(req.Texts) == 8 && req.Texts[0] == "Supplied prescription annex. Footer page numbers restart within this annex." {
+			out[i] = "Localized " + req.TargetLanguage + " annex"
+		}
+	}
+	return aidraft.TranslatedTexts{Texts: out}, nil
+}
 
 func nativeReleasePool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
@@ -74,7 +88,7 @@ func nativeReleasePool(t *testing.T) *pgxpool.Pool {
 func TestNativeReleaseJourney(t *testing.T) {
 	pool := nativeReleasePool(t)
 	ctx := context.Background()
-	router := NewRouter(pool, aidraft.Disabled)
+	router := NewRouter(pool, nativeReleaseTranslator{aidraft.Disabled})
 	adminID := "10000000-0000-4000-8000-000000000001"
 	guardianID := "10000000-0000-4000-8000-000000000002"
 	otherID := "10000000-0000-4000-8000-000000000003"
@@ -124,7 +138,7 @@ func TestNativeReleaseJourney(t *testing.T) {
 	for _, lang := range []string{"en", "bn", "hi"} {
 		t.Run(lang, func(t *testing.T) {
 			body := map[string]string{"child_id": reg, "display_name": "Synthetic native child", "date_of_birth": dob, "language_id": lang}
-			if lang == "hi" {
+			if lang != "en" {
 				body["photo_data_uri"] = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGOUC+hhYGBgYmBgYGBgAAALdAD+3y8XygAAAABJRU5ErkJggg=="
 				body["parents_photo_data_uri"] = body["photo_data_uri"]
 				body["prescription_photo_data_uri"] = body["photo_data_uri"]
@@ -141,6 +155,20 @@ func TestNativeReleaseJourney(t *testing.T) {
 			}
 			if err := json.Unmarshal(w.Body.Bytes(), &generated); err != nil {
 				t.Fatal(err)
+			}
+			if lang != "en" {
+				path := filepath.Join(t.TempDir(), "localized-annex.pdf")
+				if err := os.WriteFile(path, generated.Book1.PDF, 0600); err != nil {
+					t.Fatal(err)
+				}
+				text, err := exec.Command("pdftotext", path, "-").CombinedOutput()
+				if err != nil {
+					t.Fatalf("extract annex: %v: %s", err, text)
+				}
+				label := map[string]string{"bn": "Bengali", "hi": "Hindi"}[lang]
+				if !strings.Contains(string(text), "Localized "+label+" annex") {
+					t.Fatal("configured translator did not reach prescription annex")
+				}
 			}
 			var releases []struct{ ID, Book, Status string }
 			w = request("GET", "/api/book-releases?registration_id="+reg, nil, adminToken, 200)

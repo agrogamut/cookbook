@@ -179,3 +179,65 @@ func TestNativeLocalizationBatchesKeepOrder(t *testing.T) {
 		t.Fatal("cancelled translation succeeded")
 	}
 }
+
+func TestNativeLocalizationOrdinaryCompounds(t *testing.T) {
+	compounds := []string{"age-appropriate", "age-safe", "vitamin-C", "low-medium", "cross-contact", "batch-cooked", "selected-recipe", "clinical-history"}
+	for _, language := range []string{"bn", "hi"} {
+		t.Run(language, func(t *testing.T) {
+			blocks := []bookdocx.Block{nativeText(strings.Join(compounds, " "))}
+			for _, word := range compounds {
+				blocks = append(blocks, nativeText(word))
+			}
+			n := NativeSet{Books: [2]bookdocx.Request{{Book: 1, Language: language, Modules: map[string]bookdocx.Module{"B1-01": {Blocks: blocks}}}, {Language: "en"}}}
+			d := &translateFakeDrafter{transform: strings.ToUpper}
+			if err := LocalizeNative(context.Background(), &n, d); err != nil {
+				t.Fatal(err)
+			}
+			for i, block := range n.Books[0].Modules["B1-01"].Blocks {
+				if got, want := block.Paragraph.Runs[0].Text, strings.ToUpper(blocks[i].Paragraph.Runs[0].Text); got != want {
+					t.Errorf("ordinary prose skipped translation: %q, want %q", got, want)
+				}
+			}
+		})
+	}
+}
+
+func TestNativeLocalizationExactSourceFacts(t *testing.T) {
+	facts := []string{"MG-WB-C26-001", "MG-R-00042", "WBING0070", "WBING0080", "ING0001", "B1-NUTRITION-01", "B2-56", "CLD-04", "CLR-007", "AF01", "NT02", "WHO-CF-2023", "Book1", "Book2", "v1", "2026-10-24", "9adf9451-e1fa-417d-8d43-e10af0d0c8a9", "3ae4477c943f672c4912ae532c1096dfc7da351d9aea9414bf03e523799797e2", "0.005 g", "79.6 g", ".005 mg", "-0.25 kg", "+1.25 cm", "120 mL", "0.5 µg", "12 min", "62.5%", "https://example.invalid/source-01"}
+	for _, language := range []string{"bn", "hi"} {
+		t.Run(language, func(t *testing.T) {
+			original := "Use age-safe preparation: " + strings.Join(facts, " | ")
+			raw := "Clinical_Tag: age-safe source wording; Review_Status: Draft; Data_Quality: Provisional; audit PASS"
+			n := NativeSet{Books: [2]bookdocx.Request{{Language: language, Modules: map[string]bookdocx.Module{"B1-01": {Blocks: []bookdocx.Block{nativeText(original), nativeText(raw)}}}}, {Language: "en"}}}
+			if err := LocalizeNative(context.Background(), &n, &translateFakeDrafter{transform: func(s string) string {
+				for _, fact := range facts {
+					if strings.Contains(s, fact) {
+						t.Errorf("source fact exposed to translation: %q", fact)
+					}
+				}
+				return strings.ToUpper(s)
+			}}); err != nil {
+				t.Fatal(err)
+			}
+			got := n.Books[0].Modules["B1-01"].Blocks
+			if got[0].Paragraph.Runs[0].Text != "USE AGE-SAFE PREPARATION: "+strings.Join(facts, " | ") {
+				t.Fatal(got[0].Paragraph.Runs[0].Text)
+			}
+			if got[1].Paragraph.Runs[0].Text != raw {
+				t.Fatal("explicit raw source/status field changed")
+			}
+		})
+	}
+}
+
+func TestNativeLocalizationSourceFilenames(t *testing.T) {
+	file := "MadamGY_WB_Case_26_CLR_001_100_Recipes.xlsx"
+	text := "Workbook " + file + "; Recipe_Master; ingredient_master.quantity_g; ALG-MILK; WHO-GROWTH; IAP-DEVELOPMENT; MG-INTERNAL; GENERIC-GAS; ____________________; age-safe recipe MG-WB-C26-001"
+	n := NativeSet{Books: [2]bookdocx.Request{{Language: "bn", Modules: map[string]bookdocx.Module{"B2-56": {Blocks: []bookdocx.Block{nativeText(text)}}}}, {Language: "en"}}}
+	if err := LocalizeNative(context.Background(), &n, &translateFakeDrafter{transform: strings.ToUpper}); err != nil {
+		t.Fatal(err)
+	}
+	if got := n.Books[0].Modules["B2-56"].Blocks[0].Paragraph.Runs[0].Text; got != "WORKBOOK "+file+"; Recipe_Master; ingredient_master.quantity_g; ALG-MILK; WHO-GROWTH; IAP-DEVELOPMENT; MG-INTERNAL; GENERIC-GAS; ____________________; AGE-SAFE RECIPE MG-WB-C26-001" {
+		t.Fatal(got)
+	}
+}

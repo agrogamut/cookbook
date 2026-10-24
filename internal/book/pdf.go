@@ -291,7 +291,7 @@ type PrintJob struct {
 // budget of the next and a crashed tab does not take the browser with it. The tab is closed
 // on the way out, which matters more now that the browser outlives the request: a leaked tab
 // per print would grow the process until the instance's memory cap killed it.
-func printIn(caller, browser context.Context, htmlDoc []byte, meta Metadata) ([]byte, error) {
+func printIn(caller, browser context.Context, htmlDoc []byte, meta Metadata, footerOverride ...string) ([]byte, error) {
 	// Wait for a slot, or give up if the caller has gone. A queued request whose client
 	// disconnected must not go on to occupy a tab.
 	select {
@@ -323,7 +323,7 @@ func printIn(caller, browser context.Context, htmlDoc []byte, meta Metadata) ([]
 	// above PrintPDF. An explicit empty string, not an omitted parameter -- CDP's PrintToPDF
 	// only falls back to its own default title/URL header when WithHeaderTemplate is left
 	// unset entirely, and that default is not one this project wants either.
-	const header = ""
+	header := ""
 
 	// The release segment is omitted entirely when there is no release id, rather than
 	// printing the label with nothing after it. There is no release layer yet, so on every
@@ -341,6 +341,11 @@ func printIn(caller, browser context.Context, htmlDoc []byte, meta Metadata) ([]
 		html.EscapeString(meta.BookVersion),
 		release,
 		meta.GenerationDate.Format("2006-01-02"))
+
+	if len(footerOverride) > 0 {
+		footer = footerOverride[0]
+		header = "<span></span>"
+	}
 
 	var out []byte
 	err := chromedp.Run(ctx,

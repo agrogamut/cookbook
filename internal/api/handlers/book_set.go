@@ -110,7 +110,9 @@ func (h *Handlers) renderSetWithPhotos(w http.ResponseWriter, r *http.Request, s
 			}
 		}
 	}
-	resp.pdfs[0], err = book.AppendPrescription(ctx, resp.pdfs[0], set.Book1)
+	var annexOmissions []string
+	resp.pdfs[0], annexOmissions, err = book.AppendPrescription(ctx, resp.pdfs[0], set.Book1, h.drafter)
+	resp.Book1Omissions = append(resp.Book1Omissions, annexOmissions...)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "supplied prescription could not be retained: "+err.Error())
 		return bookSetResponse{}, book.Set{}, false
