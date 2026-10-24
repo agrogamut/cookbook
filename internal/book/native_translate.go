@@ -16,7 +16,7 @@ import (
 
 // Protect coded identities and numeric facts, never a word merely because it has a hyphen.
 var nativeProtected = regexp.MustCompile(`https?://\S+|` +
-	`\b[A-Za-z0-9][A-Za-z0-9_.-]*\.(?i:xlsx|docx|zip|pdf)\b|` +
+	`(?:[A-Za-z]:[\\/]|[\\/])?(?:[A-Za-z0-9_.-]+[\\/])*[A-Za-z0-9][A-Za-z0-9_.-]*\.(?i:xlsx|docx|zip|pdf)\b|` +
 	`\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b|` +
 	`\b(?:ALG|MG|IAP|WHO|GENERIC)-[A-Z0-9_-]+\b|_{2,}|` +
 	`\b[[:xdigit:]]{64}\b|\b[[:xdigit:]]{8}(?:-[[:xdigit:]]{4}){3}-[[:xdigit:]]{12}\b|` +
@@ -168,7 +168,7 @@ func nativeVerbatim(text string) bool {
 	if strings.Contains(text, "Source review status") || strings.Contains(text, "Draft") || strings.Contains(text, "Provisional") || strings.Contains(text, "PASS") || strings.Contains(text, "BLOCKED") || strings.Contains(text, "NOT SELECTABLE") {
 		return true
 	}
-	return !strings.ContainsAny(text, " \t\n") && (nativeProtected.FindString(text) == text || strings.Contains(text, "/"))
+	return !strings.ContainsAny(text, " \t\n") && nativeProtected.FindString(text) == text
 }
 
 func nativeTextCells(blocks []bookdocx.Block) []*string {

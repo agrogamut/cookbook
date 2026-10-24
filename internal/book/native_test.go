@@ -241,3 +241,80 @@ func TestNativeLocalizationSourceFilenames(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestNativeLocalizationSlashProseAndSourcePaths(t *testing.T) {
+	words := []string{"Grapes/cherries", "Hard/sticky", "Fish/meat", "Hearing/vision", "Social/communication", "Language/hearing", "Dentist/pediatrician"}
+	facts := []string{"https://example.invalid/source/clinical.pdf", "data/provider/source.xlsx", "/app/data/case-source/source.zip", "../masters/v1/book1-bn.docx", "MG-WB-C26-001", "WBING0080", "0.005 g"}
+	for _, language := range []string{"bn", "hi"} {
+		t.Run(language, func(t *testing.T) {
+			var blocks []bookdocx.Block
+			for _, word := range words {
+				blocks = append(blocks, bookdocx.Block{Table: &bookdocx.Table{Rows: [][]string{{word, "Recorded rule", "Source action", "<5 years"}}}})
+			}
+			for _, fact := range facts {
+				blocks = append(blocks, nativeText("Source reference "+fact))
+			}
+			raw := "Clinical_Tag: Fish/meat; Review_Status: Draft; Data_Quality: Provisional; audit PASS"
+			blocks = append(blocks, nativeText(raw), bookdocx.Block{Table: &bookdocx.Table{Rows: [][]string{{"Source", "Grapes/cherries"}, {"Review status", "Draft / source text"}}}})
+			n := NativeSet{Books: [2]bookdocx.Request{{Language: language, Modules: map[string]bookdocx.Module{"B1-07": {Blocks: blocks}}}, {Language: "en"}}}
+			if err := LocalizeNative(context.Background(), &n, &translateFakeDrafter{transform: strings.ToUpper}); err != nil {
+				t.Fatal(err)
+			}
+			got := n.Books[0].Modules["B1-07"].Blocks
+			for i, word := range words {
+				if got[i].Table.Rows[0][0] != strings.ToUpper(word) {
+					t.Errorf("reader-facing slash label skipped: %q", word)
+				}
+			}
+			for i, fact := range facts {
+				if got[len(words)+i].Paragraph.Runs[0].Text != "SOURCE REFERENCE "+fact {
+					t.Errorf("source reference changed: %q", fact)
+				}
+			}
+			if got[len(got)-2].Paragraph.Runs[0].Text != raw || got[len(got)-1].Table.Rows[0][1] != "Grapes/cherries" || got[len(got)-1].Table.Rows[1][1] != "Draft / source text" {
+				t.Fatal("explicit raw source/status field changed")
+			}
+		})
+	}
+}
+
+func TestNativeVeganDeclarationDisplay(t *testing.T) {
+	for _, language := range []string{"en", "bn", "hi"} {
+		for _, vegan := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/%t", language, vegan), func(t *testing.T) {
+				s := storedProfileAged(8)
+				s.Vegan, s.LanguageID = vegan, language
+				set := Set{Book1: Book1{Metadata: Metadata{Language: language}}, Book2: Book2{Metadata: Metadata{Language: language}}}
+				n := NativeBindings(s, set)
+				want := "No"
+				if vegan {
+					want = "Yes"
+				}
+				for bi, key := range []string{"B1-06", "B2-02"} {
+					if got := n.Books[bi].Modules[key].Blocks[0].Table.Rows[1][1]; got != want {
+						t.Errorf("shared declaration display: got %q want %q", got, want)
+					}
+				}
+				if err := LocalizeNative(context.Background(), &n, &translateFakeDrafter{transform: func(text string) string {
+					if text == "Yes" || text == "No" {
+						return "Localized " + text
+					}
+					return text
+				}}); err != nil {
+					t.Fatal(err)
+				}
+				if language != "en" {
+					want = "Localized " + want
+				}
+				for bi, key := range []string{"B1-06", "B2-02"} {
+					if got := n.Books[bi].Modules[key].Blocks[0].Table.Rows[1][1]; got != want {
+						t.Errorf("declaration bypassed localization: got %q want %q", got, want)
+					}
+				}
+				if s.Vegan != vegan {
+					t.Fatal("recorded profile boolean changed")
+				}
+			})
+		}
+	}
+}

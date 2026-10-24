@@ -91,7 +91,11 @@ func NativeBindings(s profile.Stored, set Set) NativeSet {
 		partial(1, 52, "Recorded flags are not a specialist plan. No structured clinician-authored diet, fluid or treatment plan was recorded.")
 		partial(1, 60, "Structured medicine doses, laboratory results and appointment dates are not recorded.")
 	}
-	food := nativeTable([]string{"Diet", s.DietType}, []string{"Vegan declaration", strconv.FormatBool(s.Vegan)}, []string{"Region", s.RegionCulture}, []string{"Cuisine", s.CuisineCode}, []string{"Religious restriction", s.ReligiousRestriction}, []string{"Budget band", s.BudgetBand})
+	vegan := "No"
+	if s.Vegan {
+		vegan = "Yes"
+	}
+	food := nativeTable([]string{"Diet", s.DietType}, []string{"Vegan declaration", vegan}, []string{"Region", s.RegionCulture}, []string{"Cuisine", s.CuisineCode}, []string{"Religious restriction", s.ReligiousRestriction}, []string{"Budget band", s.BudgetBand})
 	put(1, 6, food)
 	put(2, 2, food)
 	provider(7, "B1-018")
