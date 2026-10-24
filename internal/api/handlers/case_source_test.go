@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -102,16 +103,49 @@ func TestCaseSourceAPI(t *testing.T) {
 	if found == 0 {
 		t.Fatal("no source results")
 	}
-	id := casesource.CandidateID("3ae4477c943f672c4912ae532c1096dfc7da351d9aea9414bf03e523799797e2", "MG-WB-C26-001")
-	request := httptest.NewRequest("GET", "/api/recipes/"+id, nil)
-	params := chi.NewRouteContext()
-	params.URLParams.Add("recipeID", id)
-	request = request.WithContext(context.WithValue(request.Context(), chi.RouteCtxKey, params))
-	response = httptest.NewRecorder()
-	h.RecipeDetail(response, request)
-	if response.Code != 200 {
-		t.Fatalf("detail: %d %s", response.Code, response.Body.String())
+	router := chi.NewRouter()
+	router.Get("/api/recipes/{recipeID}", h.RecipeDetail)
+	detailRequest := func(id string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest("GET", "/api/recipes/"+id, nil))
+		return rec
 	}
+	for _, original := range []string{"MG-WB-C01-001", "MG-WB-C26-001"} {
+		t.Run("detail_"+original, func(t *testing.T) {
+			id := casesource.CandidateID("3ae4477c943f672c4912ae532c1096dfc7da351d9aea9414bf03e523799797e2", original)
+			literal := detailRequest(id)
+			if literal.Code != 200 {
+				t.Fatalf("literal detail: %d %s", literal.Code, literal.Body.String())
+			}
+			for _, tc := range []struct{ name, path string }{
+				{"encoded_upper", strings.ReplaceAll(id, ":", "%3A")},
+				{"encoded_lower", strings.ReplaceAll(id, ":", "%3a")},
+				{"mixed", strings.Replace(id, ":", "%3A", 1)},
+				{"encoded_letter", "%63" + strings.ReplaceAll(id[1:], ":", "%3A")},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					encoded := detailRequest(tc.path)
+					if encoded.Code != 200 || !bytes.Equal(encoded.Body.Bytes(), literal.Body.Bytes()) {
+						t.Fatalf("encoded detail differs from literal: status=%d body=%s", encoded.Code, encoded.Body.String())
+					}
+				})
+			}
+			for _, tc := range []struct{ name, path string }{
+				{"double_encoded", strings.ReplaceAll(id, ":", "%253A")},
+				{"double_encoded_raw_path", "%63" + strings.ReplaceAll(id[1:], ":", "%253A")},
+				{"unknown", strings.ReplaceAll(id+"-missing", ":", "%3A")},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					missing := detailRequest(tc.path)
+					if missing.Code != 404 {
+						t.Fatalf("different identity resolved: status=%d body=%s", missing.Code, missing.Body.String())
+					}
+				})
+			}
+		})
+	}
+	id := casesource.CandidateID("3ae4477c943f672c4912ae532c1096dfc7da351d9aea9414bf03e523799797e2", "MG-WB-C26-001")
+	response = detailRequest(strings.ReplaceAll(id, ":", "%3A"))
 	var detail struct {
 		Nutrition any               `json:"nutrition"`
 		Gap       string            `json:"nutrition_gap"`
@@ -120,7 +154,7 @@ func TestCaseSourceAPI(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &detail); err != nil {
 		t.Fatal(err)
 	}
-	if detail.Nutrition != nil || detail.Gap == "" || len(detail.Source.Fields) != 37 || len(detail.Source.Ingredients) != 10 {
+	if detail.Nutrition != nil || detail.Gap == "" || detail.Source.Citation.RecipeID != "MG-WB-C26-001" || len(detail.Source.Fields) != 37 || len(detail.Source.Ingredients) != 10 {
 		t.Fatalf("detail fidelity: %+v", detail)
 	}
 	first, last := detail.Source.Ingredients[7], detail.Source.Ingredients[9]

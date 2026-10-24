@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"net/url"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
@@ -14,6 +15,15 @@ import (
 // own provenance columns from recipe_method_card and recipe_nutrition_recomputed.
 func (h *Handlers) RecipeDetail(w http.ResponseWriter, r *http.Request) {
 	recipeID := chi.URLParam(r, "recipeID")
+	// Chi matches RawPath when present; otherwise URL.Path is already decoded.
+	if r.URL.RawPath != "" {
+		var err error
+		recipeID, err = url.PathUnescape(recipeID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid recipe identifier")
+			return
+		}
+	}
 	if casesource.IsCandidate(recipeID) {
 		h.caseRecipeDetail(w, r, recipeID)
 		return
