@@ -1,0 +1,31 @@
+# Native Word rendering
+
+`Fill(ctx, Request)` returns a native DOCX. `NewConverter(ConverterOptions)` constructs a bounded Linux converter; `Render(ctx, Request)` returns both formats, retaining the filled `Document` when PDF conversion fails. `PDF(ctx, Document)` accepts only unmodified documents returned by `Fill` in this process. No domain assembly, database, selection or translation dependency exists here.
+
+Select book 1 or 2, language `en`, `bn` or `hi`, and version `v1` explicitly. Supply every module in `Request.Modules`: B1-01 through B1-63 or B2-01 through B2-56. Each `Module` contains ordered `Blocks` followed by `Entries`, or a nonempty `Gap`. Omissions return in source order. Missing, unknown, malformed and oversized input fails without fallback or truncation.
+
+A `Block` contains exactly one `Paragraph` or `Table`. Paragraphs contain `Run` values (text, bold, italic); tables contain rectangular string rows with 1 to 6 columns and optional header formatting. An `Entry` starts with its exact ID and then its blocks. IDs are unique within each module. Numbers and quantities are strings; the renderer never reformats them. Callers own source grounding, localization and gaps, including missing FAQ answers, schedules and beverage records.
+
+## Preservation boundary
+
+`bindings.json` records all 357 instances of 119 distinct modules: master SHA-256, ZIP part, one-based table/row/column, XPath, code text, title hash and output-text hash. Hashes are over UTF-8 concatenated `w:t` text, including all runs. The manifest was independently checked against every original package part in the intake inventory. Source assets remain in `internal/bookmasters` unchanged.
+
+Only the contents after `w:tcPr` inside each declared output cell are replaced. The source cell width, shading and borders remain unchanged. New paragraphs reuse the source output paragraph properties; new nested tables fit that cell width and may break across pages. Entry repetition is a new content structure inside the existing cell, not a recipe-card master supplied by the source. Fixed headings, explanatory text, FAQ questions, human signature blanks, section geometry, header/footer text, page fields and package relationships remain intact. Source table headers do not repeat on continuation pages because the original table properties do not request that behavior. Very long collections consequently have empty left columns on continuation pages.
+
+The only edits outside those cells are font declarations: `w:rFonts` in document, style, numbering and header/footer parts, plus DrawingML theme font declarations. Latin text maps to Noto Sans, Bengali complex-script text to Noto Sans Bengali, Hindi to Noto Sans Devanagari. Theme Bengali/Devanagari slots map explicitly. Sizes, weight, colors and all non-font XML remain unchanged. Unmodified ZIP entries retain their compressed bytes. Font table metadata is unchanged; explicit declarations and isolated fontconfig determine rendering.
+
+## Conversion profile
+
+Nine unmodified Noto files are embedded with their license, version integers and SHA-256 hashes under `fonts/`. Noto Sans supplies regular/bold/italic/bold-italic, Bengali and Devanagari supply regular/bold, and Noto Sans Symbols 2 supplies source checkbox characters. Indic italic is a renderer synthesis of these upright fonts; no extra font family is permitted. Unsupported Unicode characters fail the font character-map check. Complex shaping still needs visual language review.
+
+Each conversion writes these exact fonts into a private directory with a fontconfig configuration that includes no system directories. A unique LibreOffice profile prevents process sharing. Only generated, sealed documents enter conversion, so callers cannot inject arbitrary package relationships or macros. Subprocesses receive an explicit environment, use the headless backend and PDF/A-2 export, and run in a cancellable process group. `prlimit` caps address space at 4 GiB and individual output files at 64 MiB. Queue time counts toward the timeout. A converter allows two jobs by default (configurable 1 to 4); the process-wide ceiling is four across all instances.
+
+The default timeout is 120 seconds and maximum is five minutes. Temporary data is removed on success and failure. `pdffonts` must report every used font as embedded and from the approved Noto set; unexpected fallback is an error. DOCX carries font references, not embedded font binaries, so opening it in a different Word environment requires installing these font files. PDF is the portable rendered output. Native Word and LibreOffice pagination need not be identical.
+
+Limits: 4 MiB input text, 64 KiB per string, 500 entries per module, 2000 per book, 20000 blocks, 50000 runs, 20000 table cells, 1000 rows per table, 16 MiB filled XML part/DOCX and 64 MiB PDF. Oversized structure fails before XML construction.
+
+## Local verification
+
+Run `go test -race ./internal/bookdocx`. For actual conversions, install LibreOffice Writer, fontconfig, poppler-utils and util-linux, then run `BOOKDOCX_INTEGRATION=1 go test ./internal/bookdocx -run TestNative -count=1 -v`. `BOOKDOCX_ARTIFACT_DIR` saves the six synthetic DOCX/PDFs and actual rasterized pages. Tests inspect exact quantities/IDs, every module marker, final repeated entries, page dimensions and embedded font inventories. Preservation tests compare all bytes outside binding/font declarations and include original footer fields and relationships.
+
+Runtime dependencies and font checksum checks are in the repository Dockerfile. Converter behavior follows the upstream [startup parameter documentation](https://help.libreoffice.org/latest/en-US/text/shared/guide/start_parameters.html) and [PDF export options](https://help.libreoffice.org/latest/en-US/text/shared/guide/pdf_params.html). The font files retain the Noto upstream license; version and byte identity are fixed by the embedded manifest rather than the host package version.

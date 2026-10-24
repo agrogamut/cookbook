@@ -20,7 +20,8 @@ COPY internal/ ./internal/
 ENV CGO_ENABLED=0
 RUN go build -o /out/server ./cmd/server && \
     go build -o /out/import ./cmd/import && \
-    go build -o /out/staff-admin ./cmd/staff-admin
+    go build -o /out/staff-admin ./cmd/staff-admin && \
+    go clean -cache
 
 FROM debian:bookworm-slim
 WORKDIR /app
@@ -31,11 +32,24 @@ WORKDIR /app
 # ship. fonts-noto-color-emoji is deliberately not installed: nothing in these books uses one.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         chromium \
+        libreoffice-writer \
+        poppler-utils \
+        fontconfig \
+        util-linux \
         fonts-noto-core \
         ca-certificates \
     && test "$(fc-match -f "%{family}" "Noto Sans Bengali")" = "Noto Sans Bengali" \
     && test "$(fc-match -f "%{family}" "Noto Serif Bengali")" = "Noto Serif Bengali" \
     && rm -rf /var/lib/apt/lists/*
+
+# Native conversion uses the same hashed font bytes as the embedded renderer.
+COPY internal/bookdocx/fonts/ /usr/share/fonts/bookdocx/
+RUN cd /usr/share/fonts/bookdocx && sha256sum -c SHA256SUMS \
+    && test "$(fc-scan --format '%{family}' NotoSans-Regular.ttf)" = "Noto Sans" \
+    && test "$(fc-scan --format '%{family}' NotoSansBengali-Regular.ttf)" = "Noto Sans Bengali" \
+    && test "$(fc-scan --format '%{family}' NotoSansDevanagari-Regular.ttf)" = "Noto Sans Devanagari" \
+    && libreoffice --headless --version \
+    && command -v pdffonts && command -v prlimit
 
 # staff-admin creates the first administrator. It ships in the image because there is no
 # other way to run it against a deployed database: staff accounts are provisioned, never
