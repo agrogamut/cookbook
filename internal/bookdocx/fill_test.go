@@ -158,7 +158,7 @@ func maskBindings(t *testing.T, data []byte, m Manifest) []byte {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return out
+	return restorePageStarts(t, out, m)
 }
 
 func TestPreservation(t *testing.T) {

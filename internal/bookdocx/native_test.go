@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -110,6 +111,9 @@ func TestNative(t *testing.T) {
 					t.Fatal(err)
 				}
 				text := command(t, "pdftotext", "-layout", stem+".pdf", "-")
+				if err := checkPageBodies(text, nil); err != nil {
+					t.Fatal(err)
+				}
 				if err := checkFixtureHeaders(text); err != nil {
 					t.Error(err)
 				}
@@ -206,6 +210,43 @@ func TestNative(t *testing.T) {
 		t.Fatal("native subprocess cancellation", err)
 	}
 	assertClean(t, c)
+}
+
+func checkPageBodies(text string, imagePages map[int]bool) error {
+	footer := regexp.MustCompile(`^(?:Page|পৃষ্ঠা|পৃ\s*ষ্ঠা|पृष्ठ)\s*[0-9]+$`)
+	for i, page := range strings.Split(strings.TrimSuffix(text, "\f"), "\f") {
+		var lines []string
+		for _, line := range strings.Split(page, "\n") {
+			if line = strings.TrimSpace(line); line != "" {
+				lines = append(lines, line)
+			}
+		}
+		if len(lines) > 0 && strings.HasPrefix(lines[0], "MADAMGY") {
+			lines = lines[1:]
+		}
+		if len(lines) > 0 && footer.MatchString(lines[len(lines)-1]) {
+			lines = lines[:len(lines)-1]
+		}
+		if len(lines) == 0 && !imagePages[i+1] {
+			return fmt.Errorf("page %d has no body text or image", i+1)
+		}
+	}
+	return nil
+}
+
+func TestContentBodyOracle(t *testing.T) {
+	for _, footer := range []string{"Page 51", "পৃষ্ঠা 51", "পৃ ষ্ঠা 51", "पृष्ठ 51"} {
+		page := "MADAMGY | fixed running header\n" + footer + "\n\f"
+		if err := checkPageBodies(page, nil); err == nil {
+			t.Fatal("running header/footer accepted as body", footer)
+		}
+		if err := checkPageBodies(page, map[int]bool{1: true}); err != nil {
+			t.Fatal("image-only body rejected", err)
+		}
+		if err := checkPageBodies(strings.Replace(page, "\n", "\nFixed writing lines ____\n", 1), nil); err != nil {
+			t.Fatal("writing body rejected", err)
+		}
+	}
 }
 
 func checkPageBounds(bbox string) error {

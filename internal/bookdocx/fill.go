@@ -181,7 +181,10 @@ func fill(ctx context.Context, req Request, master []byte, m Manifest) (Document
 			if err != nil {
 				return Document{}, err
 			}
-			var edits []edit
+			edits, err := pageStartEdits(data, m)
+			if err != nil {
+				return Document{}, fmt.Errorf("template page starts: %w", err)
+			}
 			for i, cell := range cells {
 				start := cell.openEnd
 				width := 4000
