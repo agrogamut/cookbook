@@ -33,6 +33,7 @@ WORKDIR /app
 # ship. fonts-noto-color-emoji is deliberately not installed: nothing in these books uses one.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         chromium \
+        curl \
         libreoffice-writer \
         poppler-utils \
         fontconfig \
@@ -43,13 +44,34 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && test "$(fc-match -f "%{family}" "Noto Serif Bengali")" = "Noto Serif Bengali" \
     && rm -rf /var/lib/apt/lists/*
 
+# Debian's Writer 7.4 drops the supplied Bengali reference cell's tail and upload.
+RUN set -eu; \
+    test "$(dpkg --print-architecture)" = amd64; \
+    curl --fail --silent --show-error --max-time 180 --proto '=https' \
+        https://downloadarchive.documentfoundation.org/libreoffice/old/26.2.1.2/deb/x86_64/LibreOffice_26.2.1.2_Linux_x86-64_deb.tar.gz \
+        -o /tmp/libreoffice.tar.gz; \
+    echo '9807363c8fabf79fc3562f606ce1673c4b29c3c53baca513f84e762845a093b2  /tmp/libreoffice.tar.gz' | sha256sum -c -; \
+    mkdir /tmp/libreoffice; \
+    tar -xzf /tmp/libreoffice.tar.gz -C /tmp/libreoffice; \
+    tdf_dir=/tmp/libreoffice/LibreOffice_26.2.1.2_Linux_x86-64_deb/DEBS; \
+    set --; \
+    for tdf_package in libreoffice26.2-ure libobasis26.2-core libobasis26.2-images \
+        libobasis26.2-ooofonts libobasis26.2-writer libobasis26.2-en-us \
+        libreoffice26.2 libreoffice26.2-writer libreoffice26.2-en-us; do \
+        set -- "$@" "$tdf_dir/${tdf_package}_26.2.1.2-2_amd64.deb"; \
+    done; \
+    dpkg -i "$@"; \
+    rm -rf /tmp/libreoffice /tmp/libreoffice.tar.gz /opt/libreoffice26.2/share/fonts; \
+    ln -s /opt/libreoffice26.2/program/soffice /usr/local/bin/libreoffice; \
+    test "$(command -v libreoffice)" = /usr/local/bin/libreoffice
+
 # Native conversion uses the same hashed font bytes as the embedded renderer.
 COPY internal/bookdocx/fonts/ /usr/share/fonts/bookdocx/
 RUN cd /usr/share/fonts/bookdocx && sha256sum -c SHA256SUMS \
     && test "$(fc-scan --format '%{family}' NotoSans-Regular.ttf)" = "Noto Sans" \
     && test "$(fc-scan --format '%{family}' NotoSansBengali-Regular.ttf)" = "Noto Sans Bengali" \
     && test "$(fc-scan --format '%{family}' NotoSansDevanagari-Regular.ttf)" = "Noto Sans Devanagari" \
-    && libreoffice --headless --version \
+    && test "$(libreoffice --headless --version)" = "LibreOffice 26.2.1.2 8399f6259d8c87f40e7255cdb3c9b958f5e08948" \
     && command -v pdffonts && command -v prlimit
 
 # staff-admin creates the first administrator. It ships in the image because there is no
