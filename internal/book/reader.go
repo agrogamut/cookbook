@@ -55,7 +55,11 @@ func RenderReader(ctx context.Context, request bookdocx.Request, options ReaderO
 	if err != nil {
 		return ReaderResult{}, err
 	}
-	pdf, err := printIn(ctx, browser, out.Bytes(), meta, readerFooter(meta))
+	footer, err := readerFooter(meta)
+	if err != nil {
+		return ReaderResult{}, err
+	}
+	pdf, err := printIn(ctx, browser, out.Bytes(), meta, footer)
 	if err != nil {
 		return ReaderResult{}, err
 	}
@@ -76,12 +80,23 @@ func readerMetadata(book int, language string, options ReaderOptions) (Metadata,
 		return Metadata{}, fmt.Errorf("reader requires book %d presentation metadata", book)
 	}
 	meta.Language = language
+	copy, err := readerLocale(language)
+	if err != nil {
+		return Metadata{}, err
+	}
+	meta.Title = readerCopyTitle(meta.Title, copy)
 	return meta, nil
 }
 
 func RenderReaderHTML(w io.Writer, content bookdocx.ReaderDocument, options ReaderOptions) error {
+	copy, err := readerLocale(content.Language)
+	if err != nil {
+		return err
+	}
 	if options.Book1 != nil {
 		b := *options.Book1
+		b.Child.AgeLabel = readerCopyAge(b.Child.AgeLabel, copy)
+		b.Metadata.Title = readerCopyTitle(b.Metadata.Title, copy)
 		if b.Metadata.Logo == "" {
 			b.Metadata.Logo = logoDataURI
 		}
@@ -89,6 +104,8 @@ func RenderReaderHTML(w io.Writer, content bookdocx.ReaderDocument, options Read
 	}
 	if options.Book2 != nil {
 		b := *options.Book2
+		b.Child.AgeLabel = readerCopyAge(b.Child.AgeLabel, copy)
+		b.Metadata.Title = readerCopyTitle(b.Metadata.Title, copy)
 		if b.Metadata.Logo == "" {
 			b.Metadata.Logo = logoDataURI
 		}
@@ -106,23 +123,31 @@ func RenderReaderHTML(w io.Writer, content bookdocx.ReaderDocument, options Read
 	if err != nil {
 		return err
 	}
-	funcs := template.FuncMap{"readerImprint": func(c renderContext) renderContext { c.Data = c.Data.(readerView).Options.Book2; return c }}
-	t, err := template.New("base.html").Funcs(templateFuncs).Funcs(funcs).ParseFS(templateFS, "templates/base.html", "templates/book1/end.html", "templates/book2/cover.html", "templates/book2/end.html")
+	funcs := template.FuncMap{
+		"readerImprint": func(c renderContext) renderContext { c.Data = c.Data.(readerView).Options.Book2; return c },
+		"readerCopy":    func(key string) (string, error) { return readerCopyText(copy, key) },
+	}
+	t, err := template.New("base.html").Funcs(templateFuncs).Funcs(funcs).ParseFS(templateFS, "templates/base.html")
 	if err != nil {
 		return err
 	}
-	cover, err := templateFS.ReadFile("templates/book1/cover.html")
-	if err != nil {
-		return err
-	}
-	// The original value counts sections, not printed sheets.
-	if _, err = t.Parse(strings.Replace(string(cover), "Pages in this book", "Sections in this book", 1)); err != nil {
-		return err
+	for _, path := range []string{"templates/book1/cover.html", "templates/book1/end.html", "templates/book2/cover.html", "templates/book2/end.html"} {
+		source, err := templateFS.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		localized, err := readerCopyTemplate(path, source)
+		if err != nil {
+			return err
+		}
+		if _, err = t.Parse(localized); err != nil {
+			return err
+		}
 	}
 	if _, err = t.ParseFS(templateFS, "templates/reader.html"); err != nil {
 		return err
 	}
-	view := readerView{Options: options, Content: readerBody(content), Book: content.Book}
+	view := readerView{Options: options, Content: readerBody(content, copy), Book: content.Book}
 	render := renderContext{Metadata: meta, BookClass: fmt.Sprintf("book%d", content.Book), CSS: template.CSS(string(css) + "\n" + string(overlay)), FontFaces: fontFacesCSS, Watermark: watermarkDataURI, Data: view}
 	if err = t.ExecuteTemplate(w, "base.html", render); err != nil {
 		return fmt.Errorf("render reader: %w", err)
@@ -130,12 +155,22 @@ func RenderReaderHTML(w io.Writer, content bookdocx.ReaderDocument, options Read
 	return nil
 }
 
-func readerFooter(meta Metadata) string {
-	release := ""
-	if meta.ReleaseID != "" {
-		release = " | release " + html.EscapeString(meta.ReleaseID)
+func readerFooter(meta Metadata) (string, error) {
+	copy, err := readerLocale(meta.Language)
+	if err != nil {
+		return "", err
 	}
-	return fmt.Sprintf(`<div style="font-size:10pt;width:100%%;padding:0 20mm;display:flex;gap:4mm;justify-content:space-between;align-items:baseline;font-family:'Noto Sans',sans-serif;color:#5a5a5a"><span style="overflow-wrap:anywhere">MadamGY &middot; %s%s &middot; generated %s</span><span class="pageNumber" style="flex:none;color:#1a1a1a"></span></div>`, html.EscapeString(meta.BookVersion), release, meta.GenerationDate.Format("2006-01-02"))
+	release := ""
+	family := "'Noto Sans',sans-serif"
+	if meta.Language == "bn" {
+		family = "'Noto Sans','Noto Sans Bengali',sans-serif"
+	} else if meta.Language == "hi" {
+		family = "'Noto Sans','Noto Sans Devanagari',sans-serif"
+	}
+	if meta.ReleaseID != "" {
+		release = " | " + html.EscapeString(copy["footer_release"]) + " " + html.EscapeString(meta.ReleaseID)
+	}
+	return fmt.Sprintf(`<div style="font-size:10pt;width:100%%;padding:0 20mm;display:flex;gap:4mm;justify-content:space-between;align-items:baseline;font-family:%s;color:#5a5a5a"><span style="overflow-wrap:anywhere">MadamGY &middot; %s%s &middot; %s %s</span><span class="pageNumber" style="flex:none;color:#1a1a1a"></span></div>`, family, html.EscapeString(meta.BookVersion), release, html.EscapeString(copy["footer_generated"]), meta.GenerationDate.Format("2006-01-02")), nil
 }
 
 func readerRuns(p bookdocx.Paragraph) string {
@@ -158,7 +193,7 @@ func readerRuns(p bookdocx.Paragraph) string {
 	return out.String()
 }
 
-func readerBody(d bookdocx.ReaderDocument) template.HTML {
+func readerBody(d bookdocx.ReaderDocument, copy map[string]string) template.HTML {
 	var out strings.Builder
 	var moduleLabels []string
 	lastHeading := -1
@@ -252,7 +287,7 @@ func readerBody(d bookdocx.ReaderDocument) template.HTML {
 			if m.Content.Gap != "" {
 				readerRow(&out, "<p>"+html.EscapeString(m.Content.Gap)+"</p>")
 			}
-			readerBlocks(&out, m.Content.Blocks, m.Code)
+			readerBlocks(&out, m.Content.Blocks, m.Code, copy)
 			out.WriteString("</tbody></table>")
 			for _, e := range m.Content.Entries {
 				out.WriteString(`<div class="reader-recipe-start"></div><article class="recipe reader-recipe" data-recipe="` + html.EscapeString(e.ID) + `">`)
@@ -267,7 +302,7 @@ func readerBody(d bookdocx.ReaderDocument) template.HTML {
 					readerRow(&out, `<div class="metastrip"><div class="metacell"><span class="value">`+readerRuns(*blocks[0].Paragraph)+`</span></div></div>`)
 					blocks = blocks[1:]
 				}
-				readerBlocks(&out, blocks, m.Code)
+				readerBlocks(&out, blocks, m.Code, copy)
 				out.WriteString("</tbody></table></article>")
 			}
 			out.WriteString("</section>")
@@ -301,7 +336,7 @@ func readerContextStart(out *strings.Builder, heading, class string) {
 
 func readerRow(out *strings.Builder, body string) { out.WriteString("<tr><td>" + body + "</td></tr>") }
 
-func readerBlocks(out *strings.Builder, blocks []bookdocx.Block, code string) {
+func readerBlocks(out *strings.Builder, blocks []bookdocx.Block, code string, copy map[string]string) {
 	for i := 0; i < len(blocks); i++ {
 		b := blocks[i]
 		if code == "B1-50" && b.Paragraph != nil && i+1 < len(blocks) && blocks[i+1].Table != nil {
@@ -310,10 +345,10 @@ func readerBlocks(out *strings.Builder, blocks []bookdocx.Block, code string) {
 				var situation strings.Builder
 				readerContextStart(&situation, readerRuns(*b.Paragraph), "illness reader-situation")
 				row := t.Rows[0]
-				for j, label := range []string{"What to do", "Watch for"} {
-					readerRow(&situation, `<p class="reader-label">`+label+`</p><p>`+html.EscapeString(row[j])+`</p>`)
+				for j, key := range []string{"illness_action", "illness_monitor"} {
+					readerRow(&situation, `<p class="reader-label">`+html.EscapeString(copy[key])+`</p><p>`+html.EscapeString(row[j])+`</p>`)
 				}
-				readerRow(&situation, `<div class="callout warning"><h3>Warning: seek medical care</h3><p>`+html.EscapeString(row[2])+`</p></div>`)
+				readerRow(&situation, `<div class="callout warning"><h3>`+html.EscapeString(copy["illness_warning"])+`</h3><p>`+html.EscapeString(row[2])+`</p></div>`)
 				readerRow(&situation, `<p class="domain-limit">`+html.EscapeString(row[3])+`</p>`)
 				situation.WriteString("</tbody></table>")
 				readerRow(out, situation.String())

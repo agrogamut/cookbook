@@ -100,6 +100,65 @@ func TestReaderRecipeHalfPageBoundary(t *testing.T) {
 	}
 }
 
+func TestReaderCopyFooterNativeFonts(t *testing.T) {
+	if os.Getenv("BOOK_READER_NATIVE") != "1" {
+		t.Skip("set BOOK_READER_NATIVE=1 for actual footer fonts")
+	}
+	if !BrowserAvailable() {
+		t.Fatal("Chromium unavailable")
+	}
+	defer ShutdownBrowser()
+	for _, language := range []string{"en", "bn", "hi"} {
+		t.Run(language, func(t *testing.T) {
+			meta := Metadata{Language: language, BookVersion: "V-0007", ReleaseID: "R-0008", GenerationDate: time.Date(2026, 10, 24, 0, 0, 0, 0, time.UTC)}
+			footer, err := readerFooter(meta)
+			if err != nil {
+				t.Fatal(err)
+			}
+			browser, err := sharedBrowser()
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			pdf, err := printIn(ctx, browser, []byte(`<html><body style="font:12pt 'Noto Sans'">FOOTER-CONTROL</body></html>`), meta, footer)
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(t.TempDir(), "footer.pdf")
+			if err := os.WriteFile(path, pdf, 0600); err != nil {
+				t.Fatal(err)
+			}
+			fonts, err := exec.CommandContext(ctx, "pdffonts", path).Output()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(fonts), "FreeSans") {
+				t.Fatalf("unapproved footer font: %s", fonts)
+			}
+			if language != "en" {
+				family := "NotoSansBengali"
+				if language == "hi" {
+					family = "NotoSansDevanagari"
+				}
+				if !strings.Contains(string(fonts), family) {
+					t.Fatalf("missing %s: %s", family, fonts)
+				}
+			}
+			text, err := exec.CommandContext(ctx, "pdftotext", "-raw", path, "-").Output()
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := strings.Join(strings.Fields(string(text)), "")
+			for _, value := range []string{readerTestLocale(t, language)["footer_generated"], readerTestLocale(t, language)["footer_release"], "V-0007", "R-0008", "2026-10-24"} {
+				if !strings.Contains(got, strings.Join(strings.Fields(value), "")) {
+					t.Fatalf("footer missing %q: %s", value, text)
+				}
+			}
+		})
+	}
+}
+
 func TestReaderLongLocalizedContinuation(t *testing.T) {
 	defer ShutdownBrowser()
 	for _, tc := range []struct{ language, text string }{
@@ -117,7 +176,7 @@ func TestReaderLongLocalizedContinuation(t *testing.T) {
 				blocks = append(blocks, bookdocx.Block{Paragraph: &bookdocx.Paragraph{Runs: []bookdocx.Run{{Text: fmt.Sprintf("%s ROW-%03d 12.50 g", tc.text, i)}}}})
 			}
 			d := bookdocx.ReaderDocument{Nodes: []bookdocx.ReaderNode{{Module: &bookdocx.ReaderModule{Code: "B2-10", Content: bookdocx.Module{Entries: []bookdocx.Entry{{ID: "R-EXACT", Blocks: blocks}}}}}, {Paragraph: &bookdocx.ReaderParagraph{Paragraph: bookdocx.Paragraph{Runs: []bookdocx.Run{{Text: "ORDINARY-FOLLOWING"}}}}}}}
-			_, pages := readerNativePDF(t, tc.language, string(readerBody(d)))
+			_, pages := readerNativePDF(t, tc.language, string(readerBody(d, readerTestLocale(t, tc.language))))
 			all := strings.Join(pages, "\n")
 			for prefix, count := range map[string]int{"TALL": 90, "ROW": 25} {
 				for i := 0; i < count; i++ {
@@ -153,7 +212,7 @@ func TestReaderShortWritingFormStaysTogether(t *testing.T) {
 			for i := 1; i <= 5; i++ {
 				d.Nodes = append(d.Nodes, bookdocx.ReaderNode{Paragraph: &bookdocx.ReaderParagraph{Paragraph: bookdocx.Paragraph{Runs: []bookdocx.Run{{Text: fmt.Sprintf("%d.  %s", i, strings.Repeat("_", 74))}}}}})
 			}
-			_, pages := readerNativePDF(t, language, `<div style="height:205mm">PRECEDING-CONTENT</div>`+string(readerBody(d)))
+			_, pages := readerNativePDF(t, language, `<div style="height:205mm">PRECEDING-CONTENT</div>`+string(readerBody(d, readerTestLocale(t, language))))
 			if len(pages) != 2 || strings.Contains(pages[0], "WRITING-FORM") {
 				t.Fatalf("form did not move intact: %q", pages)
 			}

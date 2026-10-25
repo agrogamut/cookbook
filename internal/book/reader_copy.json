@@ -1,0 +1,1657 @@
+{
+  "version": 2,
+  "batch_sha256": "fd8a3912094da74e194d9675f9629021388a234b3721b10ef5bca149ec48d378",
+  "translation_source_commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48",
+  "renderer_core_commit": "accd34ef2b335a0af7cec5fa4b6d11c4facf2818",
+  "model": "gemini-3.6-flash",
+  "started_at": "2026-10-25T16:11:43.432800846Z",
+  "finished_at": "2026-10-25T16:12:21.59949233Z",
+  "duration_seconds": 38.166691574,
+  "status": "complete",
+  "items": {
+    "about_copy": {
+      "order": 13,
+      "canonical_en": "About this copy",
+      "sources": [
+        "internal/book/templates/book1/end.html:21",
+        "internal/book/templates/book2/end.html:11"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "এই কপি সম্পর্কে",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 11,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "About this copy",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "इस प्रति के बारे में",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 11,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "age_at_generation": {
+      "order": 4,
+      "canonical_en": "Age at generation",
+      "sources": [
+        "internal/book/templates/book1/cover.html:63",
+        "internal/book/templates/book2/cover.html:30"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "তৈরির সময় বয়স",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 2,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Age at generation",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "निर्माण के समय उम्र",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 2,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "age_months": {
+      "order": 31,
+      "canonical_en": "%d months",
+      "sources": [
+        "internal/book/book1.go:1543"
+      ],
+      "slots": [
+        {
+          "token": "COPYVAL0",
+          "kind": "runtime_integer",
+          "meaning": "age in completed months"
+        }
+      ],
+      "values": {
+        "bn": {
+          "state": "reused",
+          "text": "COPYVAL0 মাস",
+          "provenance": {
+            "file": "../localization-slash/bn-cache.json",
+            "key": "ZXQ0QXZ months",
+            "stored_text": "ZXQ0QXZ মাস",
+            "origin": "1042963 saved configured translation",
+            "path": "/Books/0/Modules/B1-31/Blocks/3/Table/Rows/0/2",
+            "normalization": "Replace exactly one ZXQ0QXZ with COPYVAL0; translated words unchanged."
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "COPYVAL0 months",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "reused",
+          "text": "COPYVAL0 महीने",
+          "provenance": {
+            "file": "../localization-slash/hi-cache.json",
+            "key": "ZXQ0QXZ months",
+            "stored_text": "ZXQ0QXZ महीने",
+            "origin": "1042963 saved configured translation",
+            "path": "/Books/0/Modules/B1-31/Blocks/3/Table/Rows/0/2",
+            "normalization": "Replace exactly one ZXQ0QXZ with COPYVAL0; translated words unchanged."
+          }
+        }
+      }
+    },
+    "age_years": {
+      "order": 32,
+      "canonical_en": "%d years",
+      "sources": [
+        "internal/book/book1.go:1547"
+      ],
+      "slots": [
+        {
+          "token": "COPYVAL0",
+          "kind": "runtime_integer",
+          "meaning": "age in completed years"
+        }
+      ],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "COPYVAL0 বছর",
+          "provenance": {
+            "call": "copy-calls/bn-02.json",
+            "generated_at": "2026-10-25T21:42:02.732805794+05:30",
+            "input_index": 1,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "COPYVAL0 years",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "COPYVAL0 वर्ष",
+          "provenance": {
+            "call": "copy-calls/hi-02.json",
+            "generated_at": "2026-10-25T21:42:21.598645644+05:30",
+            "input_index": 3,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "age_years_months": {
+      "order": 33,
+      "canonical_en": "%d years %d months",
+      "sources": [
+        "internal/book/book1.go:1549"
+      ],
+      "slots": [
+        {
+          "token": "COPYVAL0",
+          "kind": "runtime_integer",
+          "meaning": "completed years"
+        },
+        {
+          "token": "COPYVAL1",
+          "kind": "runtime_integer",
+          "meaning": "remaining months"
+        }
+      ],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "COPYVAL0 বছর COPYVAL1 মাস",
+          "provenance": {
+            "call": "copy-calls/bn-02.json",
+            "generated_at": "2026-10-25T21:42:02.732805794+05:30",
+            "input_index": 2,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "COPYVAL0 years COPYVAL1 months",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "COPYVAL0 वर्ष COPYVAL1 महीने",
+          "provenance": {
+            "call": "copy-calls/hi-02.json",
+            "generated_at": "2026-10-25T21:42:21.598645644+05:30",
+            "input_index": 4,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "book_label": {
+      "order": 20,
+      "canonical_en": "Book",
+      "sources": [
+        "internal/book/templates/book2/end.html:22"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "বই",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 18,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Book",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "किताब",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 18,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "book_version": {
+      "order": 15,
+      "canonical_en": "Book version",
+      "sources": [
+        "internal/book/templates/book1/end.html:26",
+        "internal/book/templates/book2/end.html:23"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "বইয়ের সংস্করণ",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 13,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Book version",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "किताब का संस्करण",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 13,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "date_of_birth": {
+      "order": 3,
+      "canonical_en": "Date of birth",
+      "sources": [
+        "internal/book/templates/book1/cover.html:61"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "reused",
+          "text": "জন্ম তারিখ",
+          "provenance": {
+            "file": "../localization-slash/bn-cache.json",
+            "key": "Date of birth",
+            "stored_text": "জন্ম তারিখ",
+            "origin": "1042963 saved configured translation",
+            "path": "/Books/0/Modules/B1-01/Blocks/0/Table/Rows/1/0",
+            "normalization": "none"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Date of birth",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "reused",
+          "text": "जन्म तिथि",
+          "provenance": {
+            "file": "../localization-slash/hi-cache.json",
+            "key": "Date of birth",
+            "stored_text": "जन्म तिथि",
+            "origin": "1042963 saved configured translation",
+            "path": "/Books/0/Modules/B1-01/Blocks/0/Table/Rows/1/0",
+            "normalization": "none"
+          }
+        }
+      }
+    },
+    "food_practice": {
+      "order": 10,
+      "canonical_en": "Food practice",
+      "sources": [
+        "internal/book/templates/book2/cover.html:32"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "খাদ্যাভ্যাস",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 8,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Food practice",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "भोजन की आदतें",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 8,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "footer_generated": {
+      "order": 25,
+      "canonical_en": "generated",
+      "sources": [
+        "internal/book/reader.go:133"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "reused",
+          "text": "তৈরি করা হয়েছে",
+          "provenance": {
+            "file": "../localization-slash/bn-cache.json",
+            "key": "generated",
+            "stored_text": "তৈরি করা হয়েছে",
+            "origin": "refresh configured gemini-3.6-flash",
+            "path": "call:48/input:7",
+            "normalization": "none"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "generated",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "निर्मित",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 22,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "footer_release": {
+      "order": 24,
+      "canonical_en": "release",
+      "sources": [
+        "internal/book/reader.go:131"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "reused",
+          "text": "প্রকাশ",
+          "provenance": {
+            "file": "../localization-slash/bn-cache.json",
+            "key": "release",
+            "stored_text": "প্রকাশ",
+            "origin": "refresh configured gemini-3.6-flash",
+            "path": "call:48/input:6",
+            "normalization": "none"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "release",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "रिलीज़",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 21,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "generated_label": {
+      "order": 21,
+      "canonical_en": "Generated",
+      "sources": [
+        "internal/book/templates/book2/end.html:24"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "reused",
+          "text": "তৈরি করা হয়েছে",
+          "provenance": {
+            "file": "../localization-slash/bn-cache.json",
+            "key": "Generated",
+            "stored_text": "তৈরি করা হয়েছে",
+            "origin": "1042963 saved configured translation",
+            "path": "/Books/0/Modules/B1-01/Blocks/0/Table/Rows/5/0",
+            "normalization": "none"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Generated",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "reused",
+          "text": "तैयार किया गया",
+          "provenance": {
+            "file": "../localization-slash/hi-cache.json",
+            "key": "Generated",
+            "stored_text": "तैयार किया गया",
+            "origin": "1042963 saved configured translation",
+            "path": "/Books/0/Modules/B1-01/Blocks/0/Table/Rows/5/0",
+            "normalization": "none"
+          }
+        }
+      }
+    },
+    "generation_date": {
+      "order": 17,
+      "canonical_en": "Generation date",
+      "sources": [
+        "internal/book/templates/book1/end.html:28"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "তৈরির তারিখ",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 15,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Generation date",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "निर्माण की तारीख",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 15,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "growth_cover_summary": {
+      "order": 2,
+      "canonical_en": "A working guide to feeding, growth, vaccination, development and everyday care, personalised to this child's age and recorded profile. Prepared after consultation.",
+      "sources": [
+        "internal/book/templates/book1/cover.html:56"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "শিশুটির বয়স এবং নথিভুক্ত প্রোফাইল অনুসারে তৈরি খাওয়ানো, বৃদ্ধি, টিকাদান, বিকাশ এবং দৈনন্দিন যত্নের একটি ব্যবহারিক নির্দেশিকা। পরামর্শের পর প্রস্তুত করা হয়েছে।",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 1,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "A working guide to feeding, growth, vaccination, development and everyday care, personalised to this child's age and recorded profile. Prepared after consultation.",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "इस बच्चे की उम्र और दर्ज प्रोफ़ाइल के अनुसार तैयार, खान-पान, बढ़त, टीकाकरण, विकास और रोज़ाना की देखरेख की एक व्यावहारिक गाइड। परामर्श के बाद तैयार की गई।",
+          "provenance": {
+            "call": "copy-calls/hi-repair-01.json",
+            "input_index": 0,
+            "source": "gemini",
+            "model": "gemini-3.6-flash",
+            "generated_at": "2026-10-25T21:48:19.888238837+05:30",
+            "repair": true,
+            "superseded": {
+              "state": "review_gap",
+              "text": null,
+              "provenance": {
+                "call": "copy-calls/hi-01.json",
+                "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+                "input_index": 1,
+                "model": "gemini-3.6-flash",
+                "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+                "source": "gemini"
+              },
+              "candidate_text": "बच्चे की उम्र और दर्ज प्रोफ़ाइल के अनुसार खान-पान, विकास, टीकाकरण और रोज़ाना की देखभाल के लिए एक व्यावहारिक मार्गदर्शिका। परामर्श के बाद तैयार की गई।",
+              "issues": [
+                "Potential semantic coverage gap: source names growth and development separately; Hindi response uses one विकास term. Held for coordinator disposition, with no authored rewrite or further request."
+              ]
+            },
+            "reconciliation": "COPY-REPAIR-RESULT.json"
+          }
+        }
+      }
+    },
+    "growth_kicker": {
+      "order": 1,
+      "canonical_en": "Growth, Nutrition & Development",
+      "sources": [
+        "internal/book/templates/book1/cover.html:54"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "বৃদ্ধি, পুষ্টি ও বিকাশ",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 0,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Growth, Nutrition & Development",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "विकास, पोषण और वृद्धि",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 0,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "growth_metadata_title": {
+      "order": 29,
+      "canonical_en": "My Child's Growth, Nutrition & Development Companion",
+      "sources": [
+        "internal/book/book1.go:209",
+        "internal/book/templates/base.html:5"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "আমার সন্তানের বৃদ্ধি, পুষ্টি ও বিকাশ সঙ্গী",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 24,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "My Child's Growth, Nutrition & Development Companion",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "मेरे बच्चे के विकास, पोषण और वृद्धि का साथी",
+          "provenance": {
+            "call": "copy-calls/hi-02.json",
+            "generated_at": "2026-10-25T21:42:21.598645644+05:30",
+            "input_index": 1,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "illness_action": {
+      "order": 26,
+      "canonical_en": "What to do",
+      "sources": [
+        "internal/book/reader.go:270",
+        "internal/book/templates/book1/illness.html:16"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "করণীয়",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 21,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "What to do",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "क्या करें",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 23,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "illness_monitor": {
+      "order": 27,
+      "canonical_en": "Watch for",
+      "sources": [
+        "internal/book/reader.go:270",
+        "internal/book/templates/book1/illness.html:17"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "খেয়াল রাখুন",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 22,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Watch for",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "इन लक्षणों पर ध्यान दें",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 24,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "illness_warning": {
+      "order": 28,
+      "canonical_en": "Warning: seek medical care",
+      "sources": [
+        "internal/book/reader.go:273",
+        "internal/book/templates/book1/illness.html:22"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "সতর্কবার্তা: ডাক্তারি পরামর্শ নিন",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 23,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Warning: seek medical care",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "चेतावनी: चिकित्सीय सहायता लें",
+          "provenance": {
+            "call": "copy-calls/hi-02.json",
+            "generated_at": "2026-10-25T21:42:21.598645644+05:30",
+            "input_index": 0,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "not_recorded": {
+      "order": 11,
+      "canonical_en": "not recorded",
+      "sources": [
+        "internal/book/templates/book2/cover.html:33"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "নথিভুক্ত করা হয়নি",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 9,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "not recorded",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "दर्ज नहीं है",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 9,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "recipe_count_label": {
+      "order": 12,
+      "canonical_en": "Recipes in this book",
+      "sources": [
+        "internal/book/templates/book2/cover.html:34"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "এই বইয়ের রেসিপিগুলো",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 10,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Recipes in this book",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "इस किताब की रेसिपी",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 10,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "recipe_cover_summary": {
+      "order": 9,
+      "canonical_en": "Selected against this child's feeding stage, declared food practice and allergy exclusions. Matched from the provider's recipe master, not written for this book.",
+      "sources": [
+        "internal/book/templates/book2/cover.html:25"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "শিশুটির খাওয়ানোর পর্যায়, ঘোষিত খাদ্যাভ্যাস এবং অ্যালার্জি বর্জন বিবেচনা করে নির্বাচিত। প্রদানকারীর রেসিপি মাস্টার থেকে সংগৃহীত, এই বইয়ের জন্য নতুন লেখা নয়।",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 7,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Selected against this child's feeding stage, declared food practice and allergy exclusions. Matched from the provider's recipe master, not written for this book.",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "इस बच्चे के आहार चरण, बताई गई भोजन पद्धतियों और एलर्जी संबंधी परहेजों के आधार पर चुना गया है। प्रदाता के रेसिपी मास्टर से मिलाया गया है, खास इस किताब के लिए नहीं लिखा गया।",
+          "provenance": {
+            "call": "copy-calls/hi-repair-02.json",
+            "input_index": 0,
+            "source": "gemini",
+            "model": "gemini-3.6-flash",
+            "generated_at": "2026-10-25T22:03:00.017304242+05:30",
+            "validation": "Exact returned text through the unchanged protected-value seam; source concepts reconciled without editing target wording.",
+            "repair_result": "COPY-REPAIR-V2-RESULT.json",
+            "superseded": {
+              "state": "fresh",
+              "text": "बच्चे के खान-पान के चरण, भोजन संबंधी प्राथमिकताओं और एलर्जी से बचाव के आधार पर चुनी गई हैं। ये प्रदाता के रेसिपी मास्टर से ली गई हैं, विशेष रूप से लिखी नहीं गई हैं।",
+              "provenance": {
+                "call": "copy-calls/hi-01.json",
+                "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+                "input_index": 7,
+                "model": "gemini-3.6-flash",
+                "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+                "source": "gemini"
+              }
+            },
+            "superseded_reason": "The consumed response omitted the explicit declared/reported food-practice qualifier."
+          }
+        }
+      }
+    },
+    "recipe_data_version": {
+      "order": 23,
+      "canonical_en": "Recipe data version",
+      "sources": [
+        "internal/book/templates/book2/end.html:34"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "রেসিপি ডেটা সংস্করণ",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 20,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Recipe data version",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "रेसिपी डेटा संस्करण",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 20,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "recipe_imprint_summary": {
+      "order": 19,
+      "canonical_en": "Recipes, ingredients, quantities, preparation methods and safety rules on these pages are the provider's own, carried through unchanged. Nutrition figures are recomputed from the Indian Food Composition Tables 2017 (ICMR-NIN, Hyderabad) where an ingredient could be matched to an IFCT food; every recipe page states how much of the dish that covers.",
+      "sources": [
+        "internal/book/templates/book2/end.html:15"
+      ],
+      "slots": [
+        {
+          "token": "COPYREF0",
+          "kind": "fixed_source_identifier",
+          "restore": "ICMR-NIN"
+        },
+        {
+          "token": "COPYREF1",
+          "kind": "fixed_source_identifier",
+          "restore": "IFCT"
+        }
+      ],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "এই পৃষ্ঠাগুলির রেসিপি, উপাদান, পরিমাণ, প্রস্তুতপ্রণালী এবং সুরক্ষা নিয়মাবলী প্রদানকারীর নিজস্ব এবং অপরিবর্তিত রাখা হয়েছে। যেসব উপাদান IFCT খাদ্যের সাথে মেলানো গেছে, সেগুলির পুষ্টির হিসাব ইন্ডিয়ান ফুড কম্পোজিশন টেবিল 2017 (ICMR-NIN, হায়দ্রাবাদ) থেকে পুনরায় হিসাব করা হয়েছে; প্রতিটি রেসিপি পৃষ্ঠায় উল্লেখ আছে তা খাবারের কতটুকু অংশ কভার করে।",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 17,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Recipes, ingredients, quantities, preparation methods and safety rules on these pages are the provider's own, carried through unchanged. Nutrition figures are recomputed from the Indian Food Composition Tables 2017 (ICMR-NIN, Hyderabad) where an ingredient could be matched to an IFCT food; every recipe page states how much of the dish that covers.",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "इन पृष्ठों पर दी गई रेसिपी, सामग्री, मात्रा, बनाने की विधि और सुरक्षा नियम प्रदाता के अपने हैं और इनमें कोई बदलाव नहीं किया गया है। पोषण संबंधी आंकड़े इंडियन फूड कंपोज़िशन टेबल्स 2017 (ICMR-NIN, हैदराबाद) से पुनः परिकलित किए गए हैं जहाँ किसी सामग्री का मिलान IFCT खाद्य पदार्थ से हो सका; प्रत्येक रेसिपी पृष्ठ पर यह बताया गया है कि यह डिश के कितने भाग को कवर करता है।",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 17,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "recipe_kicker": {
+      "order": 7,
+      "canonical_en": "Personalised Recipe Book",
+      "sources": [
+        "internal/book/templates/book2/cover.html:22"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "ব্যক্তিগতকৃত রেসিপি বই",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 5,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Personalised Recipe Book",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "व्यक्तिगत रेसिपी बुक",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 5,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "recipe_metadata_title": {
+      "order": 30,
+      "canonical_en": "My Child's Personalized Recipe Book",
+      "sources": [
+        "internal/book/book2.go:311",
+        "internal/book/templates/book2/end.html:22",
+        "internal/book/templates/base.html:5"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "আমার শিশুর নিজস্ব রেসিপি বই",
+          "provenance": {
+            "call": "copy-calls/bn-02.json",
+            "generated_at": "2026-10-25T21:42:02.732805794+05:30",
+            "input_index": 0,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "My Child's Personalized Recipe Book",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "मेरे बच्चे की खास रेसिपी पुस्तिका",
+          "provenance": {
+            "call": "copy-calls/hi-02.json",
+            "generated_at": "2026-10-25T21:42:21.598645644+05:30",
+            "input_index": 2,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "recipes_for": {
+      "order": 8,
+      "canonical_en": "Recipes for",
+      "sources": [
+        "internal/book/templates/book2/cover.html:24"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "যার জন্য রেসিপি",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 6,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Recipes for",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "इनके लिए रेसिपी",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 6,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "release_id": {
+      "order": 16,
+      "canonical_en": "Release ID",
+      "sources": [
+        "internal/book/templates/book1/end.html:27"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "রিলিজ আইডি",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 14,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Release ID",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "रिलीज़ आईडी",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 14,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "release_label": {
+      "order": 22,
+      "canonical_en": "Release",
+      "sources": [
+        "internal/book/templates/book2/end.html:28"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "রিলিজ",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 19,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Release",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "रिलीज़",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 19,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "section_count_label": {
+      "order": 5,
+      "canonical_en": "Sections in this book",
+      "sources": [
+        "internal/book/approved reader display override for templates/book1/cover.html:65"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "এই বইয়ের বিভাগসমূহ",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 3,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Sections in this book",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "इस किताब के भाग",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 3,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "section_count_unit": {
+      "order": 6,
+      "canonical_en": "sections",
+      "sources": [
+        "internal/book/templates/book1/cover.html:66"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "বিভাগ",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 4,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "sections",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "भाग",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 4,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "sources_version": {
+      "order": 18,
+      "canonical_en": "Sources and version",
+      "sources": [
+        "internal/book/templates/book2/end.html:12"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "উৎস এবং সংস্করণ",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 16,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Sources and version",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "स्रोत और संस्करण",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 16,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    },
+    "version_generation": {
+      "order": 14,
+      "canonical_en": "Version and generation",
+      "sources": [
+        "internal/book/templates/book1/end.html:22"
+      ],
+      "slots": [],
+      "values": {
+        "bn": {
+          "state": "fresh",
+          "text": "সংস্করণ এবং তৈরির তথ্য",
+          "provenance": {
+            "call": "copy-calls/bn-01.json",
+            "generated_at": "2026-10-25T21:41:55.964019002+05:30",
+            "input_index": 12,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        },
+        "en": {
+          "state": "source",
+          "text": "Version and generation",
+          "provenance": {
+            "commit": "cde3e7ed8bdbf5a1223c4dc1a6efe8e8b43c5e48"
+          }
+        },
+        "hi": {
+          "state": "fresh",
+          "text": "संस्करण और निर्माण",
+          "provenance": {
+            "call": "copy-calls/hi-01.json",
+            "generated_at": "2026-10-25T21:42:15.674181238+05:30",
+            "input_index": 12,
+            "model": "gemini-3.6-flash",
+            "replay": "Offline per-item validation of this saved fresh response through the same protected-value seam; zero additional service calls.",
+            "source": "gemini"
+          }
+        }
+      }
+    }
+  },
+  "counts": {
+    "en": {
+      "source": 33
+    },
+    "bn": {
+      "fresh": 28,
+      "reused": 5
+    },
+    "hi": {
+      "fresh": 30,
+      "reused": 3
+    }
+  },
+  "usage": {
+    "run_id": "LDDYQU2KMXN2WRBK65YLSICTP3",
+    "total": {
+      "calls": 4,
+      "request_errors": 0,
+      "missing_usage": 0,
+      "prompt_tokens": 1542,
+      "output_tokens": 896,
+      "thought_tokens": 4787,
+      "cached_tokens": 0,
+      "total_tokens": 7225,
+      "call_ms": 38125
+    },
+    "books": [
+      {
+        "book": "copy-bn",
+        "calls": 2,
+        "request_errors": 0,
+        "missing_usage": 0,
+        "prompt_tokens": 767,
+        "output_tokens": 446,
+        "thought_tokens": 2215,
+        "cached_tokens": 0,
+        "total_tokens": 3428,
+        "call_ms": 19280
+      },
+      {
+        "book": "copy-hi",
+        "calls": 2,
+        "request_errors": 0,
+        "missing_usage": 0,
+        "prompt_tokens": 775,
+        "output_tokens": 450,
+        "thought_tokens": 2572,
+        "cached_tokens": 0,
+        "total_tokens": 3797,
+        "call_ms": 18845
+      }
+    ],
+    "groups": [
+      {
+        "book": "copy-bn",
+        "operation": "translation",
+        "model": "gemini-3.6-flash",
+        "calls": 2,
+        "request_errors": 0,
+        "missing_usage": 0,
+        "prompt_tokens": 767,
+        "output_tokens": 446,
+        "thought_tokens": 2215,
+        "cached_tokens": 0,
+        "total_tokens": 3428,
+        "call_ms": 19280
+      },
+      {
+        "book": "copy-hi",
+        "operation": "translation",
+        "model": "gemini-3.6-flash",
+        "calls": 2,
+        "request_errors": 0,
+        "missing_usage": 0,
+        "prompt_tokens": 775,
+        "output_tokens": 450,
+        "thought_tokens": 2572,
+        "cached_tokens": 0,
+        "total_tokens": 3797,
+        "call_ms": 18845
+      }
+    ]
+  },
+  "notes": [
+    "Local draft working assumption; no user preference reply inferred. Later supplied wording overrides this catalog.",
+    "Existing cover/imprint claims translated verbatim, not rewritten or clinically revalidated.",
+    "English source unchanged; runtime integer slots remain named. Fixed source identifier slots restored exactly.",
+    "Existing configured model and translation/protected-value seam; no full book or profile values sent.",
+    "Qualified native-language and clinical review remain outstanding.",
+    "All declared structural checks passed. One Hindi cover-summary candidate is held for the recorded source-concept coverage concern; raw responses remain unchanged.",
+    "The one Hindi cover-summary hold was resolved by a separately authorized single-input repair. Returned wording was not edited. Its superseded candidate and exact raw response remain preserved.",
+    "Version2 changes only the selected Hindi recipe-cover summary. The declared/reported qualifier is now explicit in the exact returned text. Consumed version1 and its audit/release remain unchanged."
+  ],
+  "reviewed_at": "2026-10-25T16:16:20.924981+00:00",
+  "repair_runs": [
+    {
+      "item": "growth_cover_summary",
+      "language": "hi",
+      "result": "COPY-REPAIR-RESULT.json",
+      "duration_seconds": 6.190580136,
+      "usage": {
+        "run_id": "MRTBA22FZHIDOUQ2YEPM72Z4EE",
+        "total": {
+          "calls": 1,
+          "request_errors": 0,
+          "missing_usage": 0,
+          "prompt_tokens": 250,
+          "output_tokens": 55,
+          "thought_tokens": 897,
+          "cached_tokens": 0,
+          "total_tokens": 1202,
+          "call_ms": 6190
+        },
+        "books": [
+          {
+            "book": "copy-hi-repair",
+            "calls": 1,
+            "request_errors": 0,
+            "missing_usage": 0,
+            "prompt_tokens": 250,
+            "output_tokens": 55,
+            "thought_tokens": 897,
+            "cached_tokens": 0,
+            "total_tokens": 1202,
+            "call_ms": 6190
+          }
+        ],
+        "groups": [
+          {
+            "book": "copy-hi-repair",
+            "operation": "translation",
+            "model": "gemini-3.6-flash",
+            "calls": 1,
+            "request_errors": 0,
+            "missing_usage": 0,
+            "prompt_tokens": 250,
+            "output_tokens": 55,
+            "thought_tokens": 897,
+            "cached_tokens": 0,
+            "total_tokens": 1202,
+            "call_ms": 6190
+          }
+        ]
+      },
+      "concept_reconciliation_pass": true
+    },
+    {
+      "item": "recipe_cover_summary",
+      "language": "hi",
+      "result": "COPY-REPAIR-V2-RESULT.json",
+      "duration_seconds": 5.095129009,
+      "usage": {
+        "run_id": "YF5UI74YQG63Z2HY7JJKGJN35V",
+        "total": {
+          "calls": 1,
+          "request_errors": 0,
+          "missing_usage": 0,
+          "prompt_tokens": 252,
+          "output_tokens": 59,
+          "thought_tokens": 513,
+          "cached_tokens": 0,
+          "total_tokens": 824,
+          "call_ms": 5094
+        },
+        "books": [
+          {
+            "book": "copy-hi-repair-v2",
+            "calls": 1,
+            "request_errors": 0,
+            "missing_usage": 0,
+            "prompt_tokens": 252,
+            "output_tokens": 59,
+            "thought_tokens": 513,
+            "cached_tokens": 0,
+            "total_tokens": 824,
+            "call_ms": 5094
+          }
+        ],
+        "groups": [
+          {
+            "book": "copy-hi-repair-v2",
+            "operation": "translation",
+            "model": "gemini-3.6-flash",
+            "calls": 1,
+            "request_errors": 0,
+            "missing_usage": 0,
+            "prompt_tokens": 252,
+            "output_tokens": 59,
+            "thought_tokens": 513,
+            "cached_tokens": 0,
+            "total_tokens": 824,
+            "call_ms": 5094
+          }
+        ]
+      },
+      "concept_reconciliation_pass": true
+    }
+  ],
+  "combined_usage": {
+    "calls": 6,
+    "request_errors": 0,
+    "missing_usage": 0,
+    "prompt_tokens": 2044,
+    "output_tokens": 1010,
+    "thought_tokens": 6197,
+    "cached_tokens": 0,
+    "total_tokens": 9251,
+    "call_ms": 49409
+  },
+  "total_inputs_sent": 60,
+  "original_batch_inputs": 58,
+  "targeted_repair_inputs": 2,
+  "catalog_completed_at": "2026-10-25T16:34:49.559637+00:00",
+  "supersedes_catalog": {
+    "path": "COPY-CATALOG.json",
+    "sha256": "8e5f5bcaca0c8f5f5e8f833ed7b3e7b68ae4e2bf921d4ab269fe4db89930796d"
+  }
+}

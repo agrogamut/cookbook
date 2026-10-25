@@ -62,7 +62,11 @@ func TestReaderHTMLUsesOriginalThemeAndAllModules(t *testing.T) {
 				if strings.Contains(s, "ZgotmplZ") {
 					t.Fatal("template rejected a trusted asset")
 				}
-				if book == 1 && (!strings.Contains(s, "Sections in this book") || strings.Contains(s, "Pages in this book")) {
+				copy, err := readerLocale(language)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if book == 1 && (!strings.Contains(s, copy["section_count_label"]) || strings.Contains(s, "Pages in this book")) {
 					t.Fatal("cover count label does not describe sections")
 				}
 			})
