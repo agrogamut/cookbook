@@ -36,6 +36,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
         libreoffice-writer \
         poppler-utils \
+        qpdf \
         fontconfig \
         util-linux \
         fonts-noto-core \

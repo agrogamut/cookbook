@@ -1,0 +1,13 @@
+{{ define "body" }}
+{{ if eq .Data.Book 1 }}
+{{ template "B1-COVER-01" .Data.Options.Book1 }}
+{{ else }}
+{{ template "B2-COVER-01" .Data.Options.Book2 }}
+{{ end }}
+<main class="reader-flow" data-layout="pink-flow-v1">{{ .Data.Content }}</main>
+{{ if eq .Data.Book 1 }}
+{{ template "B1-END-01" .Data.Options.Book1.Metadata }}
+{{ else }}
+{{ template "B2-IMPRINT-01" (readerImprint .) }}
+{{ end }}
+{{ end }}

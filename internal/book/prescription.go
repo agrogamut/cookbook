@@ -90,7 +90,7 @@ func prescriptionDocument(ctx context.Context, b Book1, drafter aidraft.Drafter)
 		release = " | " + html.EscapeString(labels[6]) + " " + html.EscapeString(b.Metadata.ReleaseID)
 	}
 	// Footer labels translate; supplied names, release identifiers and dates never enter translation.
-	footer := fmt.Sprintf(`<div style="font-size:7pt;width:100%%;padding:0 20mm;display:flex;justify-content:space-between;align-items:baseline;font-family:'Noto Sans','Noto Sans Bengali','Noto Sans Devanagari',sans-serif;color:#5a5a5a"><span>MadamGY &middot; %s %s%s &middot; %s %s</span><span class="pageNumber" style="font-size:9pt;color:#1a1a1a"></span></div>`, html.EscapeString(b.Metadata.BookVersion), html.EscapeString(labels[5]), release, html.EscapeString(labels[7]), b.Metadata.GenerationDate.Format("2006-01-02"))
+	footer := fmt.Sprintf(`<div style="font-size:10pt;width:100%%;padding:0 20mm;display:flex;gap:4mm;justify-content:space-between;align-items:baseline;font-family:'Noto Sans','Noto Sans Bengali','Noto Sans Devanagari',sans-serif;color:#5a5a5a"><span>MadamGY &middot; %s %s%s &middot; %s %s</span><span class="pageNumber" style="flex:none;color:#1a1a1a"></span></div>`, html.EscapeString(b.Metadata.BookVersion), html.EscapeString(labels[5]), release, html.EscapeString(labels[7]), b.Metadata.GenerationDate.Format("2006-01-02"))
 	return document.Bytes(), footer, omissions, nil
 }
 
@@ -121,7 +121,7 @@ func mergeBookPDF(ctx context.Context, first, attachment []byte) ([]byte, error)
 			return nil, fmt.Errorf("prescription PDF component: %w", err)
 		}
 	}
-	args := append([]string{"--as=4294967296", "--fsize=134217728", "--", "pdfunite"}, paths...)
+	args := []string{"--as=4294967296", "--fsize=134217728", "--", "qpdf", "--empty", "--pages", paths[0], paths[1], "--", paths[2]}
 	cmd := exec.CommandContext(ctx, "prlimit", args...)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("merge supplied prescription: %w (%s)", err, output)

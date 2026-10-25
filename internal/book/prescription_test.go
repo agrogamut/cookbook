@@ -4,13 +4,21 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"github.com/madamgy/recipie/internal/aidraft"
+	"encoding/json"
+	"fmt"
 	"html"
 	"image"
 	"image/png"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/madamgy/recipie/internal/aidraft"
 )
 
 func TestAppendPrescriptionWithoutUploadKeepsBytes(t *testing.T) {
@@ -18,6 +26,160 @@ func TestAppendPrescriptionWithoutUploadKeepsBytes(t *testing.T) {
 	got, _, err := AppendPrescription(context.Background(), pdf, Book1{}, aidraft.Disabled)
 	if err != nil || !bytes.Equal(got, pdf) {
 		t.Fatalf("no-upload path changed bytes: %v", err)
+	}
+}
+
+func prescriptionPageResources(t *testing.T, pdf []byte) []any {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "document.pdf")
+	if err := os.WriteFile(path, pdf, 0600); err != nil {
+		t.Fatal(err)
+	}
+	run := func(args ...string) []byte {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(ctx, "qpdf", append(args, path)...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("qpdf %v: %v: %s", args, err, out)
+		}
+		return out
+	}
+	run("--check")
+	var document struct {
+		Pages []struct{ Object string }
+		Qpdf  []map[string]any
+	}
+	if err := json.Unmarshal(run("--json"), &document); err != nil {
+		t.Fatal(err)
+	}
+	objects := map[string]map[string]any{}
+	for key, value := range document.Qpdf[1] {
+		objects[key] = value.(map[string]any)
+	}
+	ref := regexp.MustCompile(`^\d+ \d+ R$`)
+	cache := map[string]any{}
+	var resolve func(any) any
+	resolve = func(v any) any {
+		switch v := v.(type) {
+		case string:
+			if !ref.MatchString(v) {
+				return v
+			}
+			if cached, ok := cache[v]; ok {
+				return cached
+			}
+			cache[v] = "cycle"
+			object := objects["obj:"+v]
+			value := object["value"]
+			if stream, ok := object["stream"].(map[string]any); ok {
+				dict := stream["dict"].(map[string]any)
+				delete(dict, "/Length")
+				delete(dict, "/Filter")
+				delete(dict, "/DecodeParms")
+				value = map[string]any{"dict": resolve(dict), "bytes": string(run("--show-object="+strings.Fields(v)[0], "--filtered-stream-data"))}
+			} else {
+				value = resolve(value)
+			}
+			cache[v] = value
+			return value
+		case map[string]any:
+			out := map[string]any{}
+			for k, value := range v {
+				out[k] = resolve(value)
+			}
+			return out
+		case []any:
+			out := make([]any, len(v))
+			for i, value := range v {
+				out[i] = resolve(value)
+			}
+			return out
+		default:
+			return v
+		}
+	}
+	var pages []any
+	for _, page := range document.Pages {
+		dict := objects["obj:"+page.Object]["value"].(map[string]any)
+		selected := map[string]any{}
+		for _, key := range []string{"/MediaBox", "/CropBox", "/Rotate", "/Resources", "/Contents"} {
+			if value, ok := dict[key]; ok {
+				selected[key] = value
+			}
+		}
+		pages = append(pages, resolve(selected))
+	}
+	return pages
+}
+
+func TestPrescriptionMergePreservesPageResources(t *testing.T) {
+	if !browserOnPath() {
+		t.Skip("no Chromium installed")
+	}
+	var scan bytes.Buffer
+	if err := png.Encode(&scan, image.NewRGBA(image.Rect(0, 0, 20, 30))); err != nil {
+		t.Fatal(err)
+	}
+	docs := []string{`<p style="font-size:12pt">Original source 0.005 g</p>`, fmt.Sprintf(`<p>Original scan caption</p><img src="data:image/png;base64,%s" width="20" height="30">`, base64.StdEncoding.EncodeToString(scan.Bytes()))}
+	var parts [][]byte
+	var expected []any
+	for _, html := range docs {
+		pdf, err := PrintPDF(context.Background(), []byte(html), Metadata{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		parts = append(parts, pdf)
+		expected = append(expected, prescriptionPageResources(t, pdf)...)
+	}
+	merged, err := mergeBookPDF(context.Background(), parts[0], parts[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := prescriptionPageResources(t, merged); !reflect.DeepEqual(got, expected) {
+		t.Fatal("merge changed decoded drawing, font, image or page geometry resources")
+	}
+}
+
+func TestPrescriptionMergeFailureAndCancellationCleanup(t *testing.T) {
+	fish, err := exec.LookPath("fish")
+	if err != nil {
+		t.Skip("fish unavailable for subprocess control")
+	}
+	for _, tc := range []struct {
+		name, script string
+		cancel       bool
+	}{
+		{"error", "echo controlled-merge-error >&2\nexit 2\n", false},
+		{"cancel", "exec sleep 30\n", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			bin, temp := t.TempDir(), t.TempDir()
+			if err := os.WriteFile(filepath.Join(bin, "qpdf"), []byte("#!"+fish+"\n"+tc.script), 0700); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+			t.Setenv("TMPDIR", temp)
+			ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+			defer cancel()
+			_, err := mergeBookPDF(ctx, []byte("%PDF-1.4"), []byte("%PDF-1.4"))
+			if err == nil {
+				t.Fatal("controlled failure succeeded")
+			}
+			if tc.cancel && ctx.Err() == nil {
+				t.Fatal("merge did not reach cancellation")
+			}
+			if !tc.cancel && !strings.Contains(err.Error(), "controlled-merge-error") {
+				t.Fatal(err)
+			}
+			files, err := os.ReadDir(temp)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(files) != 0 || len(mergeSlots) != 0 {
+				t.Fatal("merge retained temporary files or concurrency slot")
+			}
+		})
 	}
 }
 

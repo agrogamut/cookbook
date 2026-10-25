@@ -1,0 +1,58 @@
+.reader-flow {
+  --body-size: 12pt;
+  --table-size: 12pt;
+  --caption-size: 11.5pt;
+  --small-size: 11.5pt;
+  --measure: 170mm;
+  font-size: var(--body-size);
+  line-height: 1.55;
+  break-before: page;
+}
+html[lang="bn"], html[lang="hi"] {
+  --font-serif: "Poppins", var(--font-indic);
+  --font-sans: "Poppins", var(--font-indic-sans);
+}
+html[lang="hi"] :is(.label, [class*="kicker"], th, h3, .contents-group, .toc-group) { letter-spacing: normal; }
+html[lang="bn"] .reader-flow, html[lang="hi"] .reader-flow {
+  --body-size: 13pt;
+  --table-size: 13pt;
+  --caption-size: 12pt;
+  --small-size: 12pt;
+  line-height: 1.6;
+}
+.reader-flow p { max-width: none; margin: 0 0 3mm; white-space: pre-wrap; overflow-wrap: break-word; widows: 3; orphans: 3; }
+.reader-flow h1, .reader-flow h2, .reader-flow h3 { break-inside: avoid; break-after: avoid; }
+.reader-flow h2 { margin: 6mm 0 4mm; }
+.reader-flow h3 { font-size: 15pt; margin: 0 0 3mm; }
+.reader-flow .reader-chapter { break-before: page; }
+.reader-flow .reader-bullet { padding-left: 5mm; }
+.reader-flow .reader-bullet::before { content: "\2022  "; }
+.reader-flow section + section { margin-top: 6mm; }
+.reader-flow table { width: 100%; max-width: 100%; font-size: var(--table-size); }
+.reader-flow td, .reader-flow th { overflow-wrap: break-word; word-break: normal; white-space: pre-wrap; }
+.reader-flow .reader-context { margin: 0; border: 0; break-inside: auto; }
+.reader-flow .reader-context > thead > tr > th { background: transparent; padding: 0; border: 0; text-align: left; text-transform: none; letter-spacing: normal; }
+.reader-flow .reader-context > tbody > tr { break-inside: auto; }
+.reader-flow .reader-context > tbody > tr > td { padding: 0; border: 0; background: transparent; }
+.reader-flow .reader-context > tbody > tr:last-child > td > :last-child { margin-bottom: 0; }
+.reader-flow .reader-context > tbody > tr > td > p { font-family: var(--font-serif); }
+.reader-flow .reader-label { font-family: var(--font-sans); font-weight: 600; color: var(--ink-soft); break-after: avoid; }
+.reader-flow .reader-situation > thead > tr > th h3 { color: var(--brand-deep); }
+.reader-flow .reader-situation { margin-bottom: 7mm; }
+.reader-flow .callout { break-inside: avoid; break-before: auto; }
+.reader-flow .domain-limit { font-size: 14pt; font-weight: 700; font-style: normal; }
+.reader-flow .reader-data { margin: 0 0 4mm; break-inside: auto; }
+.reader-flow .reader-data tr { break-inside: avoid; }
+.reader-flow .reader-record { margin: 0 0 5mm; }
+.reader-flow .reader-short-record { break-inside: avoid; }
+.reader-flow .reader-fixed td { vertical-align: top; }
+.reader-flow .reader-fixed td:first-child { width: 26%; }
+.reader-flow .reader-fixed p { margin-bottom: 2mm; }
+.reader-flow .reader-writing-form { break-inside: avoid; }
+.reader-flow .reader-upload { margin: 3mm 0; break-inside: avoid; }
+.reader-flow .reader-upload img { display: block; max-width: 100%; max-height: 180mm; width: auto; height: auto; object-fit: contain; }
+.reader-flow .reader-recipe { break-before: auto; }
+.reader-flow .reader-recipe-context > thead > tr > th { text-transform: none; letter-spacing: normal; }
+.reader-flow .reader-recipe-context .metacell .value { font-size: var(--body-size); }
+/* The zero-net-height probe asks the fragmenter for half a printable page at a card start. */
+.reader-flow .reader-recipe-start { height: 127.5mm; margin-bottom: -127.5mm; break-inside: avoid; break-after: avoid; }
