@@ -1,8 +1,8 @@
 {{ define "body" }}
 {{ if eq .Data.Book 1 }}
-{{ template "B1-COVER-01" .Data.Options.Book1 }}
+{{ template "B1-COVER-01" .Data.Cover }}
 {{ else }}
-{{ template "B2-COVER-01" .Data.Options.Book2 }}
+{{ template "B2-COVER-01" .Data.Cover }}
 {{ end }}
 <main class="reader-flow" data-layout="pink-flow-v1">{{ .Data.Content }}</main>
 {{ if eq .Data.Book 1 }}

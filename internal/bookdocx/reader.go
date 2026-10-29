@@ -27,7 +27,11 @@ type ReaderParagraph struct {
 	Style string
 }
 
-type ReaderTable struct{ Rows []ReaderRow }
+type ReaderTable struct {
+	Rows []ReaderRow
+	// ContextParagraphs identifies the preceding source heading/intro for a repeating header.
+	ContextParagraphs int
+}
 type ReaderRow struct{ Cells [][]ReaderParagraph }
 
 type ReaderModule struct {
@@ -95,17 +99,24 @@ func ReadContent(ctx context.Context, req Request) (ReaderDocument, error) {
 		case n.is("tbl"):
 			tableIndex++
 			var pending ReaderTable
-			flush := func() {
+			flush := func() error {
 				if len(pending.Rows) > 0 {
 					t := pending
+					t.ContextParagraphs, err = readerFixedContext(req, tableIndex, t, out.Nodes)
+					if err != nil {
+						return err
+					}
 					out.Nodes = append(out.Nodes, ReaderNode{Table: &t})
 					pending = ReaderTable{}
 				}
+				return nil
 			}
 			for i, row := range n.direct("tr") {
 				cells := row.direct("tc")
 				if b, ok := bound[[2]int{tableIndex, i + 1}]; ok {
-					flush()
+					if err := flush(); err != nil {
+						return ReaderDocument{}, err
+					}
 					out.Nodes = append(out.Nodes, ReaderNode{Module: &ReaderModule{
 						Code: b.Code, Title: readerCell(cells[1]), Content: copyModule(req.Modules[b.Code]),
 					}})
@@ -117,10 +128,42 @@ func ReadContent(ctx context.Context, req Request) (ReaderDocument, error) {
 				}
 				pending.Rows = append(pending.Rows, r)
 			}
-			flush()
+			if err := flush(); err != nil {
+				return ReaderDocument{}, err
+			}
 		}
 	}
 	return out, nil
+}
+
+func readerFixedContext(req Request, tableIndex int, table ReaderTable, preceding []ReaderNode) (int, error) {
+	count, columns := 0, 0
+	// These semantic locations belong to the v1 masters whose complete hashes were validated above.
+	if req.Version == "v1" {
+		if tableIndex == 1 {
+			count, columns = 1, 3
+		} else if req.Book == 1 && tableIndex == 15 || req.Book == 2 && tableIndex == 11 {
+			count, columns = 2, 2
+		}
+	}
+	if count == 0 {
+		return 0, nil
+	}
+	if len(table.Rows) < 2 || len(preceding) < count {
+		return 0, fmt.Errorf("reader fixed table %d lacks source context or data", tableIndex)
+	}
+	for _, row := range table.Rows {
+		if len(row.Cells) != columns {
+			return 0, fmt.Errorf("reader fixed table %d has unexpected columns", tableIndex)
+		}
+	}
+	context := preceding[len(preceding)-count:]
+	for i, node := range context {
+		if node.Paragraph == nil || len(node.Paragraph.Runs) == 0 || i == 0 && node.Paragraph.Style != "Heading1" {
+			return 0, fmt.Errorf("reader fixed table %d has unexpected source context", tableIndex)
+		}
+	}
+	return count, nil
 }
 
 func readerCell(n *node) []ReaderParagraph {

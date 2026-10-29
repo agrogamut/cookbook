@@ -48,6 +48,13 @@ html[lang="bn"] .reader-flow, html[lang="hi"] .reader-flow {
 .reader-flow .reader-fixed td { vertical-align: top; }
 .reader-flow .reader-fixed td:first-child { width: 26%; }
 .reader-flow .reader-fixed p { margin-bottom: 2mm; }
+.reader-flow .reader-fixed-context { break-inside: auto; }
+/* Preserve the original first cell: 170mm * 26% plus its 3mm right padding. */
+.reader-flow .reader-fixed-context col:first-child { width: 47.2mm; }
+.reader-flow .reader-fixed-context > thead { display: table-header-group; break-inside: avoid; }
+.reader-flow .reader-fixed-context > tbody > tr { break-inside: avoid; }
+.reader-flow .reader-fixed-caption > td:first-child { width: auto; padding: 0; border: 0; background: transparent; }
+.reader-flow .reader-fixed-caption p { margin-bottom: 3mm; }
 .reader-flow .reader-writing-form { break-inside: avoid; }
 .reader-flow .reader-upload { margin: 3mm 0; break-inside: avoid; }
 .reader-flow .reader-upload img { display: block; max-width: 100%; max-height: 180mm; width: auto; height: auto; object-fit: contain; }

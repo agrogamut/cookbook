@@ -2,16 +2,158 @@ package book
 
 import (
 	"context"
+	"encoding/xml"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 
 	"github.com/madamgy/recipie/internal/bookdocx"
+	"golang.org/x/text/unicode/norm"
 )
+
+func TestReaderFixedTableNativeContinuation(t *testing.T) {
+	if os.Getenv("BOOK_READER_NATIVE") != "1" {
+		t.Skip("set BOOK_READER_NATIVE=1 for actual fixed-table continuation")
+	}
+	defer ShutdownBrowser()
+	compact := func(s string) string {
+		return strings.Map(func(r rune) rune {
+			if unicode.IsSpace(r) {
+				return -1
+			}
+			return r
+		}, norm.NFC.String(s))
+	}
+	paragraph := func(p bookdocx.ReaderParagraph) string {
+		var s strings.Builder
+		for _, run := range p.Runs {
+			s.WriteString(run.Text)
+		}
+		return compact(s.String())
+	}
+	for _, language := range []string{"en", "bn", "hi"} {
+		for _, number := range []int{1, 2} {
+			d := readerFixture(t, number, language)
+			for index, node := range d.Nodes {
+				if node.Table == nil || node.Table.ContextParagraphs == 0 {
+					continue
+				}
+				kind := "contents"
+				if node.Table.ContextParagraphs == 2 {
+					kind = "faq"
+				}
+				t.Run(fmt.Sprintf("%s/book%d/%s", language, number, kind), func(t *testing.T) {
+					sourceContext := d.Nodes[index-node.Table.ContextParagraphs : index]
+					fragment := bookdocx.ReaderDocument{Nodes: d.Nodes[index-node.Table.ContextParagraphs : index+1]}
+					body := `<div style="height:80mm">PRECEDING-CONTROL</div>` + string(readerBody(fragment, readerTestLocale(t, language)))
+					pdf, _ := readerNativePDF(t, language, body)
+					path := filepath.Join(t.TempDir(), "fixed.pdf")
+					if err := os.WriteFile(path, pdf, 0600); err != nil {
+						t.Fatal(err)
+					}
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+					defer cancel()
+					text, err := exec.CommandContext(ctx, "pdftotext", "-raw", path, "-").Output()
+					if err != nil {
+						t.Fatal(err)
+					}
+					bbox, err := exec.CommandContext(ctx, "pdftotext", "-bbox", path, "-").Output()
+					if err != nil {
+						t.Fatal(err)
+					}
+					var positioned struct {
+						Pages []struct {
+							Words []struct {
+								Text string  `xml:",chardata"`
+								X    float64 `xml:"xMin,attr"`
+								Y    float64 `xml:"yMin,attr"`
+							} `xml:"word"`
+						} `xml:"body>doc>page"`
+					}
+					if err := xml.Unmarshal(bbox, &positioned); err != nil {
+						t.Fatal(err)
+					}
+					firstLabel := paragraph(node.Table.Rows[0].Cells[0][0])
+					measured := 0
+					for _, page := range positioned.Pages {
+						for i, word := range page.Words {
+							if compact(word.Text) != firstLabel {
+								continue
+							}
+							for _, next := range page.Words[i+1:] {
+								if math.Abs(next.Y-word.Y) < 1 && next.X > word.X+5 {
+									// Original first-cell measure is 26% of 170mm plus its 3mm right padding.
+									if math.Abs(next.X-word.X-(170*.26+3)*72/25.4) > .75 {
+										t.Fatalf("source table column measure changed: %.3fpt", next.X-word.X)
+									}
+									measured++
+									break
+								}
+							}
+						}
+					}
+					if measured == 0 {
+						t.Fatal("no source header column geometry measured")
+					}
+					var identities []string
+					for _, n := range sourceContext {
+						identities = append(identities, paragraph(*n.Paragraph))
+					}
+					for _, cell := range node.Table.Rows[0].Cells {
+						for _, p := range cell {
+							identities = append(identities, paragraph(p))
+						}
+					}
+					var rows []string
+					for _, row := range node.Table.Rows[1:] {
+						var s strings.Builder
+						for _, p := range row.Cells[len(row.Cells)-1] {
+							s.WriteString(paragraph(p))
+						}
+						rows = append(rows, s.String())
+					}
+					counts := make([]int, len(rows))
+					dataPages := 0
+					for pageIndex, page := range strings.Split(strings.TrimSuffix(string(text), "\f"), "\f") {
+						page = compact(page)
+						data := false
+						for i, row := range rows {
+							n := strings.Count(page, row)
+							counts[i] += n
+							data = data || n > 0
+						}
+						if !data {
+							if strings.Contains(page, identities[0]) {
+								t.Fatalf("context-only table page %d", pageIndex+1)
+							}
+							continue
+						}
+						dataPages++
+						for _, identity := range identities {
+							if !strings.Contains(page, identity) {
+								t.Fatalf("page %d lacks source table context %q", pageIndex+1, identity)
+							}
+						}
+					}
+					if dataPages < 2 {
+						t.Fatal("control did not exercise a table continuation")
+					}
+					for i, n := range counts {
+						if n != 1 {
+							t.Fatalf("source row %d occurs %d times, want once", i+1, n)
+						}
+					}
+				})
+			}
+		}
+	}
+}
 
 func readerNativePDF(t *testing.T, language, body string) ([]byte, []string) {
 	t.Helper()

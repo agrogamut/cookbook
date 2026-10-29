@@ -31,8 +31,38 @@ type ReaderResult struct {
 
 type readerView struct {
 	Options ReaderOptions
+	Cover   any
 	Content template.HTML
 	Book    int
+}
+
+type readerBook1Cover struct {
+	*Book1
+	SectionCount int
+}
+
+type readerBook2Cover struct {
+	*Book2
+	RecipeCount int
+}
+
+func readerCover(content bookdocx.ReaderDocument, options ReaderOptions) any {
+	sections := 0
+	ids := map[string]struct{}{}
+	for _, node := range content.Nodes {
+		if node.Module == nil {
+			continue
+		}
+		sections++
+		for _, entry := range node.Module.Content.Entries {
+			ids[entry.ID] = struct{}{}
+		}
+	}
+	if content.Book == 1 {
+		// Sections here are printed content modules, not the master's numbered Parts.
+		return readerBook1Cover{Book1: options.Book1, SectionCount: sections}
+	}
+	return readerBook2Cover{Book2: options.Book2, RecipeCount: len(ids)}
 }
 
 func RenderReader(ctx context.Context, request bookdocx.Request, options ReaderOptions) (ReaderResult, error) {
@@ -147,7 +177,7 @@ func RenderReaderHTML(w io.Writer, content bookdocx.ReaderDocument, options Read
 	if _, err = t.ParseFS(templateFS, "templates/reader.html"); err != nil {
 		return err
 	}
-	view := readerView{Options: options, Content: readerBody(content, copy), Book: content.Book}
+	view := readerView{Options: options, Cover: readerCover(content, options), Content: readerBody(content, copy), Book: content.Book}
 	render := renderContext{Metadata: meta, BookClass: fmt.Sprintf("book%d", content.Book), CSS: template.CSS(string(css) + "\n" + string(overlay)), FontFaces: fontFacesCSS, Watermark: watermarkDataURI, Data: view}
 	if err = t.ExecuteTemplate(w, "base.html", render); err != nil {
 		return fmt.Errorf("render reader: %w", err)
@@ -197,13 +227,26 @@ func readerBody(d bookdocx.ReaderDocument, copy map[string]string) template.HTML
 	var out strings.Builder
 	var moduleLabels []string
 	lastHeading := -1
+	contexts := map[int]int{}
 	for i, n := range d.Nodes {
 		if n.Paragraph != nil && n.Paragraph.Style == "Heading1" {
 			lastHeading = i
 		}
+		if n.Table != nil && n.Table.ContextParagraphs > 0 && i >= n.Table.ContextParagraphs {
+			contexts[i-n.Table.ContextParagraphs] = i
+		}
 	}
 	formEnd := -1
+	contextEnd := -1
 	for i, n := range d.Nodes {
+		if i <= contextEnd {
+			continue
+		}
+		if end, ok := contexts[i]; ok {
+			readerFixedTable(&out, *d.Nodes[end].Table, d.Nodes[i:end])
+			contextEnd = end
+			continue
+		}
 		if p := n.Paragraph; p != nil && p.Style == "Heading2" {
 			end := i
 			for end+1 < len(d.Nodes) && readerWritingLine(d.Nodes[end+1].Paragraph) {
@@ -257,19 +300,7 @@ func readerBody(d bookdocx.ReaderDocument, copy map[string]string) template.HTML
 				}
 				continue
 			}
-			out.WriteString(`<table class="reader-fixed"><tbody>`)
-			for _, row := range t.Rows {
-				out.WriteString("<tr>")
-				for _, cell := range row.Cells {
-					out.WriteString("<td>")
-					for _, p := range cell {
-						out.WriteString("<p>" + readerRuns(p.Paragraph) + "</p>")
-					}
-					out.WriteString("</td>")
-				}
-				out.WriteString("</tr>")
-			}
-			out.WriteString("</tbody></table>")
+			readerFixedTable(&out, *t, nil)
 		}
 		if m := n.Module; m != nil {
 			heading := html.EscapeString(m.Code)
@@ -309,6 +340,46 @@ func readerBody(d bookdocx.ReaderDocument, copy map[string]string) template.HTML
 		}
 	}
 	return template.HTML(out.String())
+}
+
+func readerFixedTable(out *strings.Builder, table bookdocx.ReaderTable, context []bookdocx.ReaderNode) {
+	rows := func(rows []bookdocx.ReaderRow) {
+		for _, row := range rows {
+			out.WriteString("<tr>")
+			for _, cell := range row.Cells {
+				out.WriteString("<td>")
+				for _, p := range cell {
+					out.WriteString("<p>" + readerRuns(p.Paragraph) + "</p>")
+				}
+				out.WriteString("</td>")
+			}
+			out.WriteString("</tr>")
+		}
+	}
+	body := table.Rows
+	if len(context) > 0 {
+		out.WriteString(`<table class="reader-fixed reader-fixed-context"><colgroup>`)
+		for range table.Rows[0].Cells {
+			out.WriteString("<col>")
+		}
+		out.WriteString("</colgroup><thead>")
+		fmt.Fprintf(out, `<tr class="reader-fixed-caption"><td colspan="%d">`, len(table.Rows[0].Cells))
+		for i, node := range context {
+			tag := "p"
+			if i == 0 {
+				tag = "h2"
+			}
+			fmt.Fprintf(out, `<%s class="">%s</%s>`, tag, readerRuns(node.Paragraph.Paragraph), tag)
+		}
+		out.WriteString("</td></tr>")
+		rows(table.Rows[:1])
+		out.WriteString("</thead><tbody>")
+		body = table.Rows[1:]
+	} else {
+		out.WriteString(`<table class="reader-fixed"><tbody>`)
+	}
+	rows(body)
+	out.WriteString("</tbody></table>")
 }
 
 func readerWritingLine(p *bookdocx.ReaderParagraph) bool {

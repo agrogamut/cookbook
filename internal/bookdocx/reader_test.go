@@ -122,3 +122,63 @@ func TestReaderCopiesCallerContent(t *testing.T) {
 		t.Fatal("reader retains caller-owned content")
 	}
 }
+
+func TestReaderFixedContextUsesVersionedMasterLocations(t *testing.T) {
+	for _, language := range []string{"en", "bn", "hi"} {
+		for _, book := range []int{1, 2} {
+			t.Run(fmt.Sprintf("%d-%s", book, language), func(t *testing.T) {
+				d, err := ReadContent(context.Background(), request(t, book, language))
+				if err != nil {
+					t.Fatal(err)
+				}
+				contexts := 0
+				for i, n := range d.Nodes {
+					if n.Table == nil || n.Table.ContextParagraphs == 0 {
+						continue
+					}
+					contexts++
+					if n.Table.ContextParagraphs != contexts || d.Nodes[i-contexts].Paragraph.Style != "Heading1" {
+						t.Fatal("wrong source heading/intro context")
+					}
+					wantColumns := 4 - contexts
+					if len(n.Table.Rows[0].Cells) != wantColumns {
+						t.Fatal("wrong fixed column header")
+					}
+				}
+				if contexts != 2 {
+					t.Fatalf("context tables %d, want contents and FAQ only", contexts)
+				}
+			})
+		}
+	}
+}
+
+func TestReaderFixedContextRejectsUnexpectedStructure(t *testing.T) {
+	for _, mutation := range []string{"rows", "columns", "missing-context", "heading", "intro"} {
+		t.Run(mutation, func(t *testing.T) {
+			row := ReaderRow{Cells: make([][]ReaderParagraph, 2)}
+			table := ReaderTable{Rows: []ReaderRow{row, row}}
+			heading := &ReaderParagraph{Style: "Heading1", Paragraph: Paragraph{Runs: []Run{{Text: "Source heading"}}}}
+			intro := &ReaderParagraph{Paragraph: Paragraph{Runs: []Run{{Text: "Source introduction"}}}}
+			context := []ReaderNode{{Paragraph: heading}, {Paragraph: intro}}
+			switch mutation {
+			case "rows":
+				table.Rows = table.Rows[:1]
+			case "columns":
+				table.Rows[0].Cells = table.Rows[0].Cells[:1]
+			case "missing-context":
+				context = nil
+			case "heading":
+				heading.Style = ""
+			case "intro":
+				context[1].Paragraph = nil
+			}
+			if _, err := readerFixedContext(Request{Book: 1, Version: "v1"}, 15, table, context); err == nil {
+				t.Fatal("unexpected semantic context accepted")
+			}
+			if count, err := readerFixedContext(Request{Book: 1, Version: "v1"}, 16, table, context); err != nil || count != 0 {
+				t.Fatal("unrelated fixed form was inferred to have a header")
+			}
+		})
+	}
+}
