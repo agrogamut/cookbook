@@ -30,13 +30,15 @@ type bookSetResponse struct {
 	Book2               string    `json:"book2_html"`
 	Book1TemplateSHA256 string    `json:"book1_template_sha256"`
 	Book2TemplateSHA256 string    `json:"book2_template_sha256"`
+	Book1LayoutVersion  string    `json:"book1_layout_version"`
+	Book2LayoutVersion  string    `json:"book2_layout_version"`
 
 	ProfileOmissions []string `json:"profile_omissions"`
 	Book1Omissions   []string `json:"book1_omissions"`
 	Book2Omissions   []string `json:"book2_omissions"`
 }
 
-// renderSet assembles one shared snapshot and converts both native masters.
+// renderSet assembles one shared snapshot for both books.
 func (h *Handlers) renderSet(w http.ResponseWriter, r *http.Request, s profile.Stored) (bookSetResponse, book.Set, bool) {
 	return h.renderSetWithPhotos(w, r, s, nil, nil, nil)
 }
@@ -68,10 +70,6 @@ func (h *Handlers) renderSetWithPhotos(w http.ResponseWriter, r *http.Request, s
 		set.Book1.Metadata.PrescriptionPhoto = prescriptionPhoto
 	}
 
-	if h.converterErr != nil {
-		writeError(w, http.StatusServiceUnavailable, "native document renderer unavailable: "+h.converterErr.Error())
-		return bookSetResponse{}, book.Set{}, false
-	}
 	bindings := book.NativeBindings(s, set)
 	if err := book.NativePhotos(&bindings, set); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -90,16 +88,18 @@ func (h *Handlers) renderSetWithPhotos(w http.ResponseWriter, r *http.Request, s
 		Book1Omissions:   append(set.Book1Omissions, bindings.Omissions[0]...),
 		Book2Omissions:   append(set.Book2Omissions, bindings.Omissions[1]...)}
 	for i, request := range bindings.Books {
-		result, err := h.converter.Render(ctx, request)
+		result, err := h.reader(ctx, request, book.ReaderOptions{Book1: &set.Book1, Book2: &set.Book2})
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, fmt.Sprintf("book%d native render failed: %v", i+1, err))
+			writeError(w, http.StatusInternalServerError, fmt.Sprintf("book%d reader render failed: %v", i+1, err))
 			return bookSetResponse{}, book.Set{}, false
 		}
 		resp.pdfs[i], resp.docx[i] = result.PDF, result.DOCX
 		if i == 0 {
 			resp.Book1TemplateSHA256 = result.TemplateSHA256
+			resp.Book1LayoutVersion = result.LayoutVersion
 		} else {
 			resp.Book2TemplateSHA256 = result.TemplateSHA256
+			resp.Book2LayoutVersion = result.LayoutVersion
 		}
 		for _, omission := range result.Omissions {
 			message := omission.Module + ": " + omission.Reason

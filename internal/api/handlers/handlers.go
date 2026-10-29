@@ -11,23 +11,20 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/madamgy/recipie/internal/aidraft"
+	"github.com/madamgy/recipie/internal/book"
 	"github.com/madamgy/recipie/internal/bookdocx"
 )
 
 type Handlers struct {
-	pool         *pgxpool.Pool
-	drafter      aidraft.Drafter
-	converter    nativeRenderer
-	converterErr error
+	pool    *pgxpool.Pool
+	drafter aidraft.Drafter
+	reader  readerRenderer
 }
 
-type nativeRenderer interface {
-	Render(context.Context, bookdocx.Request) (bookdocx.Result, error)
-}
+type readerRenderer func(context.Context, bookdocx.Request, book.ReaderOptions) (book.ReaderResult, error)
 
 func New(pool *pgxpool.Pool, drafter aidraft.Drafter) *Handlers {
-	converter, err := bookdocx.NewConverter(bookdocx.ConverterOptions{MaxConcurrent: 2})
-	return &Handlers{pool: pool, drafter: drafter, converter: converter, converterErr: err}
+	return &Handlers{pool: pool, drafter: drafter, reader: book.RenderReader}
 }
 
 func (h *Handlers) Healthz(w http.ResponseWriter, r *http.Request) {

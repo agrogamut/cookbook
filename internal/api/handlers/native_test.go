@@ -4,20 +4,21 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"github.com/madamgy/recipie/internal/bookdocx"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/madamgy/recipie/internal/book"
+	"github.com/madamgy/recipie/internal/bookdocx"
 )
 
-// Policy-route tests validate real bindings without repeating native conversion for every condition.
-type bindingRenderer struct{}
-
-func (bindingRenderer) Render(ctx context.Context, request bookdocx.Request) (bookdocx.Result, error) {
-	doc, err := bookdocx.Fill(ctx, request)
-	return bookdocx.Result{Document: doc, PDF: []byte("%PDF-1.4\n% route policy fixture\n%%EOF")}, err
+// Policy-route tests validate real content without printing every condition.
+func bindingReader(ctx context.Context, request bookdocx.Request, _ book.ReaderOptions) (book.ReaderResult, error) {
+	doc, err := bookdocx.ReadContent(ctx, request)
+	return book.ReaderResult{Result: bookdocx.Result{Document: doc.Document, PDF: []byte("%PDF-1.4\n% route policy fixture\n%%EOF")}, LayoutVersion: book.ReaderLayoutVersion}, err
 }
 
 func previewPDF(t *testing.T, doc string) []byte {
@@ -47,22 +48,55 @@ func pdfText(t *testing.T, pdf []byte) string {
 	return string(text)
 }
 
-func pdfImageCount(t *testing.T, pdf []byte) int {
+func pdfContainsPNG(t *testing.T, pdf []byte, encoded string) bool {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "book.pdf")
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "book.pdf")
 	if err := os.WriteFile(path, pdf, 0600); err != nil {
 		t.Fatal(err)
 	}
-	output, err := exec.Command("pdfimages", "-list", path).CombinedOutput()
+	output, err := exec.Command("pdfimages", "-png", path, filepath.Join(dir, "image")).CombinedOutput()
 	if err != nil {
 		t.Fatalf("PDF image inspection: %v: %s", err, output)
 	}
-	count := 0
-	for _, line := range strings.Split(string(output), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) > 3 && fields[2] == "image" {
-			count++
+	files, err := filepath.Glob(filepath.Join(dir, "image-*.png"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, file := range files {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := png.Decode(bytes.NewReader(data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Bounds() != want.Bounds() {
+			continue
+		}
+		equal := true
+		for y := want.Bounds().Min.Y; y < want.Bounds().Max.Y && equal; y++ {
+			for x := want.Bounds().Min.X; x < want.Bounds().Max.X; x++ {
+				wr, wg, wb, wa := want.At(x, y).RGBA()
+				gr, gg, gb, ga := got.At(x, y).RGBA()
+				if wr != gr || wg != gg || wb != gb || wa != ga {
+					equal = false
+					break
+				}
+			}
+		}
+		if equal {
+			return true
 		}
 	}
-	return count
+	return false
 }

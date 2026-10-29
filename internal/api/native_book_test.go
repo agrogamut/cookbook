@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/madamgy/recipie/internal/aidraft"
+	"github.com/madamgy/recipie/internal/book"
 	"github.com/madamgy/recipie/internal/casesource"
 	"github.com/madamgy/recipie/internal/db"
 	"github.com/madamgy/recipie/internal/importer"
@@ -135,10 +136,14 @@ func TestNativeReleaseJourney(t *testing.T) {
 		t.Fatal(err)
 	}
 	reg := registration["id"]
-	for _, lang := range []string{"en", "bn", "hi"} {
-		t.Run(lang, func(t *testing.T) {
+	for _, fixture := range []struct {
+		language string
+		uploads  bool
+	}{{"en", false}, {"en", true}, {"bn", true}, {"hi", true}} {
+		lang := fixture.language
+		t.Run(fmt.Sprintf("%s/uploads=%t", lang, fixture.uploads), func(t *testing.T) {
 			body := map[string]string{"child_id": reg, "display_name": "Synthetic native child", "date_of_birth": dob, "language_id": lang}
-			if lang != "en" {
+			if fixture.uploads {
 				body["photo_data_uri"] = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGOUC+hhYGBgYmBgYGBgAAALdAD+3y8XygAAAABJRU5ErkJggg=="
 				body["parents_photo_data_uri"] = body["photo_data_uri"]
 				body["prescription_photo_data_uri"] = body["photo_data_uri"]
@@ -146,7 +151,9 @@ func TestNativeReleaseJourney(t *testing.T) {
 			}
 			w := request("POST", "/api/registrations/"+reg+"/book-releases", body, adminToken, 201)
 			var generated struct {
-				Book1 struct {
+				Book1LayoutVersion string `json:"book1_layout_version"`
+				Book2LayoutVersion string `json:"book2_layout_version"`
+				Book1              struct {
 					PDF []byte `json:"pdf"`
 				} `json:"book1_print"`
 				Book2 struct {
@@ -156,7 +163,20 @@ func TestNativeReleaseJourney(t *testing.T) {
 			if err := json.Unmarshal(w.Body.Bytes(), &generated); err != nil {
 				t.Fatal(err)
 			}
-			if lang != "en" {
+			if generated.Book1LayoutVersion != book.ReaderLayoutVersion || generated.Book2LayoutVersion != book.ReaderLayoutVersion {
+				t.Fatal("release response lost reader layout provenance")
+			}
+			for name, pdf := range map[string][]byte{"book1": generated.Book1.PDF, "book2": generated.Book2.PDF} {
+				path := filepath.Join(t.TempDir(), name+".pdf")
+				if err := os.WriteFile(path, pdf, 0600); err != nil {
+					t.Fatal(err)
+				}
+				output, err := exec.Command("qpdf", "--check", path).CombinedOutput()
+				if err != nil || strings.Contains(strings.ToLower(string(output)), "warning") {
+					t.Fatalf("final %s/%s PDF structure: %v: %s", lang, name, err, output)
+				}
+			}
+			if fixture.uploads {
 				path := filepath.Join(t.TempDir(), "localized-annex.pdf")
 				if err := os.WriteFile(path, generated.Book1.PDF, 0600); err != nil {
 					t.Fatal(err)
@@ -165,8 +185,11 @@ func TestNativeReleaseJourney(t *testing.T) {
 				if err != nil {
 					t.Fatalf("extract annex: %v: %s", err, text)
 				}
-				label := map[string]string{"bn": "Bengali", "hi": "Hindi"}[lang]
-				if !strings.Contains(string(text), "Localized "+label+" annex") {
+				label := "Supplied prescription annex."
+				if lang != "en" {
+					label = "Localized " + map[string]string{"bn": "Bengali", "hi": "Hindi"}[lang] + " annex"
+				}
+				if !strings.Contains(string(text), label) {
 					t.Fatal("configured translator did not reach prescription annex")
 				}
 			}

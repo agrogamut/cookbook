@@ -85,7 +85,7 @@ func specialCareConditionIDs(t *testing.T, h *Handlers) []string {
 // return 409 any more -- that status is gone from this API entirely.
 func TestASpecialCareChildGetsBooksOnEveryRoute(t *testing.T) {
 	r, h := booksRouter(t)
-	h.converter, h.converterErr = bindingRenderer{}, nil
+	h.reader = bindingReader
 	const childID = "BOOK-TEST-BLOCKED-001"
 	cleanupChild(t, h, childID)
 

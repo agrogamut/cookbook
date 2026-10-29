@@ -130,9 +130,7 @@ func TestGenerateRequiresDateOfBirth(t *testing.T) {
 // Book 2, a working recipe document with no photo upload of any kind.
 func TestGeneratePutsThePhotoOnBook1Cover(t *testing.T) {
 	const png = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGOUC+hhYGBgYmBgYGBgAAALdAD+3y8XygAAAABJRU5ErkJggg=="
-	// A second, distinct PNG (a real 1x1 red pixel, not a copy of the fixture above) so a
-	// bytes.Contains match against it can only mean the parents' photo specifically, never a
-	// coincidental match against the child's photo or an embedded illustration.
+	// Distinct pixel values distinguish the two uploads from each other and the artwork.
 	const parentsPNG = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGOcphHAwMDAxMDAwMDAAAANGAESBcDPUwAAAABJRU5ErkJggg=="
 	body := `{"display_name":"Photo Child","date_of_birth":"2022-05-01",
 	          "photo_data_uri":"data:image/png;base64,` + png + `","photo_caption":"With her mother",
@@ -150,13 +148,13 @@ func TestGeneratePutsThePhotoOnBook1Cover(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	book1, book2 := previewPDF(t, got.Book1), previewPDF(t, got.Book2)
-	if pdfImageCount(t, book1) < 2 {
+	if !pdfContainsPNG(t, book1, png) || !pdfContainsPNG(t, book1, parentsPNG) {
 		t.Fatal("both uploaded portraits must be embedded in Book1")
 	}
 	if !strings.Contains(pdfText(t, book1), "With her mother") {
 		t.Fatal("child photo caption missing")
 	}
-	if pdfImageCount(t, book2) != 0 {
+	if pdfContainsPNG(t, book2, png) || pdfContainsPNG(t, book2, parentsPNG) {
 		t.Fatal("portraits must not enter Book2")
 	}
 
@@ -181,14 +179,14 @@ func TestGeneratePutsThePrescriptionPhotoOnBook1(t *testing.T) {
 		t.Fatalf("decode: %v", err)
 	}
 	book1, book2 := previewPDF(t, got.Book1), previewPDF(t, got.Book2)
-	if pdfImageCount(t, book1) < 1 {
+	if !pdfContainsPNG(t, book1, rxPNG) {
 		t.Fatal("supplied prescription must be embedded in final Book1")
 	}
 	text := pdfText(t, book1)
 	if !strings.Contains(text, "Dr Sen, follow-up") || !strings.Contains(text, "Rx Child") || !strings.Contains(text, "prescription annex") {
 		t.Fatal("supplied prescription caption or child missing")
 	}
-	if pdfImageCount(t, book2) != 0 {
+	if pdfContainsPNG(t, book2, rxPNG) {
 		t.Fatal("prescription must not enter Book2")
 	}
 
@@ -201,7 +199,7 @@ func TestGeneratePutsThePrescriptionPhotoOnBook1(t *testing.T) {
 // document. See docs/superpowers/specs/2026-09-05-direct-generation-design.md.
 func TestGenerateProducesBooksForEverySpecialCareCondition(t *testing.T) {
 	h := New(testPool(t), aidraft.Disabled)
-	h.converter, h.converterErr = bindingRenderer{}, nil
+	h.reader = bindingReader
 	r := chi.NewRouter()
 	r.Post("/api/books/generate", h.BookGenerate)
 
