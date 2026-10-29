@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -17,11 +18,6 @@ import (
 	"github.com/madamgy/recipie/internal/models"
 	"github.com/madamgy/recipie/internal/profile"
 )
-
-// methodStepPattern splits the provider's numbered preparation text ("1) ... 2) ... 3) ...")
-// into individual steps. Whatever the numbering, the words themselves are the provider's own
-// -- this only breaks one string into several, it never rewrites a syllable of it.
-var methodStepPattern = regexp.MustCompile(`\d+\)\s*`)
 
 // maxRecipesPerSection is a project policy decision, not provider data: every row of
 // meal_category_target.default_target_recipes reads 25 (verified live), and every chapter of
@@ -892,24 +888,80 @@ func splitIngredients(ids, names, quantities string, bengaliNames map[string]str
 	return out
 }
 
-// splitMethodSteps breaks the provider's single preparation_method_full string into the
-// numbered steps it already contains ("1) ... 2) ... 3) ..."). This only segments existing
-// text; it introduces no new instruction and rewrites no word of the provider's own.
+// Only a complete sequential list has removable markers. Ambiguous source stays verbatim.
 func splitMethodSteps(method string) []string {
-	parts := methodStepPattern.Split(method, -1)
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		p = strings.TrimSpace(p)
-		if p != "" {
-			out = append(out, p)
-		}
+	if method == "" {
+		return nil
 	}
-	if len(out) == 0 {
-		if trimmed := strings.TrimSpace(method); trimmed != "" {
-			out = append(out, trimmed)
+	verbatim := []string{method}
+	type marker struct{ start, end int }
+	var markers []marker
+	depth := 0
+	previous := rune(' ')
+	for i := 0; i < len(method); {
+		char, size := utf8.DecodeRuneInString(method[i:])
+		if depth == 0 && unicode.IsSpace(previous) && char >= '0' && char <= '9' {
+			end := i
+			for end < len(method) && method[end] >= '0' && method[end] <= '9' {
+				end++
+			}
+			if end+1 < len(method) && method[end] == ')' {
+				next, _ := utf8.DecodeRuneInString(method[end+1:])
+				if unicode.IsSpace(next) {
+					if method[i:end] != strconv.Itoa(len(markers)+1) {
+						return verbatim
+					}
+					start := i
+					for start > 0 {
+						before, width := utf8.DecodeLastRuneInString(method[:start])
+						if !unicode.IsSpace(before) {
+							break
+						}
+						start -= width
+					}
+					if len(markers) == 0 && start != 0 {
+						return verbatim
+					}
+					end++
+					for end < len(method) {
+						after, width := utf8.DecodeRuneInString(method[end:])
+						if !unicode.IsSpace(after) {
+							break
+						}
+						end += width
+					}
+					markers = append(markers, marker{start, end})
+					i, previous = end, ' '
+					continue
+				}
+			}
 		}
+		switch char {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth < 0 {
+				return verbatim
+			}
+		}
+		i, previous = i+size, char
 	}
-	return out
+	if depth != 0 || len(markers) == 0 {
+		return verbatim
+	}
+	parts := make([]string, len(markers))
+	for i, m := range markers {
+		end := len(method)
+		if i+1 < len(markers) {
+			end = markers[i+1].start
+		}
+		if end <= m.end {
+			return verbatim
+		}
+		parts[i] = method[m.end:end]
+	}
+	return parts
 }
 
 // recipeMeta builds the production strip a cook reads before starting.
