@@ -111,10 +111,30 @@ func (h *Handlers) caseRecipeDetail(w http.ResponseWriter, r *http.Request, id s
 		writeError(w, http.StatusInternalServerError, "source ingredients lookup failed: "+err.Error())
 		return
 	}
+	locale, err := casesource.Bengali(r.Context(), h.pool, recipe)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "source locale lookup failed: "+err.Error())
+		return
+	}
+	title, method := recipe.Fields["Recipe_Name"], recipe.Fields["Preparation_Method_FULL"]
+	method = recipe.PresentationText("Preparation_Method_FULL", "en", method)
+	if r.URL.Query().Get("language") == "bn" && locale != nil {
+		for _, text := range locale.Texts {
+			switch text.Field {
+			case "title":
+				title = text.Text
+			case "method":
+				method = text.Presented()
+			}
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"method":        map[string]any{"recipe_id": recipe.Citation.RecipeID, "recipe_name": recipe.Fields["Recipe_Name"], "region_culture": recipe.Fields["Region_Culture"], "provider_method": recipe.Fields["Preparation_Method_FULL"], "provider_review_status": recipe.Fields["Review_Status"]},
-		"nutrition":     nil,
-		"nutrition_gap": "Source estimates have no verified ingredient nutrient crosswalk or measured cooked yield.",
-		"case_source":   recipe,
+		"method":              map[string]any{"recipe_id": recipe.Citation.RecipeID, "recipe_name": title, "region_culture": recipe.Fields["Region_Culture"], "provider_method": method, "provider_review_status": recipe.Fields["Review_Status"]},
+		"nutrition":           nil,
+		"nutrition_gap":       "Source estimates have no verified ingredient nutrient crosswalk or measured cooked yield.",
+		"source_nutrition":    recipe.SourceNumbers(),
+		"source_nutrient_gap": recipe.Fields["Nutrient_Gap"],
+		"source_locale":       locale,
+		"case_source":         recipe,
 	})
 }

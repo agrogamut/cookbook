@@ -606,7 +606,11 @@ func applySuspectedAllergenRank(ctx context.Context, pool *pgxpool.Pool, p model
 		           SELECT 1 FROM engine_candidate_ingredient m
 		           JOIN ingredient_allergen_override o ON o.ingredient_id = m.ingredient_id
 		           WHERE m.recipe_id = r.recipe_id
-		             AND o.allergen_group = ANY($2)))`,
+		             AND o.allergen_group = ANY($2))
+		       OR EXISTS (
+		           SELECT 1 FROM case_source_recipe_policy p
+		           JOIN allergen_mapping a ON p.policy->'allergen_codes' ? a.allergen_id
+		           WHERE p.candidate_id = r.recipe_id AND a.allergen_group = ANY($2)))`,
 		ids, p.SuspectedAllergens)
 	if err != nil {
 		return nil, models.StepResult{}, fmt.Errorf("engine: suspected allergen rank: %w", err)
@@ -657,10 +661,10 @@ func applySuspectedAllergenRank(ctx context.Context, pool *pgxpool.Pool, p model
 		return nil, models.StepResult{}, err
 	}
 
-	note := fmt.Sprintf("%d of %d candidates carry a suspected allergen tag and were ranked down by %.2f; none were excluded, because AS-002 marks a suspected allergy hard_block = N",
+	note := fmt.Sprintf("%d of %d candidates carry a suspected allergen association and were ranked down by %.2f; none were excluded, because AS-002 marks a suspected allergy hard_block = N",
 		len(demote), stepIn, penalty)
 	if len(unscreened) > 0 {
-		note += fmt.Sprintf(". Suspected group(s) %v have no corpus tag, so they demoted nothing", unscreened)
+		note += fmt.Sprintf(". Suspected group(s) %v lack a legacy corpus tag or override; revision-specific source-policy matches are included above", unscreened)
 	}
 	if len(unknown) > 0 {
 		note += fmt.Sprintf(". Suspected group(s) %v are not in allergen_mapping and were ignored", unknown)

@@ -31,11 +31,11 @@ func execute(ctx context.Context, args []string, output io.Writer) error {
 	flags := flag.NewFlagSet("import-cases", flag.ContinueOnError)
 	flags.SetOutput(output)
 	const original = "data/case-source/3ae4477c943f672c4912ae532c1096dfc7da351d9aea9414bf03e523799797e2.zip"
-	archive := flags.String("archive", original, "case source ZIP")
+	archive := flags.String("archive", "data/case-source/"+casesource.FinalArchiveSHA256+".zip", "case source ZIP")
 	baselinePath := flags.String("baseline", original, "retained original v1 comparison ZIP for Bengali staging")
 	databaseURL := flags.String("database-url", "", "explicit staging database connection; no environment fallback")
 	check := flags.Bool("check", false, "validate source bytes without connecting to a database")
-	activate := flags.Bool("activate", false, "activate v1 only; unreconciled Bengali v2 is staging only")
+	activate := flags.Bool("activate", false, "explicitly activate v1 or the accepted final-source contract; no production connection is implicit")
 	details := flags.Bool("details", false, "include per-row v2 validation findings in JSON output")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -77,13 +77,17 @@ func execute(ctx context.Context, args []string, output io.Writer) error {
 	if !*details {
 		report.Findings = nil
 	}
-	if report.ActivationBlocked && *activate {
+	accepted := casesource.AcceptedArchive(report.ArchiveSHA256)
+	if report.ActivationBlocked && *activate && !accepted {
 		if err := json.NewEncoder(output).Encode(report); err != nil {
 			return err
 		}
 		return casesource.ErrLocaleActivation
 	}
 	if *check {
+		if accepted {
+			return json.NewEncoder(output).Encode(map[string]any{"intake": report, "accepted_final_source": true, "activation_requires_explicit_command": true})
+		}
 		if report.ActivationBlocked {
 			return json.NewEncoder(output).Encode(report)
 		}
@@ -101,7 +105,12 @@ func execute(ctx context.Context, args []string, output io.Writer) error {
 	}
 	if report.ActivationBlocked {
 		r.Report = report
-		return json.NewEncoder(output).Encode(r)
+		if err := json.NewEncoder(output).Encode(r); err != nil {
+			return err
+		}
+		if !*activate {
+			return nil
+		}
 	}
 	if _, err := fmt.Fprintf(output, "archive=%s inserted=%t workbooks=%d recipes=%d audits=%d occurrences=%d\n",
 		report.ArchiveSHA256, r.Inserted, report.Workbooks, report.Recipes, report.Audits, report.Occurrences); err != nil {

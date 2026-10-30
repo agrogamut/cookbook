@@ -100,9 +100,24 @@ func Assess(r Recipe, input Input) []Gap {
 		add("age_excluded", "recipe", "Min_Age_Months", fmt.Sprintf("Source age range is %d-%d months; recorded age is %d months.", min, max, input.AgeMonths))
 	}
 	tags := map[string]bool{}
+	allergenText := r.Fields["Allergen_Tags"]
+	final := AcceptedArchive(r.Citation.ArchiveSHA256)
+	if final {
+		if r.Policy == nil || r.Policy.ContractSHA256 != hash(finalContractBytes) || r.Policy.RuleSHA256 != RuleFingerprint(r.Fields) {
+			add("rule_unmapped", "recipe", "Safety_Rule", "Final source policy is missing or does not match this immutable revision.")
+			return gaps
+		}
+		allergenText = strings.Join(r.Policy.AllergenCodes, ";")
+		for _, hold := range r.Policy.Holds {
+			gaps = append(gaps, Gap{Code: hold.Code, Scope: "recipe", Field: hold.Field, Reason: hold.Reason, Evidence: hold.Evidence, Source: r.Citation})
+		}
+	}
 	knownAllergens := map[string]bool{"ALG-MILK": true, "ALG-EGG": true, "ALG-PEANUT": true, "ALG-TREENUT": true, "ALG-WHEAT": true, "ALG-SOY": true, "ALG-SESAME": true, "ALG-FISH": true, "ALG-SHELLFISH": true, "ALG-MUSTARD": true, "ALG-SULPHITE": true}
-	for _, tag := range strings.Split(r.Fields["Allergen_Tags"], ";") {
+	for _, tag := range strings.Split(allergenText, ";") {
 		tag = strings.TrimSpace(tag)
+		if final && tag == "" {
+			continue
+		}
 		tags[tag] = true
 		if !knownAllergens[tag] && tag != "None of the 11 coded allergens in ingredient list" {
 			add("allergen_unknown", "recipe", "Allergen_Tags", "Source allergen classification is missing or unsupported: "+tag+".")
@@ -125,7 +140,11 @@ func Assess(r Recipe, input Input) []Gap {
 	if len(input.UnmappedClinical) > 0 {
 		add("clinical_unmapped", "recipe", "Clinical_Tag", "No source-backed clinical crosswalk for recorded conditions: "+strings.Join(input.UnmappedClinical, ", ")+".")
 	}
-	if knownRules[r.Citation.RecipeID] != RuleFingerprint(r.Fields) {
+	rules := knownRules
+	if final {
+		rules = finalContract.Rules
+	}
+	if rules[r.Citation.RecipeID] != RuleFingerprint(r.Fields) {
 		add("rule_unmapped", "recipe", "Safety_Rule", "Source safety/selection content differs from the mapped source version; eligibility requires a matching rule mapping.")
 		return gaps
 	}

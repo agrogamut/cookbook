@@ -2,13 +2,92 @@ package engine
 
 import (
 	"context"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/madamgy/recipie/internal/casesource"
 	"github.com/madamgy/recipie/internal/models"
 )
+
+func TestFinalSourceSuspectedAllergens(t *testing.T) {
+	pool := casePool(t)
+	ctx := context.Background()
+	baseline, err := os.ReadFile("../../data/case-source/3ae4477c943f672c4912ae532c1096dfc7da351d9aea9414bf03e523799797e2.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile("../../data/case-source/" + casesource.FinalArchiveSHA256 + ".zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := casesource.ImportIntake(ctx, pool, data, baseline); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := casesource.Activate(ctx, pool, casesource.FinalArchiveSHA256); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct{ group, code, rawTag string }{
+		{"Mustard", "ALG-MUSTARD", "Mustard"},
+		{"Crustacean/Mollusc", "ALG-SHELLFISH", "Shellfish"},
+	} {
+		t.Run(test.group, func(t *testing.T) {
+			var id string
+			err := pool.QueryRow(ctx, `SELECT r.candidate_id FROM case_source_active_recipe r
+			 JOIN case_source_recipe_policy p USING(candidate_id)
+			 WHERE p.policy->'allergen_codes' ? $1 AND r.fields->>'Allergen_Tags' NOT ILIKE '%' || $2 || '%'
+			 ORDER BY r.case_number=12 DESC,r.recipe_id LIMIT 1`, test.code, test.rawTag).Scan(&id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			recipes, err := casesource.Recipes(ctx, pool, []string{id})
+			if err != nil || len(recipes) != 1 {
+				t.Fatal(err)
+			}
+			r := recipes[0]
+			age, err := strconv.Atoi(r.Fields["Min_Age_Months"])
+			if err != nil {
+				t.Fatal(err)
+			}
+			if test.group == "Mustard" && len(casesource.Assess(r, casesource.Input{AgeMonths: age})) != 0 {
+				t.Fatal("mustard positive must be eligible", r.Citation)
+			}
+			confirmed := false
+			for _, gap := range casesource.Assess(r, casesource.Input{AgeMonths: age, AllergenCodes: []string{test.code}}) {
+				confirmed = confirmed || gap.Code == "allergen_excluded"
+			}
+			if !confirmed {
+				t.Fatal("confirmed source association lost", r.Citation)
+			}
+			input := []models.RankedRecipe{{RecipeID: id, RankedScore: 1, AgeInBand: true}, {RecipeID: "unknown-control", RankedScore: 1, AgeInBand: true}}
+			for _, groups := range [][]string{nil, {test.group}, {test.group, test.group}} {
+				out, step, err := applySuspectedAllergenRank(ctx, pool, models.ChildProfile{AgeMonths: age, SuspectedAllergens: groups}, input)
+				if err != nil || len(out) != len(input) || step.CandidatesIn != step.CandidatesOut {
+					t.Fatal("suspected association excluded candidates", err, step)
+				}
+				if len(groups) > 0 && (!strings.HasPrefix(step.Note, "1 of 2 candidates carry a suspected allergen association") || strings.Contains(step.Note, "demoted nothing")) {
+					t.Fatal("suspected note contradicts derived match", step.Note)
+				}
+				want := 1.0
+				if len(groups) > 0 {
+					want -= 0.15
+				}
+				for _, v := range out {
+					expected := 1.0
+					if v.RecipeID == id {
+						expected = want
+					}
+					if v.RankedScore != expected {
+						t.Errorf("%s suspected %v score=%v want=%v", v.RecipeID, groups, v.RankedScore, expected)
+					}
+				}
+			}
+			t.Logf("FINAL_SUSPECTED_CONTROL recipe=%s group=%s raw=%q", r.Citation.RecipeID, test.group, r.Fields["Allergen_Tags"])
+		})
+	}
+}
 
 func TestApplyMealFilterDegradesOnEmptyResult(t *testing.T) {
 	pool := testPool(t)

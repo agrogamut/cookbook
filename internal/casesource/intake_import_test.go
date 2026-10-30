@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/big"
 	"os"
@@ -191,8 +190,9 @@ func TestIntakeImportDelivery(t *testing.T) {
 	if err != nil || again.Inserted || !reflect.DeepEqual(snapshot, localeDigest(t, pool)) {
 		t.Fatal("repeat import modified immutable staging", err)
 	}
-	if _, err := Activate(ctx, pool, i.Archive.SHA256); !errors.Is(err, ErrLocaleActivation) {
-		t.Fatal("v2 activation was not refused", err)
+	var projected int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM case_source_recipe_revision WHERE archive_sha256=$1`, i.Archive.SHA256).Scan(&projected); err != nil || projected != 0 {
+		t.Fatal("staging implicitly activated final source", err)
 	}
 	tx, err = pool.Begin(ctx)
 	if err != nil {

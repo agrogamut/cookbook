@@ -222,10 +222,10 @@ func TestImport(t *testing.T) {
 	}
 	beforeRollback := digestTables(t, pool, false)
 	for _, migration := range []string{
-		"0048_case_source_locale_staging.down", "0047_case_source_revision_lookup.down",
+		"0049_final_case_source.down", "0048_case_source_locale_staging.down", "0047_case_source_revision_lookup.down",
 		"0046_case_source_activation.down", "0045_case_source_staging.down",
 		"0045_case_source_staging.up", "0046_case_source_activation.up",
-		"0047_case_source_revision_lookup.up", "0048_case_source_locale_staging.up",
+		"0047_case_source_revision_lookup.up", "0048_case_source_locale_staging.up", "0049_final_case_source.up",
 	} {
 		sql, err := os.ReadFile("../db/migrations/" + migration + ".sql")
 		if err != nil {

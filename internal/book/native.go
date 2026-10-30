@@ -7,12 +7,14 @@ import (
 	"strings"
 
 	"github.com/madamgy/recipie/internal/bookdocx"
+	"github.com/madamgy/recipie/internal/casesource"
 	"github.com/madamgy/recipie/internal/profile"
 )
 
 type NativeSet struct {
-	Books     [2]bookdocx.Request
-	Omissions [2][]string
+	Books         [2]bookdocx.Request
+	Omissions     [2][]string
+	SourceLocales map[string]*casesource.Locale
 }
 
 func nativeText(text string) bookdocx.Block {
@@ -23,12 +25,54 @@ func nativeTable(rows ...[]string) bookdocx.Block {
 	return bookdocx.Block{Table: &bookdocx.Table{Rows: rows}}
 }
 
+func nativeSourceLanguage(b Book2) (Book2, map[string]*casesource.Locale) {
+	locales := map[string]*casesource.Locale{}
+	if b.Metadata.Language != "bn" {
+		return b, locales
+	}
+	b.MealSections = append([]MealSection(nil), b.MealSections...)
+	for mi := range b.MealSections {
+		meal := &b.MealSections[mi]
+		meal.Recipes = append([]RecipeCard(nil), meal.Recipes...)
+		for ri := range meal.Recipes {
+			r := &meal.Recipes[ri]
+			l := r.SourceLocale
+			if l == nil || r.SourceRevision == nil || l.Source != *r.SourceRevision || l.Language != "bn" {
+				continue
+			}
+			if err := l.Validate(casesource.Recipe{CandidateID: r.SourceCandidateID, Citation: *r.SourceRevision, Fields: r.SourceFields}); err != nil {
+				continue
+			}
+			r.Ingredients = append([]IngredientLine(nil), r.Ingredients...)
+			for _, text := range l.Texts {
+				switch text.Field {
+				case "title":
+					r.Title = text.Text
+				case "method":
+					r.MethodSteps = []string{text.Presented()}
+				case "safety":
+					r.Safety = text.Text
+				case "ingredient":
+					for i := range r.Ingredients {
+						if r.Ingredients[i].SourceOrdinal == text.Ordinal {
+							r.Ingredients[i].Name = text.Text
+						}
+					}
+				}
+			}
+			locales[r.RecipeID] = l
+		}
+	}
+	return b, locales
+}
+
 // NativeBindings reads one assembled set; no module performs recipe selection.
 func NativeBindings(s profile.Stored, set Set) NativeSet {
 	n := NativeSet{Books: [2]bookdocx.Request{
 		{Book: 1, Language: set.Book1.Metadata.Language, Version: "v1", Modules: map[string]bookdocx.Module{}},
 		{Book: 2, Language: set.Book2.Metadata.Language, Version: "v1", Modules: map[string]bookdocx.Module{}},
 	}}
+	set.Book2, n.SourceLocales = nativeSourceLanguage(set.Book2)
 	put := func(book, module int, blocks ...bookdocx.Block) {
 		n.Books[book-1].Modules[fmt.Sprintf("B%d-%02d", book, module)] = bookdocx.Module{Blocks: blocks}
 	}
@@ -378,6 +422,9 @@ func nativeRecipe(r RecipeCard, meal string, module int) []bookdocx.Block {
 			b = append(b, nativeText("Cooking minutes: "+strconv.Itoa(*r.CookTimeMinutes)))
 		}
 	case 46:
+		if gap := r.SourceFields["Nutrient_Gap"]; gap != "" {
+			b = append(b, nativeText("Nutrient_Gap: "+gap))
+		}
 		if r.Nutrition == nil {
 			b = append(b, nativeText("Verified recipe nutrition is unavailable. Source estimates have no validated ingredient equivalence and are not presented as verified nutrition."))
 		} else {
@@ -386,8 +433,15 @@ func nativeRecipe(r RecipeCard, meal string, module int) []bookdocx.Block {
 		}
 	case 47:
 		b = append(b, nativeText(r.Safety), nativeText("Source review status: "+r.ReviewStatus))
+		if r.SourcePolicy != nil {
+			b = append(b, nativeText("Ingredient-backed allergen codes: "+strings.Join(r.SourcePolicy.AllergenCodes, "; ")), nativeText("Derived source contract: "+r.SourcePolicy.Version+"; provenance in B2-56."))
+		}
 		for _, key := range []string{"Min_Age_Months", "Max_Age_Months", "Diet_Type", "Allergen_Tags", "Clinical_Tag", "Growth_Target", "Texture", "Book1_Use", "Book2_Use", "AI_Adaptation_Rule"} {
 			if v := r.SourceFields[key]; v != "" {
+				if key == "Book2_Use" && r.SourceRevision != nil {
+					source := casesource.Recipe{CandidateID: r.SourceCandidateID, Citation: *r.SourceRevision, Fields: r.SourceFields}
+					v = source.PresentationText(key, "en", v)
+				}
 				b = append(b, nativeText(key+": "+v))
 			}
 		}
@@ -448,6 +502,17 @@ func nativeSources(b Book2) []bookdocx.Block {
 			}
 			seen[r.RecipeID] = true
 			out = append(out, nativeText(r.RecipeID), nativeText("Source: "+r.Source), nativeText("Source review status: "+r.ReviewStatus))
+			if p := r.SourcePolicy; p != nil {
+				out = append(out, nativeText("Policy contract SHA256: "+p.ContractSHA256))
+				for _, a := range p.TextAmendments {
+					out = append(out, nativeText(fmt.Sprintf("Display amendment: %s (%s); %s!%s; raw SHA256 %s; byte %d: %s -> %s. %s", a.Field, a.Language, a.Sheet, a.Cell, a.RawSHA256, a.ByteOffset, a.Before, a.After, a.Basis)))
+				}
+				for _, evidence := range p.AllergenEvidence {
+					if ref := evidence.Reference; ref != nil {
+						out = append(out, nativeText(fmt.Sprintf("%s; ordinal %d; %s; %s row %d; reference SHA256 %s", evidence.Code, evidence.Ordinal, ref.File, ref.Sheet, ref.Row, ref.SHA256)))
+					}
+				}
+			}
 			if c := r.SourceRevision; c != nil {
 				if !archives[c.ArchiveSHA256] {
 					out = append(out, nativeText("Archive SHA256: "+c.ArchiveSHA256))

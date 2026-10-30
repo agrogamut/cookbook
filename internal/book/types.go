@@ -516,6 +516,8 @@ type RecipeCard struct {
 	SourceCandidateID string               `json:"source_candidate_id,omitempty"`
 	SourceRevision    *casesource.Citation `json:"source_revision,omitempty"`
 	SourceFields      map[string]string    `json:"source_fields,omitempty"`
+	SourceLocale      *casesource.Locale   `json:"source_locale,omitempty"`
+	SourcePolicy      *casesource.Policy   `json:"source_policy,omitempty"`
 	StorageRule       string               `json:"storage_rule,omitempty"`
 	RecipeID          string               `json:"recipe_id"`
 	RecipeVersion     string               `json:"recipe_version"`

@@ -42,6 +42,7 @@ func SafeIngredients(ctx context.Context, pool *pgxpool.Pool, p models.ChildProf
 		SELECT i.ingredient_id, i.english_name
 		FROM ingredient_master i
 		WHERE (NOT $2::boolean OR i.food_group != ALL($3))
+		  AND i.ingredient_id NOT IN ('ING0075','ING0074')
 		  AND (NOT $2::boolean OR i.allergen_tags NOT ILIKE '%Milk%')
 		  AND NOT EXISTS (
 		      SELECT 1 FROM allergen_tag_vocabulary v

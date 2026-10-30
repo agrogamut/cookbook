@@ -3,6 +3,7 @@ package book
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -565,6 +566,56 @@ func TestTheUnionRemovesTheOrdinaryOutOfBandFill(t *testing.T) {
 			t.Fatalf("an ordinary three-year-old should no longer need an out-of-band fill "+
 				"now that the AI corpus is in the candidate pool, but a chapter reported one: %s", o)
 		}
+	}
+}
+
+func TestPrintedAgeNotesMatchFinalCards(t *testing.T) {
+	pool := testPool(t)
+	ctx := context.Background()
+	asOf := time.Date(2026, 9, 5, 0, 0, 0, 0, time.UTC)
+	for _, narrow := range []bool{false, true} {
+		t.Run(fmt.Sprintf("narrow_%t", narrow), func(t *testing.T) {
+			s := profile.Stored{DisplayName: "Age accounting", DateOfBirth: asOf.AddDate(-3, 0, 0)}
+			if narrow {
+				s.Vegan = true
+				s.Allergens = []profile.DeclaredAllergen{{Group: "Peanut", Status: "confirmed"}, {Group: "Milk", Status: "confirmed"}, {Group: "Wheat", Status: "confirmed"}}
+			}
+			b, omissions, err := AssembleBook2(ctx, pool, s, asOf)
+			if err != nil {
+				t.Fatal(err)
+			}
+			positive := 0
+			for _, section := range b.MealSections {
+				ids := make([]string, len(section.Recipes))
+				for i, card := range section.Recipes {
+					ids[i] = card.RecipeID
+				}
+				if len(ids) > maxRecipesPerSection || (!narrow && len(ids) != maxRecipesPerSection) {
+					t.Fatal("printed count changed", section.Title, len(ids))
+				}
+				var outside int
+				if err := pool.QueryRow(ctx, `SELECT count(*) FROM engine_candidate WHERE recipe_id=ANY($1) AND NOT(min_age_months<=36 AND max_age_months>=36)`, ids).Scan(&outside); err != nil {
+					t.Fatal(err)
+				}
+				found := false
+				for _, note := range omissions {
+					if strings.HasPrefix(note, section.MealCategoryID+" (") && strings.Contains(note, "outside this child's age band") {
+						found = true
+						want := fmt.Sprintf("%s (%s): %d of %d printed recipes are outside this child's age band.", section.MealCategoryID, section.Title, outside, len(ids))
+						if outside == 0 || !strings.HasPrefix(note, want) {
+							t.Errorf("note does not describe final cards: %q, actual outside=%d total=%d", note, outside, len(ids))
+						}
+					}
+				}
+				if found != (outside > 0) {
+					t.Errorf("%s outside=%d reported=%t", section.Title, outside, found)
+				}
+				positive += outside
+			}
+			if (positive > 0) != narrow {
+				t.Fatal("source-backed age control changed", narrow, positive)
+			}
+		})
 	}
 }
 

@@ -27,6 +27,10 @@ func loadSourceCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 	}
 	out := map[string]RecipeCard{}
 	for _, r := range recipes {
+		locale, err := casesource.Bengali(ctx, pool, r)
+		if err != nil {
+			return nil, nil, fmt.Errorf("source recipe locale: %w", err)
+		}
 		occ, err := casesource.Ingredients(ctx, pool, r.CandidateID)
 		if err != nil {
 			return nil, nil, err
@@ -48,9 +52,9 @@ func loadSourceCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 		out[r.CandidateID] = RecipeCard{RecipeID: r.Citation.RecipeID, RecipeVersion: r.Citation.ArchiveSHA256, Title: f["Recipe_Name"], MealCategoryID: category,
 			SelectionReasons: []string{"Source age, declared diet and confirmed allergens checked; no unmet mapped source prerequisites."},
 			PrepTimeMinutes:  &prep, CookTimeMinutes: &cook, CostBand: &band, Ingredients: ingredients,
-			MethodSteps: splitMethodSteps(f["Preparation_Method_FULL"]), TextureServing: &texture, Serving: r.ServingGrams + " g",
+			MethodSteps: splitMethodSteps(r.PresentationText("Preparation_Method_FULL", "en", f["Preparation_Method_FULL"])), TextureServing: &texture, Serving: r.ServingGrams + " g",
 			Safety: f["Safety_Rule"], ReviewStatus: f["Review_Status"], RegionCulture: f["Region_Culture"], Source: casesource.CandidateSource,
-			SourceRevision: &r.Citation, SourceFields: f, StorageRule: f["Storage_Rule"], SourceCandidateID: r.CandidateID,
+			SourceRevision: &r.Citation, SourceFields: f, SourceLocale: locale, SourcePolicy: r.Policy, StorageRule: f["Storage_Rule"], SourceCandidateID: r.CandidateID,
 		}
 	}
 	return out, omitted, nil

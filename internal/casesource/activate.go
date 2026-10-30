@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -45,10 +46,25 @@ func Activate(ctx context.Context, pool *pgxpool.Pool, archiveSHA256 string) (Ac
 	if err := pool.QueryRow(ctx, `SELECT archive_bytes, parser_version FROM case_source_archive WHERE archive_sha256=$1`, archiveSHA256).Scan(&data, &parser); err != nil {
 		return result, fmt.Errorf("read retained source for activation: %w", err)
 	}
+	var a *Archive
+	var err error
 	if parser == LocaleParserVersion {
-		return result, ErrLocaleActivation
+		if !AcceptedArchive(archiveSHA256) {
+			return result, ErrLocaleActivation
+		}
+		var baseline []byte
+		if err := pool.QueryRow(ctx, `SELECT a.archive_bytes FROM case_source_locale_validation v
+		    JOIN case_source_archive a ON a.archive_sha256=v.baseline_sha256 WHERE v.archive_sha256=$1`, archiveSHA256).Scan(&baseline); err != nil {
+			return result, fmt.Errorf("read retained comparison: %w", err)
+		}
+		intake, parseErr := ParseIntake(ctx, data, baseline)
+		if parseErr != nil {
+			return result, parseErr
+		}
+		a = intake.Archive
+	} else {
+		a, err = Parse(ctx, data)
 	}
-	a, err := Parse(ctx, data)
 	if err != nil {
 		return result, fmt.Errorf("validate retained source: %w", err)
 	}
@@ -63,6 +79,20 @@ func Activate(ctx context.Context, pool *pgxpool.Pool, archiveSHA256 string) (Ac
 	// Serialize current-pointer updates across overlapping snapshots.
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(460060)`); err != nil {
 		return result, fmt.Errorf("lock activation: %w", err)
+	}
+	if !AcceptedArchive(archiveSHA256) {
+		var finalActivated bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM case_source_recipe_revision WHERE archive_sha256=$1)`, FinalArchiveSHA256).Scan(&finalActivated); err != nil {
+			return result, fmt.Errorf("read authoritative source history: %w", err)
+		}
+		if finalActivated {
+			return result, fmt.Errorf("authoritative final source is already activated; historical deliveries cannot replace current recipes")
+		}
+	}
+	if parser == LocaleParserVersion {
+		if err := projectFinalRows(ctx, tx, a.SHA256); err != nil {
+			return result, err
+		}
 	}
 	meanings := make(map[string]bool)
 	for _, w := range a.Workbooks {
@@ -97,6 +127,20 @@ func Activate(ctx context.Context, pool *pgxpool.Pool, archiveSHA256 string) (Ac
 					return result, fmt.Errorf("activate %s: %w", r.RecipeID, err)
 				}
 				result.RevisionsAdded += insert.RowsAffected()
+				if parser == LocaleParserVersion {
+					policy, err := finalPolicy(fields, r.Ingredients)
+					if err != nil {
+						return result, err
+					}
+					encoded, err := json.Marshal(policy)
+					if err != nil {
+						return result, err
+					}
+					if _, err := tx.Exec(ctx, `INSERT INTO case_source_recipe_policy(candidate_id,contract_version,policy)
+					    VALUES($1,$2,$3) ON CONFLICT(candidate_id) DO NOTHING`, id, policy.Version, string(encoded)); err != nil {
+						return result, fmt.Errorf("retain final policy: %w", err)
+					}
+				}
 				for _, ingredient := range r.Ingredients {
 					meaning := MeaningID(ingredient.RawID, ingredient.RawName)
 					if meanings[meaning] {
@@ -123,4 +167,24 @@ func Activate(ctx context.Context, pool *pgxpool.Pool, archiveSHA256 string) (Ac
 		return result, fmt.Errorf("commit activation: %w", err)
 	}
 	return result, nil
+}
+
+func projectFinalRows(ctx context.Context, tx pgx.Tx, archive string) error {
+	// The canonical projection references the same immutable master cells as locale staging.
+	for _, statement := range []string{
+		`INSERT INTO case_source_sheet(archive_sha256,case_number,sheet_name,xml_part,header_row,raw_headers)
+		 SELECT archive_sha256,case_number,sheet_name,xml_part,header_row,raw_headers
+		 FROM case_source_locale_sheet WHERE archive_sha256=$1 AND sheet_name IN ('Recipe_Master','Uniqueness_Audit') ON CONFLICT DO NOTHING`,
+		`INSERT INTO case_source_row(archive_sha256,case_number,sheet_name,row_number,recipe_id,raw_cells,row_sha256)
+		 SELECT archive_sha256,case_number,sheet_name,row_number,recipe_id,raw_cells,row_sha256
+		 FROM case_source_locale_raw_row WHERE archive_sha256=$1 AND sheet_name IN ('Recipe_Master','Uniqueness_Audit') ON CONFLICT DO NOTHING`,
+		`INSERT INTO case_source_ingredient(archive_sha256,case_number,sheet_name,row_number,ordinal,raw_id,raw_name,raw_grams,grams)
+		 SELECT archive_sha256,case_number,'Recipe_Master',master_row,ingredient_ordinal,raw_ingredient_id,raw_ingredient_name,raw_ingredient_grams,grams
+		 FROM case_source_locale_text WHERE archive_sha256=$1 AND field='ingredient' ON CONFLICT DO NOTHING`,
+	} {
+		if _, err := tx.Exec(ctx, statement, archive); err != nil {
+			return fmt.Errorf("project retained final source: %w", err)
+		}
+	}
+	return nil
 }

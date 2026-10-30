@@ -163,3 +163,76 @@ func TestCaseSourceAPI(t *testing.T) {
 	}
 	t.Logf("SOURCE_API_OK search_source_rows=%d unknown_scores=null case26_ordinals=8,10", found)
 }
+
+func TestFinalSourceAPI(t *testing.T) {
+	pool := sourceAPIPool(t)
+	ctx := context.Background()
+	baseline, err := os.ReadFile("../../../data/case-source/3ae4477c943f672c4912ae532c1096dfc7da351d9aea9414bf03e523799797e2.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile("../../../data/case-source/" + casesource.FinalArchiveSHA256 + ".zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := casesource.ImportIntake(ctx, pool, data, baseline); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := casesource.Activate(ctx, pool, casesource.FinalArchiveSHA256); err != nil {
+		t.Fatal(err)
+	}
+	h := New(pool, aidraft.Disabled)
+	router := chi.NewRouter()
+	router.Get("/api/recipes/{recipeID}", h.RecipeDetail)
+	for _, recipe := range []string{"MG-WB-C01-001", "MG-WB-C26-001", "MG-WB-C13-012", "MG-WB-C39-027"} {
+		id := casesource.CandidateID(casesource.FinalArchiveSHA256, recipe)
+		for _, language := range []string{"en", "bn", "hi"} {
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, httptest.NewRequest("GET", "/api/recipes/"+url.PathEscape(id)+"?language="+language, nil))
+			if rec.Code != 200 {
+				t.Fatal(rec.Code, rec.Body.String())
+			}
+			var out struct {
+				Method  map[string]string  `json:"method"`
+				Source  casesource.Recipe  `json:"case_source"`
+				Locale  *casesource.Locale `json:"source_locale"`
+				Numbers map[string]*string `json:"source_nutrition"`
+			}
+			if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+				t.Fatal(err)
+			}
+			if len(out.Source.Fields) != 38 || out.Source.Policy == nil || out.Locale == nil {
+				t.Fatal("final provenance missing")
+			}
+			if err := out.Locale.Validate(out.Source); err != nil {
+				t.Fatal(err)
+			}
+			if language == "bn" {
+				for _, v := range out.Locale.Texts {
+					if v.Field == "title" && out.Method["recipe_name"] != v.Text || v.Field == "method" && out.Method["provider_method"] != v.Presented() {
+						t.Fatal("supplied Bengali not preferred")
+					}
+				}
+			} else if out.Method["recipe_name"] != out.Source.Fields["Recipe_Name"] || out.Method["provider_method"] != out.Source.PresentationText("Preparation_Method_FULL", "en", out.Source.Fields["Preparation_Method_FULL"]) {
+				t.Fatal("English/Hindi fallback source changed")
+			}
+			for field, value := range out.Numbers {
+				raw := out.Source.Fields[field]
+				if raw == "" {
+					if value != nil {
+						t.Fatal("null nutrient became a number")
+					}
+				} else if value == nil || *value != raw {
+					t.Fatal("source numeric token changed", field)
+				}
+			}
+			if recipe == "MG-WB-C26-001" {
+				occ := out.Source.Ingredients
+				if len(occ) != 10 || occ[7].Ordinal != 8 || occ[7].RawID != "ING0093" || occ[7].Grams != "0.1" || occ[9].Ordinal != 10 || occ[9].RawID != "WBING0080" || occ[9].RawGrams != " 42" {
+					t.Fatal("C26 occurrence fidelity", occ)
+				}
+			}
+		}
+	}
+	t.Log("FINAL_API_OK encoded_identity=true fields=38 supplied_Bengali=true Hindi_fallback=English nullable_source_values=true")
+}

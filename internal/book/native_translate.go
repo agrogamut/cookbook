@@ -42,6 +42,24 @@ func LocalizeNative(ctx context.Context, n *NativeSet, drafter aidraft.Drafter) 
 			continue
 		}
 		var cells []*string
+		protected := nativeProtected
+		if req.Language == "bn" && len(n.SourceLocales) > 0 {
+			var supplied []string
+			seen := map[string]bool{}
+			for _, locale := range n.SourceLocales {
+				for _, text := range locale.Texts {
+					if !seen[text.Presented()] {
+						supplied = append(supplied, text.Presented())
+						seen[text.Presented()] = true
+					}
+				}
+			}
+			sort.Slice(supplied, func(i, j int) bool { return len(supplied[i]) > len(supplied[j]) })
+			for i := range supplied {
+				supplied[i] = regexp.QuoteMeta(supplied[i])
+			}
+			protected = regexp.MustCompile(strings.Join(supplied, "|") + "|" + nativeProtected.String())
+		}
 		keys := make([]string, 0, len(req.Modules))
 		for k := range req.Modules {
 			keys = append(keys, k)
@@ -54,6 +72,9 @@ func LocalizeNative(ctx context.Context, n *NativeSet, drafter aidraft.Drafter) 
 		}
 		for i := range values {
 			m := &values[i]
+			if req.Language == "bn" {
+				nativeSourceIndexTitles(m.Blocks, n)
+			}
 			if m.Gap != "" {
 				cells = append(cells, &m.Gap)
 			}
@@ -69,15 +90,21 @@ func LocalizeNative(ctx context.Context, n *NativeSet, drafter aidraft.Drafter) 
 			if strings.TrimSpace(text) == "" || nativeVerbatim(text) {
 				continue
 			}
+			if protected != nativeProtected && strings.IndexFunc(protected.ReplaceAllString(text, ""), unicode.IsLetter) < 0 {
+				continue
+			}
 			if _, ok := unique[text]; ok {
 				continue
 			}
 			unique[text] = len(originals)
 			originals = append(originals, text)
 		}
-		translations, err := translateProtectedTexts(ctx, originals, target, drafter)
+		translations, err := translateProtectedWith(ctx, originals, target, drafter, protected)
 		if errors.Is(err, aidraft.ErrDraftingUnavailable) {
 			n.Omissions[bi] = append(n.Omissions[bi], "Dynamic localization into "+target+" is unavailable. Supplied template wording is preserved in "+target+"; inserted source text remains in its recorded language.")
+			for i, key := range keys {
+				req.Modules[key] = values[i]
+			}
 			continue
 		}
 		if err != nil {
@@ -96,13 +123,17 @@ func LocalizeNative(ctx context.Context, n *NativeSet, drafter aidraft.Drafter) 
 }
 
 func translateProtectedTexts(ctx context.Context, originals []string, target string, drafter aidraft.Drafter) ([]string, error) {
+	return translateProtectedWith(ctx, originals, target, drafter, nativeProtected)
+}
+
+func translateProtectedWith(ctx context.Context, originals []string, target string, drafter aidraft.Drafter, protected *regexp.Regexp) ([]string, error) {
 	if len(originals) == 0 {
 		return nil, nil
 	}
 	masked := make([]string, len(originals))
 	tokens := make([][]string, len(originals))
 	for i, text := range originals {
-		masked[i] = nativeProtected.ReplaceAllStringFunc(text, func(token string) string {
+		masked[i] = protected.ReplaceAllStringFunc(text, func(token string) string {
 			tokens[i] = append(tokens[i], token)
 			return fmt.Sprintf("ZXQ%dQXZ", len(tokens[i])-1)
 		})
@@ -158,6 +189,26 @@ func translateProtectedTexts(ctx context.Context, originals []string, target str
 	return translations, nil
 }
 
+func nativeSourceIndexTitles(blocks []bookdocx.Block, n *NativeSet) {
+	for _, block := range blocks {
+		if block.Table == nil {
+			continue
+		}
+		for _, row := range block.Table.Rows {
+			if len(row) != 4 {
+				continue
+			}
+			if locale := n.SourceLocales[row[0]]; locale != nil {
+				for _, text := range locale.Texts {
+					if text.Field == "title" && row[1] == text.English {
+						row[1] = text.Text
+					}
+				}
+			}
+		}
+	}
+}
+
 func nativeVerbatim(text string) bool {
 	if label, _, ok := strings.Cut(text, ":"); ok && !strings.Contains(label, " ") && strings.Contains(label, "_") {
 		return true
@@ -182,7 +233,7 @@ func nativeTextCells(blocks []bookdocx.Block) []*string {
 		if t := blocks[i].Table; t != nil {
 			for j := range t.Rows {
 				// Source status and identity values remain verbatim beside their labels.
-				verbatim := len(t.Rows[j]) == 2 && (strings.Contains(t.Rows[j][0], "status") || strings.Contains(t.Rows[j][0], "Status") || strings.Contains(t.Rows[j][0], "Quality") || strings.Contains(t.Rows[j][0], "SHA256") || t.Rows[j][0] == "Name" || t.Rows[j][0] == "Workbook" || t.Rows[j][0] == "Source")
+				verbatim := len(t.Rows[j]) == 2 && (strings.Contains(t.Rows[j][0], "_") || strings.Contains(t.Rows[j][0], "status") || strings.Contains(t.Rows[j][0], "Status") || strings.Contains(t.Rows[j][0], "Quality") || strings.Contains(t.Rows[j][0], "SHA256") || t.Rows[j][0] == "Name" || t.Rows[j][0] == "Workbook" || t.Rows[j][0] == "Source")
 				for k := range t.Rows[j] {
 					if verbatim && k == 1 {
 						continue

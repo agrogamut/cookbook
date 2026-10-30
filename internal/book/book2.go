@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/madamgy/recipie/internal/aidraft"
+	"github.com/madamgy/recipie/internal/casesource"
 	"github.com/madamgy/recipie/internal/engine"
 	"github.com/madamgy/recipie/internal/models"
 	"github.com/madamgy/recipie/internal/profile"
@@ -145,6 +146,7 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 
 	skipped := append([]string{}, dropped...)
 	sections := []MealSection{}
+	ageResults := make(map[string]models.EngineResult)
 
 	for _, cat := range categories {
 		cat.SourceOnly = !mainMealCategories[cat.ID]
@@ -194,6 +196,7 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		if err != nil {
 			return Book2{}, nil, fmt.Errorf("book: run engine for %s: %w", cat.ID, err)
 		}
+		ageResults[cat.ID] = catRes
 
 		// rank orders this category's own candidates, best first. byID recovers the
 		// engine's own recorded region and diet fields for a recipe, which is where
@@ -270,13 +273,6 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		if note != "" {
 			skipped = append(skipped, note)
 		}
-		// After the top-up, so the count reflects what actually prints. An invented card is
-		// drafted against the child's own age and never lands out of band, so it can only
-		// lower this proportion, never raise it.
-		if n := outOfBandNote(cat, cards, catRes); n != "" {
-			skipped = append(skipped, n)
-		}
-
 		sections = append(sections, MealSection{
 			MealCategoryID:    cat.ID,
 			Title:             cat.Name,
@@ -297,6 +293,10 @@ func AssembleBook2(ctx context.Context, pool *pgxpool.Pool, s profile.Stored, as
 		}
 		if sections[i].TargetRecipeCount > maxRecipesPerSection {
 			sections[i].TargetRecipeCount = maxRecipesPerSection
+		}
+		section := sections[i]
+		if note := outOfBandNote(mealCategory{ID: section.MealCategoryID, Name: section.Title}, section.Recipes, ageResults[section.MealCategoryID]); note != "" {
+			skipped = append(skipped, note)
 		}
 	}
 
@@ -628,6 +628,20 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 	boilerplate map[string]bool, ageStages map[string][]string, bengaliNames map[string]string,
 	byID map[string]models.RankedRecipe, cp models.ChildProfile, res models.EngineResult,
 	drafter aidraft.Drafter, clinicalActions []engine.ClinicalRuleAction) ([]RecipeCard, []string, error) {
+	retired, err := casesource.RetiredRecipes(ctx, pool, ids)
+	if err != nil {
+		return nil, nil, err
+	}
+	var retirementOmissions []string
+	active := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if reason, ok := retired[id]; ok {
+			retirementOmissions = append(retirementOmissions, id+": "+reason)
+		} else {
+			active = append(active, id)
+		}
+	}
+	ids = active
 
 	rows, err := pool.Query(ctx, `
 		SELECT c.recipe_id, c.recipe_name, c.provider_method, c.provider_review_status,
@@ -760,7 +774,7 @@ func loadRecipeCards(ctx context.Context, pool *pgxpool.Pool, ids []string, cate
 	// slice rather than dropped -- a chapter that asked for twelve recipes and got eleven
 	// must say so, not just render eleven.
 	cards := make([]RecipeCard, 0, len(ids))
-	skipped := append([]string{}, sourceOmissions...)
+	skipped := append(retirementOmissions, sourceOmissions...)
 	for _, id := range ids {
 		c, ok := byRecipeID[id]
 		if !ok {

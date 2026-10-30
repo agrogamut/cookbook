@@ -18,7 +18,7 @@ func bengaliDelivery(t *testing.T) []byte {
 	t.Helper()
 	path := os.Getenv("CASE_SOURCE_BENGALI_ARCHIVE")
 	if path == "" {
-		t.Skip("CASE_SOURCE_BENGALI_ARCHIVE not set; supplied Bengali archive is not accepted canonical data")
+		path = "../../data/case-source/" + FinalArchiveSHA256 + ".zip"
 	}
 	b, err := os.ReadFile(path)
 	if err != nil {
