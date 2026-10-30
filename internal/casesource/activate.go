@@ -41,8 +41,12 @@ func Fields(s Sheet, r Row) map[string]string {
 func Activate(ctx context.Context, pool *pgxpool.Pool, archiveSHA256 string) (Activation, error) {
 	result := Activation{ArchiveSHA256: archiveSHA256}
 	var data []byte
-	if err := pool.QueryRow(ctx, `SELECT archive_bytes FROM case_source_archive WHERE archive_sha256=$1`, archiveSHA256).Scan(&data); err != nil {
+	var parser string
+	if err := pool.QueryRow(ctx, `SELECT archive_bytes, parser_version FROM case_source_archive WHERE archive_sha256=$1`, archiveSHA256).Scan(&data, &parser); err != nil {
 		return result, fmt.Errorf("read retained source for activation: %w", err)
+	}
+	if parser == LocaleParserVersion {
+		return result, ErrLocaleActivation
 	}
 	a, err := Parse(ctx, data)
 	if err != nil {

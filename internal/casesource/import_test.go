@@ -221,7 +221,12 @@ func TestImport(t *testing.T) {
 		t.Fatal("provider importer changed case source staging")
 	}
 	beforeRollback := digestTables(t, pool, false)
-	for _, migration := range []string{"0046_case_source_activation.down", "0045_case_source_staging.down", "0045_case_source_staging.up", "0046_case_source_activation.up"} {
+	for _, migration := range []string{
+		"0048_case_source_locale_staging.down", "0047_case_source_revision_lookup.down",
+		"0046_case_source_activation.down", "0045_case_source_staging.down",
+		"0045_case_source_staging.up", "0046_case_source_activation.up",
+		"0047_case_source_revision_lookup.up", "0048_case_source_locale_staging.up",
+	} {
 		sql, err := os.ReadFile("../db/migrations/" + migration + ".sql")
 		if err != nil {
 			t.Fatal(err)

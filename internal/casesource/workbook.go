@@ -32,6 +32,10 @@ func (s richText) value() string {
 }
 
 func parseWorkbook(data []byte, caseNumber int, remaining *uint64) (Workbook, error) {
+	return parseWorkbookFormat(data, caseNumber, remaining, false)
+}
+
+func parseWorkbookFormat(data []byte, caseNumber int, remaining *uint64, locale bool) (Workbook, error) {
 	files, err := packageFiles(data, 256)
 	if err != nil {
 		return Workbook{}, err
@@ -94,8 +98,13 @@ func parseWorkbook(data []byte, caseNumber int, remaining *uint64) (Workbook, er
 	if err := json.Unmarshal(sourceHeaders, &headers); err != nil {
 		return Workbook{}, fmt.Errorf("read source headers: %w", err)
 	}
+	if locale {
+		headers["Recipe_Master"] = append(headers["Recipe_Master"], "Nutrient_Gap")
+		headers["For_translation"] = []string{"Recipe_ID", "Meal_Type", "Field", "English", "Quantity_g", "Bengali", "Note"}
+		headers["Glossary"] = []string{"English", "Where it prints", "Bengali"}
+	}
 	if len(manifest.Sheets) != len(headers) {
-		return Workbook{}, fmt.Errorf("expected exactly two source sheets")
+		return Workbook{}, fmt.Errorf("expected exactly %d source sheets", len(headers))
 	}
 	w := Workbook{}
 	seen := map[string]bool{}
@@ -109,7 +118,11 @@ func parseWorkbook(data []byte, caseNumber int, remaining *uint64) (Workbook, er
 		if !strings.HasPrefix(part, "xl/worksheets/") {
 			return Workbook{}, fmt.Errorf("missing worksheet relationship for %q", s.Name)
 		}
-		sheet, err := parseSheet(parts[part], stringsTable, headers[s.Name], caseNumber)
+		headerRow := 4
+		if s.Name == "For_translation" || s.Name == "Glossary" {
+			headerRow = 2
+		}
+		sheet, err := parseSheetFormat(parts[part], stringsTable, headers[s.Name], caseNumber, headerRow, s.Name != "Glossary")
 		if err != nil {
 			return Workbook{}, fmt.Errorf("sheet %s: %w", s.Name, err)
 		}
@@ -120,7 +133,7 @@ func parseWorkbook(data []byte, caseNumber int, remaining *uint64) (Workbook, er
 			if row.RecipeID == "" {
 				continue
 			}
-			if ids[s.Name][row.RecipeID] {
+			if ids[s.Name][row.RecipeID] && s.Name != "For_translation" {
 				return Workbook{}, fmt.Errorf("duplicate recipe ID %q in %s", row.RecipeID, s.Name)
 			}
 			ids[s.Name][row.RecipeID] = true
@@ -163,6 +176,10 @@ func column(ref string, row int) (int, error) {
 }
 
 func parseSheet(data []byte, shared, expected []string, caseNumber int) (Sheet, error) {
+	return parseSheetFormat(data, shared, expected, caseNumber, 4, true)
+}
+
+func parseSheetFormat(data []byte, shared, expected []string, caseNumber, headerRow int, recipeRows bool) (Sheet, error) {
 	var raw struct {
 		Rows []struct {
 			Number int `xml:"r,attr"`
@@ -220,23 +237,28 @@ func parseSheet(data []byte, shared, expected []string, caseNumber int) (Sheet, 
 			}
 		}
 		values := rowValues(row)
-		if r.Number == 4 {
+		if r.Number == headerRow {
 			if !slices.Equal(values, expected) {
-				return Sheet{}, fmt.Errorf("source headers changed at row 4")
+				return Sheet{}, fmt.Errorf("source headers changed at row %d", headerRow)
 			}
 			sheet.Headers = values
 		}
-		if r.Number > 4 && len(values) > 0 {
-			m := recipeID.FindStringSubmatch(values[0])
-			if m == nil || m[1] != fmt.Sprintf("%02d", caseNumber) || len(values) > len(expected) {
+		if r.Number > headerRow && len(values) > 0 {
+			if len(values) > len(expected) {
 				return Sheet{}, fmt.Errorf("invalid recipe row %d for case %d", r.Number, caseNumber)
 			}
-			row.RecipeID = values[0]
+			if recipeRows {
+				m := recipeID.FindStringSubmatch(values[0])
+				if m == nil || m[1] != fmt.Sprintf("%02d", caseNumber) {
+					return Sheet{}, fmt.Errorf("invalid recipe row %d for case %d", r.Number, caseNumber)
+				}
+				row.RecipeID = values[0]
+			}
 		}
 		sheet.Rows = append(sheet.Rows, row)
 	}
 	if sheet.Headers == nil {
-		return Sheet{}, fmt.Errorf("missing header row 4")
+		return Sheet{}, fmt.Errorf("missing header row %d", headerRow)
 	}
 	return sheet, nil
 }
