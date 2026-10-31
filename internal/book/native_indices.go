@@ -123,6 +123,7 @@ func NativeIndices(ctx context.Context, pool *pgxpool.Pool, set Set, n *NativeSe
 			blocks = append(blocks, nativeText("Source case ingredients have no verified food-group crosswalk and are not assigned to these groups by numeric ingredient suffix."))
 		}
 		n.Books[1].Modules[key] = bookdocx.Module{Blocks: blocks}
+		n.nativeOwnIndex(key, blocks, values)
 	}
 	return nil
 }

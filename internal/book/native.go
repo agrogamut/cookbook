@@ -15,6 +15,7 @@ type NativeSet struct {
 	Books         [2]bookdocx.Request
 	Omissions     [2][]string
 	SourceLocales map[string]*casesource.Locale
+	fallback      *nativeFallbackContext
 }
 
 func nativeText(text string) bookdocx.Block {
@@ -72,6 +73,7 @@ func NativeBindings(s profile.Stored, set Set) NativeSet {
 		{Book: 1, Language: set.Book1.Metadata.Language, Version: "v1", Modules: map[string]bookdocx.Module{}},
 		{Book: 2, Language: set.Book2.Metadata.Language, Version: "v1", Modules: map[string]bookdocx.Module{}},
 	}}
+	n.fallback = nativeNewContext(s, set)
 	set.Book2, n.SourceLocales = nativeSourceLanguage(set.Book2)
 	put := func(book, module int, blocks ...bookdocx.Block) {
 		n.Books[book-1].Modules[fmt.Sprintf("B%d-%02d", book, module)] = bookdocx.Module{Blocks: blocks}
@@ -100,7 +102,9 @@ func NativeBindings(s profile.Stored, set Set) NativeSet {
 		var blocks []bookdocx.Block
 		for _, id := range ids {
 			if sec, ok := sections[id]; ok {
-				blocks = append(blocks, nativeSection(sec)...)
+				part := nativeSection(sec)
+				n.nativeOwnSection(module, sec, part, len(blocks))
+				blocks = append(blocks, part...)
 			}
 		}
 		if len(blocks) == 0 {
@@ -218,6 +222,7 @@ func NativeBindings(s profile.Stored, set Set) NativeSet {
 	providerSafety := nativeSection(sections["B1-018"])
 	if len(providerSafety) > 0 {
 		put(2, 6, providerSafety...)
+		n.nativeOwnBlocks(nativeModulePath(2, "B2-06"), providerSafety, 0, nativeFallbackOwner{Source: "provider-section/B1-018", Revision: nativeObjectHash(providerSafety), Field: "B1-018"}, true)
 	} else {
 		gap(2, 6, "No applicable provider allergen guide was assembled.")
 	}
@@ -244,6 +249,7 @@ func NativeBindings(s profile.Stored, set Set) NativeSet {
 				for module := 44; module <= 48; module++ {
 					blocks = append(blocks, nativeRecipe(card, meal.Title, module)[1:]...)
 				}
+				n.nativeOwnRecipe(fmt.Sprintf("B2-%02d", pair.module), len(entries), card, meal.Title)
 				entries = append(entries, bookdocx.Entry{ID: card.RecipeID, Blocks: blocks})
 			}
 		}
@@ -292,11 +298,13 @@ func NativeBindings(s profile.Stored, set Set) NativeSet {
 	gap(2, 52, "No approved beverage rotation or dated beverage schedule was supplied.")
 	gap(2, 53, "No dated acceptance, exposure or reaction observations were supplied. Tracking cells remain blank.")
 	put(2, 54, nativeIngredientIndex(set.Book2)...)
+	n.nativeOwnIngredientIndex(set.Book2)
 	gap(2, 55, "The supplied fixed FAQ questions have no approved answer master. Answer cells remain blank.")
-	put(2, 56, nativeSources(set.Book2)...)
+	put(2, 56, nativeSources(set.Book2, &n)...)
 	if set.Book1.Metadata.PrescriptionPhoto != nil {
 		partial(1, 60, "The supplied prescription scan follows the template pages as a separately numbered annex in this Book1. Its clinical content is retained as uploaded; the template's prescription and signature blanks remain blank.")
 	}
+	n.nativeCaptureBindings(s, set)
 	return n
 }
 
@@ -491,7 +499,7 @@ func nativeIngredientIndex(b Book2) []bookdocx.Block {
 	return blocks
 }
 
-func nativeSources(b Book2) []bookdocx.Block {
+func nativeSources(b Book2, n *NativeSet) []bookdocx.Block {
 	var out []bookdocx.Block
 	seen := map[string]bool{}
 	archives, members := map[string]bool{}, map[string]bool{}
@@ -501,6 +509,7 @@ func nativeSources(b Book2) []bookdocx.Block {
 				continue
 			}
 			seen[r.RecipeID] = true
+			start := len(out)
 			out = append(out, nativeText(r.RecipeID), nativeText("Source: "+r.Source), nativeText("Source review status: "+r.ReviewStatus))
 			if p := r.SourcePolicy; p != nil {
 				out = append(out, nativeText("Policy contract SHA256: "+p.ContractSHA256))
@@ -536,6 +545,8 @@ func nativeSources(b Book2) []bookdocx.Block {
 			for _, k := range keys {
 				out = append(out, nativeTable([]string{k, r.SourceFields[k]}))
 			}
+			original := n.fallback.Cards[r.RecipeID]
+			n.nativeOwnBlocks(nativeModulePath(2, "B2-56"), out[start:], start, nativeCardOwner(original, "source-provenance", 0, nativeObjectHash(original.SourceFields)), false)
 		}
 	}
 	if len(out) == 0 {

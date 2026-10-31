@@ -27,98 +27,132 @@ var nativeMarker = regexp.MustCompile(`ZXQ[0-9]+QXZ`)
 
 // LocalizeNative translates only inserted content; the six fixed masters never enter this path.
 func LocalizeNative(ctx context.Context, n *NativeSet, drafter aidraft.Drafter) error {
-	// Modules can share source blocks before localization. Each output gets private values.
+	catalog, err := loadNativeFallback()
+	if err != nil {
+		return err
+	}
+	return localizeNativeWithCatalog(ctx, n, drafter, catalog)
+}
+
+func localizeNativeWithCatalog(ctx context.Context, n *NativeSet, drafter aidraft.Drafter, catalog *nativeFallbackCatalog) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	work := *n
 	encoded, err := json.Marshal(n.Books)
 	if err != nil {
 		return err
 	}
-	if err := json.Unmarshal(encoded, &n.Books); err != nil {
+	work.Books = [2]bookdocx.Request{}
+	if err := json.Unmarshal(encoded, &work.Books); err != nil {
 		return err
 	}
-	for bi := range n.Books {
-		req := &n.Books[bi]
+	for i := range work.Omissions {
+		work.Omissions[i] = append([]string(nil), n.Omissions[i]...)
+	}
+	for bi := range work.Books {
+		req := &work.Books[bi]
 		target, translate := targetLanguageName[req.Language]
 		if !translate {
 			continue
 		}
-		var cells []*string
-		protected := nativeProtected
-		if req.Language == "bn" && len(n.SourceLocales) > 0 {
-			var supplied []string
-			seen := map[string]bool{}
-			for _, locale := range n.SourceLocales {
-				for _, text := range locale.Texts {
-					if !seen[text.Presented()] {
-						supplied = append(supplied, text.Presented())
-						seen[text.Presented()] = true
-					}
-				}
-			}
-			sort.Slice(supplied, func(i, j int) bool { return len(supplied[i]) > len(supplied[j]) })
-			for i := range supplied {
-				supplied[i] = regexp.QuoteMeta(supplied[i])
-			}
-			protected = regexp.MustCompile(strings.Join(supplied, "|") + "|" + nativeProtected.String())
-		}
+		protected := nativeProtectedFor(&work, req.Language)
 		keys := make([]string, 0, len(req.Modules))
-		for k := range req.Modules {
-			keys = append(keys, k)
+		for key := range req.Modules {
+			keys = append(keys, key)
 		}
 		sort.Strings(keys)
-		var values []bookdocx.Module
-		for _, key := range keys {
-			m := req.Modules[key]
-			values = append(values, m)
-		}
-		for i := range values {
+		values := make([]bookdocx.Module, len(keys))
+		var cells []nativeCell
+		for i, key := range keys {
+			values[i] = req.Modules[key]
 			m := &values[i]
 			if req.Language == "bn" {
-				nativeSourceIndexTitles(m.Blocks, n)
+				nativeSourceIndexTitles(m.Blocks, &work)
 			}
+			prefix := nativeModulePath(bi+1, key)
 			if m.Gap != "" {
-				cells = append(cells, &m.Gap)
+				cells = append(cells, nativeCell{prefix + "/Gap", &m.Gap})
 			}
-			cells = append(cells, nativeTextCells(m.Blocks)...)
+			cells = append(cells, nativeBlockCells(m.Blocks, prefix)...)
 			for j := range m.Entries {
-				cells = append(cells, nativeTextCells(m.Entries[j].Blocks)...)
+				cells = append(cells, nativeBlockCells(m.Entries[j].Blocks, fmt.Sprintf("%s/Entries/%d", prefix, j))...)
 			}
 		}
+		var masked []string
+		var tokens [][]string
+		type pendingCell struct {
+			value *string
+			index int
+		}
+		var pending []pendingCell
 		unique := map[string]int{}
-		var originals []string
 		for _, cell := range cells {
-			text := *cell
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			text := *cell.Value
+			var binding nativeFallbackBinding
+			if work.fallback != nil {
+				binding = work.fallback.Bindings[cell.Path]
+			}
+			if identity := binding.Identity; identity != nil && identity.Passthrough {
+				if identity.Start != 0 || identity.End != len(text) || text != identity.Value {
+					return fmt.Errorf("book%d identity field mismatch", bi+1)
+				}
+				continue
+			}
 			if strings.TrimSpace(text) == "" || nativeVerbatim(text) {
 				continue
 			}
 			if protected != nativeProtected && strings.IndexFunc(protected.ReplaceAllString(text, ""), unicode.IsLetter) < 0 {
 				continue
 			}
-			if _, ok := unique[text]; ok {
+			input, values, slots, err := nativeProtect(text, protected, binding.Identity)
+			if err != nil {
+				return fmt.Errorf("book%d protected input: %w", bi+1, err)
+			}
+			output, hit, err := catalog.lookup(ctx, req.Language, input, slots, binding.Owner)
+			if err != nil {
+				return err
+			}
+			if hit {
+				restored, err := nativeRestore(output, values)
+				if err != nil {
+					return fmt.Errorf("book%d catalog response: %w", bi+1, err)
+				}
+				*cell.Value = restored
 				continue
 			}
-			unique[text] = len(originals)
-			originals = append(originals, text)
-		}
-		translations, err := translateProtectedWith(ctx, originals, target, drafter, protected)
-		if errors.Is(err, aidraft.ErrDraftingUnavailable) {
-			n.Omissions[bi] = append(n.Omissions[bi], "Dynamic localization into "+target+" is unavailable. Supplied template wording is preserved in "+target+"; inserted source text remains in its recorded language.")
-			for i, key := range keys {
-				req.Modules[key] = values[i]
+			// Ownership was checked for this occurrence before sharing a live request.
+			key := input + "\x00" + nativeObjectHash(values)
+			index, ok := unique[key]
+			if !ok {
+				index = len(masked)
+				unique[key] = index
+				masked = append(masked, input)
+				tokens = append(tokens, values)
 			}
-			continue
+			pending = append(pending, pendingCell{cell.Value, index})
 		}
-		if err != nil {
+		translations, err := translateNativeMasked(ctx, masked, tokens, target, drafter)
+		if errors.Is(err, aidraft.ErrDraftingUnavailable) {
+			work.Omissions[bi] = append(work.Omissions[bi], "Dynamic localization into "+target+" is unavailable. Supplied template wording is preserved in "+target+"; inserted source text remains in its recorded language.")
+		} else if err != nil {
 			return fmt.Errorf("book%d dynamic localization: %w", bi+1, err)
-		}
-		for _, cell := range cells {
-			if idx, ok := unique[*cell]; ok {
-				*cell = translations[idx]
+		} else {
+			for _, cell := range pending {
+				*cell.value = translations[cell.index]
 			}
 		}
 		for i, key := range keys {
 			req.Modules[key] = values[i]
 		}
 	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	n.Books, n.Omissions = work.Books, work.Omissions
 	return nil
 }
 
@@ -127,18 +161,26 @@ func translateProtectedTexts(ctx context.Context, originals []string, target str
 }
 
 func translateProtectedWith(ctx context.Context, originals []string, target string, drafter aidraft.Drafter, protected *regexp.Regexp) ([]string, error) {
-	if len(originals) == 0 {
-		return nil, nil
-	}
 	masked := make([]string, len(originals))
 	tokens := make([][]string, len(originals))
 	for i, text := range originals {
-		masked[i] = protected.ReplaceAllStringFunc(text, func(token string) string {
-			tokens[i] = append(tokens[i], token)
-			return fmt.Sprintf("ZXQ%dQXZ", len(tokens[i])-1)
-		})
+		var err error
+		masked[i], tokens[i], _, err = nativeProtect(text, protected, nil)
+		if err != nil {
+			return nil, err
+		}
 	}
-	translations := make([]string, len(originals))
+	return translateNativeMasked(ctx, masked, tokens, target, drafter)
+}
+
+func translateNativeMasked(ctx context.Context, masked []string, tokens [][]string, target string, drafter aidraft.Drafter) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if len(masked) == 0 {
+		return nil, nil
+	}
+	translations := make([]string, len(masked))
 	translateBatch := func(start int) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -153,25 +195,11 @@ func translateProtectedWith(ctx context.Context, originals []string, target stri
 		}
 		for j, text := range out.Texts {
 			idx := start + j
-			if strings.TrimSpace(text) == "" {
-				return fmt.Errorf("returned blank content")
+			restored, err := nativeRestore(text, tokens[idx])
+			if err != nil {
+				return err
 			}
-			for _, char := range nativeMarker.ReplaceAllString(text, "") {
-				if unicode.IsDigit(char) {
-					return fmt.Errorf("introduced a numeric value")
-				}
-			}
-			for k, token := range tokens[idx] {
-				marker := fmt.Sprintf("ZXQ%dQXZ", k)
-				if strings.Count(text, marker) != 1 {
-					return fmt.Errorf("changed a protected value")
-				}
-				text = strings.Replace(text, marker, token, 1)
-			}
-			if strings.Contains(text, "ZXQ") {
-				return fmt.Errorf("returned an unknown protected value")
-			}
-			translations[idx] = text
+			translations[idx] = restored
 		}
 		return nil
 	}
@@ -247,4 +275,29 @@ func nativeTextCells(blocks []bookdocx.Block) []*string {
 		}
 	}
 	return cells
+}
+
+func nativeProtectedFor(n *NativeSet, language string) *regexp.Regexp {
+	protected := nativeProtected
+	if language == "bn" && len(n.SourceLocales) > 0 {
+		var supplied []string
+		seen := map[string]bool{}
+		for _, locale := range n.SourceLocales {
+			for _, text := range locale.Texts {
+				value := text.Presented()
+				if value != "" && !seen[value] {
+					supplied = append(supplied, value)
+					seen[value] = true
+				}
+			}
+		}
+		sort.Slice(supplied, func(i, j int) bool { return len(supplied[i]) > len(supplied[j]) })
+		for i := range supplied {
+			supplied[i] = regexp.QuoteMeta(supplied[i])
+		}
+		if len(supplied) > 0 {
+			protected = regexp.MustCompile(strings.Join(supplied, "|") + "|" + nativeProtected.String())
+		}
+	}
+	return protected
 }
