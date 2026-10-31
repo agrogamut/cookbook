@@ -6,16 +6,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/xuri/excelize/v2"
 )
 
-const TriageVersion = "source-triage-v1"
-
-// This supplement is an existing intake observation, not a replacement recipe source.
-const ProviderTriageSHA256 = "7f7690d207692f5adfefe32656e2fab2ca9f4a609991e508ad1f4b94c110cfeb"
+const TriageVersion = "source-triage-v2"
 
 const MaxCorrectionBytes = 4 << 20
 
@@ -31,35 +33,35 @@ type SourceRequirement struct {
 }
 
 type TriageRecipe struct {
-	SourceKind           string              `json:"source_kind"`
-	Source               Citation            `json:"source"`
-	RevisionID           string              `json:"revision_id,omitempty"`
-	RawRowSHA256         *string             `json:"raw_row_sha256"`
-	EvidenceRecordSHA256 string              `json:"evidence_record_sha256,omitempty"`
-	RuleSHA256           string              `json:"rule_sha256,omitempty"`
-	AllergenCodes        []string            `json:"derived_allergen_codes,omitempty"`
-	Current              map[string]*string  `json:"current"`
-	Ingredients          []Occurrence        `json:"ingredients"`
-	Findings             []Finding           `json:"findings"`
-	Holds                []PolicyHold        `json:"holds"`
-	DataGaps             []PolicyHold        `json:"data_gaps"`
-	Required             []SourceRequirement `json:"required_source_fields"`
+	SourceKind       string                  `json:"source_kind"`
+	Source           Citation                `json:"source"`
+	RevisionID       string                  `json:"revision_id,omitempty"`
+	RawRowSHA256     *string                 `json:"raw_row_sha256"`
+	ProviderEvidence *ProviderRecipeEvidence `json:"provider_evidence,omitempty"`
+	RuleSHA256       string                  `json:"rule_sha256,omitempty"`
+	AllergenCodes    []string                `json:"derived_allergen_codes,omitempty"`
+	Current          map[string]*string      `json:"current"`
+	Ingredients      []Occurrence            `json:"ingredients"`
+	Findings         []Finding               `json:"findings"`
+	Holds            []PolicyHold            `json:"holds"`
+	DataGaps         []PolicyHold            `json:"data_gaps"`
+	Required         []SourceRequirement     `json:"required_source_fields"`
 }
 
 type TriageReport struct {
-	Version                  string         `json:"version"`
-	ArchiveSHA256            string         `json:"archive_sha256"`
-	ParserVersion            string         `json:"parser_version"`
-	AcceptedFinalSource      bool           `json:"accepted_final_source"`
-	ActivationPermitted      bool           `json:"activation_permitted"`
-	SupplierApprovalVerified bool           `json:"supplier_approval_verified"`
-	CorrectionInput          string         `json:"correction_input"`
-	ProviderCoverage         string         `json:"provider_coverage"`
-	ProviderReportSHA256     string         `json:"provider_report_sha256,omitempty"`
-	CasePending              int            `json:"case_pending_reformulations"`
-	ProviderPending          *int           `json:"provider_reported_pending_reformulations"`
-	CombinedPending          *int           `json:"combined_reported_pending_reformulations"`
-	Recipes                  []TriageRecipe `json:"recipes"`
+	Version                  string                  `json:"version"`
+	ArchiveSHA256            string                  `json:"archive_sha256"`
+	ParserVersion            string                  `json:"parser_version"`
+	AcceptedFinalSource      bool                    `json:"accepted_final_source"`
+	ActivationPermitted      bool                    `json:"activation_permitted"`
+	SupplierApprovalVerified bool                    `json:"supplier_approval_verified"`
+	CorrectionInput          string                  `json:"correction_input"`
+	ProviderCoverage         string                  `json:"provider_coverage"`
+	ProviderSource           *ProviderSourceEvidence `json:"provider_source,omitempty"`
+	CasePending              int                     `json:"case_pending_reformulations"`
+	ProviderPending          *int                    `json:"provider_reported_pending_reformulations"`
+	CombinedPending          *int                    `json:"combined_reported_pending_reformulations"`
+	Recipes                  []TriageRecipe          `json:"recipes"`
 }
 
 func rawRowHash(r Row) string {
@@ -95,7 +97,7 @@ func hasHold(holds []PolicyHold, code string) bool {
 }
 
 // Triage reports supplied facts. It does not evaluate a child's clinical eligibility.
-func Triage(ctx context.Context, i *Intake, providerReport []byte) (TriageReport, error) {
+func Triage(ctx context.Context, i *Intake, providerDir string) (TriageReport, error) {
 	if i == nil || i.Archive == nil || i.Archive.SHA256 == "" {
 		return TriageReport{}, fmt.Errorf("triage requires parsed source intake")
 	}
@@ -162,13 +164,19 @@ func Triage(ctx context.Context, i *Intake, providerReport []byte) (TriageReport
 			out.Recipes = append(out.Recipes, r)
 		}
 	}
-	if len(providerReport) != 0 {
-		rows, err := providerTriage(providerReport)
+	if providerDir != "" {
+		rows, evidence, err := providerTriage(ctx, providerDir)
 		if err != nil {
 			return TriageReport{}, err
 		}
-		n, total := len(rows), len(rows)+out.CasePending
-		out.ProviderCoverage, out.ProviderReportSHA256 = "hash_bound_intake_observation", ProviderTriageSHA256
+		n := 0
+		for _, row := range rows {
+			if hasHold(row.Holds, "whole_soy_reformulation_missing") {
+				n++
+			}
+		}
+		total := n + out.CasePending
+		out.ProviderCoverage, out.ProviderSource = "version_bound_workbook_observation", &evidence
 		out.ProviderPending = &n
 		if out.AcceptedFinalSource {
 			out.CombinedPending = &total
@@ -185,62 +193,321 @@ func Triage(ctx context.Context, i *Intake, providerReport []byte) (TriageReport
 	return out, nil
 }
 
-func providerTriage(data []byte) ([]TriageRecipe, error) {
-	if hash(data) != ProviderTriageSHA256 {
-		return nil, fmt.Errorf("provider supplement is not the hash-bound intake observation")
+const maxProviderWorkbookBytes = 2 << 20
+
+type ProviderWorkbookEvidence struct {
+	Workbook     string `json:"workbook"`
+	SHA256       string `json:"sha256"`
+	Sheet        string `json:"sheet"`
+	HeaderRow    int    `json:"header_row"`
+	HeaderSHA256 string `json:"header_sha256"`
+}
+
+type ProviderSourceEvidence struct {
+	Version           string                     `json:"version"`
+	Workbooks         []ProviderWorkbookEvidence `json:"workbooks"`
+	ScopeReference    string                     `json:"scope_reference"`
+	Regions           []string                   `json:"regions"`
+	RecipeRows        int                        `json:"recipe_rows"`
+	InScopeRecipes    int                        `json:"in_scope_recipes"`
+	OutOfScopeRecipes int                        `json:"out_of_scope_recipes"`
+	MappingRows       int                        `json:"mapping_rows"`
+	IngredientRows    int                        `json:"ingredient_rows"`
+}
+
+type ProviderCell struct {
+	Ref   string `json:"ref"`
+	Value string `json:"value"`
+}
+
+type ProviderRowEvidence struct {
+	Source       Citation                `json:"source"`
+	RawRowSHA256 string                  `json:"raw_row_sha256"`
+	Cells        map[string]ProviderCell `json:"cells"`
+}
+
+type ProviderIngredientEvidence struct {
+	Ordinal          int                 `json:"ordinal"`
+	Mapping          ProviderRowEvidence `json:"mapping"`
+	IngredientMaster ProviderRowEvidence `json:"ingredient_master"`
+}
+
+type ProviderRecipeEvidence struct {
+	Recipe      ProviderRowEvidence          `json:"recipe"`
+	Ingredients []ProviderIngredientEvidence `json:"ingredients"`
+}
+
+type providerWorkbookSpec struct {
+	ProviderWorkbookEvidence
+	width int
+}
+
+func providerWorkbookSpecs() []providerWorkbookSpec {
+	return []providerWorkbookSpec{
+		{ProviderWorkbookEvidence{"MadamGY_Recipe_Master_1000_Detailed_V2.xlsx", "7501efae36375161612218887f1db34e9c6205bab3173f88e021a3674be7ed87", "Recipe_Master", 4, "58399625495468201d71d722bfdda1a5b35e9d05d80672240a7eeb729fbc63f9"}, 37},
+		{ProviderWorkbookEvidence{"MadamGY_Recipe_Ingredient_Mapping_Master_V1.xlsx", "1887cf4fcb68fd7feb117cbf2c48b9cd8f8e0ad872cd3e2b45f30b8fdb6a2d88", "Recipe-Ingredient Mapping", 4, "82386f7d47bb9ff5185522164623c0e35eeb90f6aff9b13429c9452faf1e6062"}, 40},
+		{ProviderWorkbookEvidence{"MadamGY_Ingredient_Super_Master_Complete_V1_Cost_Filled.xlsx", "8e09de5d28c69f6f2e90cc4aa5be2543d0285eac06580271c6bdf5abd47ce613", "Ingredient_Master", 4, "27a50740b93c0615f8a32d2605f3c792567eeb106ff26297950b7c6c064f9c94"}, 29},
 	}
-	var report struct {
-		ProviderInputs map[string]struct {
-			SHA256 string `json:"sha256"`
-		} `json:"provider_inputs"`
-		Tofu struct {
-			Records []json.RawMessage `json:"provider_records"`
-		} `json:"tofu"`
+}
+
+// This is the committed source scope, not a query of mutable region_focus state.
+func providerRegions() []string {
+	return []string{"Bangladesh", "Central / Tribal India", "Himalayan India", "North India", "Northeast India", "South India", "West Bengal / East India", "West India"}
+}
+
+type providerRow struct {
+	number int
+	values []string
+	fields map[string]string
+}
+
+type providerSheet struct {
+	spec    providerWorkbookSpec
+	headers []string
+	rows    []providerRow
+}
+
+func readProviderWorkbook(ctx context.Context, dir string, spec providerWorkbookSpec) (providerSheet, error) {
+	if err := ctx.Err(); err != nil {
+		return providerSheet{}, err
 	}
-	if err := json.Unmarshal(data, &report); err != nil {
-		return nil, fmt.Errorf("read provider supplement: %w", err)
+	path := filepath.Join(dir, spec.Workbook)
+	info, err := os.Lstat(path)
+	if err != nil {
+		return providerSheet{}, fmt.Errorf("provider %s unavailable: %w", spec.Workbook, err)
 	}
-	var out []TriageRecipe
-	seen := map[string]bool{}
-	for _, raw := range report.Tofu.Records {
-		var v struct {
-			RecipeID  string `json:"recipe_id"`
-			Workbook  string `json:"workbook"`
-			Sheet     string `json:"sheet"`
-			Row       int    `json:"row"`
-			IDs       string `json:"ingredient_ids"`
-			Names     string `json:"ingredient_names"`
-			Grams     string `json:"raw_grams"`
-			Allergens string `json:"allergen_tags"`
+	if !info.Mode().IsRegular() || info.Size() < 1 || info.Size() > maxProviderWorkbookBytes {
+		return providerSheet{}, fmt.Errorf("provider %s must be a regular file of 1..%d bytes", spec.Workbook, maxProviderWorkbookBytes)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return providerSheet{}, fmt.Errorf("open provider %s: %w", spec.Workbook, err)
+	}
+	b, readErr := io.ReadAll(io.LimitReader(f, maxProviderWorkbookBytes+1))
+	closeErr := f.Close()
+	if readErr != nil {
+		return providerSheet{}, fmt.Errorf("read provider %s: %w", spec.Workbook, readErr)
+	}
+	if closeErr != nil {
+		return providerSheet{}, fmt.Errorf("close provider %s: %w", spec.Workbook, closeErr)
+	}
+	return parseProviderWorkbook(ctx, b, spec)
+}
+
+func parseProviderWorkbook(ctx context.Context, b []byte, spec providerWorkbookSpec) (providerSheet, error) {
+	if len(b) == 0 || len(b) > maxProviderWorkbookBytes || hash(b) != spec.SHA256 {
+		return providerSheet{}, fmt.Errorf("provider %s size or SHA-256 differs from source contract", spec.Workbook)
+	}
+	book, err := excelize.OpenReader(bytes.NewReader(b), excelize.Options{UnzipSizeLimit: 32 << 20, UnzipXMLSizeLimit: 32 << 20})
+	if err != nil {
+		return providerSheet{}, fmt.Errorf("open provider workbook %s: %w", spec.Workbook, err)
+	}
+	defer book.Close()
+	rows, err := book.Rows(spec.Sheet)
+	if err != nil {
+		return providerSheet{}, fmt.Errorf("provider sheet %s: %w", spec.Sheet, err)
+	}
+	defer rows.Close()
+	out := providerSheet{spec: spec}
+	for n := 1; rows.Next(); n++ {
+		if err := ctx.Err(); err != nil {
+			return providerSheet{}, err
 		}
-		if err := json.Unmarshal(raw, &v); err != nil {
-			return nil, err
+		if n > 5000 {
+			return providerSheet{}, fmt.Errorf("provider %s exceeds 5000 physical rows", spec.Workbook)
 		}
-		values := make([]string, 14)
-		values[11], values[12], values[13] = v.IDs, v.Names, v.Grams
-		items, err := ingredients(values)
-		if err != nil || v.RecipeID == "" || seen[v.RecipeID] || v.Sheet != "Recipe_Master" || v.Row < 1 || !validDigest(report.ProviderInputs[v.Workbook].SHA256) {
-			return nil, fmt.Errorf("invalid provider observation %q", v.RecipeID)
+		values, err := rows.Columns(excelize.Options{RawCellValue: true})
+		if err != nil {
+			return providerSheet{}, fmt.Errorf("provider %s row %d: %w", spec.Workbook, n, err)
 		}
-		seen[v.RecipeID] = true
-		r := TriageRecipe{SourceKind: "provider_observation", Source: Citation{MemberSHA256: report.ProviderInputs[v.Workbook].SHA256,
-			Workbook: v.Workbook, Sheet: v.Sheet, Row: v.Row, RecipeID: v.RecipeID}, EvidenceRecordSHA256: hash(raw),
-			Current: map[string]*string{"Allergen_Tags": sourceValue(v.Allergens)}, Ingredients: []Occurrence{},
-			Findings: []Finding{{Code: "provider_snapshot_only", RecipeID: v.RecipeID, Evidence: map[string]string{
-				"reason": "Exact observed workbook and row; full raw-row hash and runtime revision are unavailable in this supplement. Not a current database query."}}},
-			Holds: []PolicyHold{}, DataGaps: []PolicyHold{}, Required: reformulationRequirements()}
-		for _, item := range items {
-			r.Ingredients = append(r.Ingredients, Occurrence{Ordinal: item.Ordinal, RawID: item.RawID, RawName: item.RawName, RawGrams: item.RawGrams, Grams: item.Grams})
-			if strings.TrimSpace(item.RawID) == "ING0075" && strings.TrimSpace(item.RawName) == "Tofu" {
-				r.Holds = append(r.Holds, PolicyHold{"whole_soy_reformulation_missing", "Ingredient_Names", "Observed tofu formulation has no supplied whole-bean replacement.", fmt.Sprintf("ordinal %d: %s (%s g)", item.Ordinal, item.RawName, item.Grams)})
+		if n < spec.HeaderRow {
+			continue
+		}
+		if n == spec.HeaderRow {
+			header, err := json.Marshal(values)
+			if err != nil || len(values) != spec.width || hash(header) != spec.HeaderSHA256 {
+				return providerSheet{}, fmt.Errorf("provider %s header row %d differs from source contract", spec.Workbook, n)
+			}
+			out.headers = append([]string(nil), values...)
+			continue
+		}
+		if len(values) > spec.width {
+			return providerSheet{}, fmt.Errorf("provider %s row %d exceeds header width", spec.Workbook, n)
+		}
+		if strings.TrimSpace(strings.Join(values, "")) == "" {
+			continue
+		}
+		padded := make([]string, spec.width)
+		copy(padded, values)
+		r := providerRow{number: n, values: padded, fields: map[string]string{}}
+		for j, field := range out.headers {
+			r.fields[field] = padded[j]
+		}
+		out.rows = append(out.rows, r)
+	}
+	if err := rows.Error(); err != nil {
+		return providerSheet{}, fmt.Errorf("read provider %s: %w", spec.Workbook, err)
+	}
+	if len(out.headers) != spec.width || len(out.rows) == 0 {
+		return providerSheet{}, fmt.Errorf("provider %s lacks header or data rows", spec.Workbook)
+	}
+	return out, nil
+}
+
+func providerEvidence(sheet providerSheet, row providerRow, recipeID string, fields ...string) ProviderRowEvidence {
+	b, _ := json.Marshal(row.values)
+	out := ProviderRowEvidence{Source: Citation{MemberSHA256: sheet.spec.SHA256, Workbook: sheet.spec.Workbook,
+		Sheet: sheet.spec.Sheet, Row: row.number, RecipeID: recipeID}, RawRowSHA256: hash(b), Cells: map[string]ProviderCell{}}
+	for j, name := range sheet.headers {
+		for _, field := range fields {
+			if name == field {
+				ref, _ := excelize.CoordinatesToCellName(j+1, row.number)
+				out.Cells[field] = ProviderCell{ref, row.values[j]}
 			}
 		}
-		if len(r.Holds) == 0 {
-			return nil, fmt.Errorf("provider observation %s has no exact tofu occurrence", v.RecipeID)
+	}
+	return out
+}
+
+func providerTriage(ctx context.Context, dir string) ([]TriageRecipe, ProviderSourceEvidence, error) {
+	sheets := make([]providerSheet, 0, 3)
+	for _, spec := range providerWorkbookSpecs() {
+		s, err := readProviderWorkbook(ctx, dir, spec)
+		if err != nil {
+			return nil, ProviderSourceEvidence{}, err
+		}
+		sheets = append(sheets, s)
+	}
+	return joinProviderTriage(ctx, sheets[0], sheets[1], sheets[2])
+}
+
+func joinProviderTriage(ctx context.Context, recipes, mappings, ingredientsSheet providerSheet) ([]TriageRecipe, ProviderSourceEvidence, error) {
+	evidence := ProviderSourceEvidence{Version: "provider-workbook-triage-v1",
+		ScopeReference: "internal/db/migrations/0002_annotations_and_seeds.up.sql:region_focus + 0004_scope_india_bangladesh.up.sql",
+		Regions:        providerRegions(), RecipeRows: len(recipes.rows), MappingRows: len(mappings.rows), IngredientRows: len(ingredientsSheet.rows)}
+	for _, sheet := range []providerSheet{recipes, mappings, ingredientsSheet} {
+		evidence.Workbooks = append(evidence.Workbooks, sheet.spec.ProviderWorkbookEvidence)
+	}
+	ingredientByID, recipeByID := map[string]providerRow{}, map[string]providerRow{}
+	itemsByRecipe := map[string][]Ingredient{}
+	for _, row := range ingredientsSheet.rows {
+		id := row.fields["Ingredient_ID"]
+		if id == "" || ingredientByID[id].number != 0 || row.fields["English_Name"] == "" {
+			return nil, evidence, fmt.Errorf("provider ingredient identity missing or duplicated at row %d", row.number)
+		}
+		ingredientByID[id] = row
+	}
+	if ingredientByID["ING0075"].fields["English_Name"] != "Tofu" || ingredientByID["ING0074"].fields["English_Name"] != "Soybean/soy chunks" {
+		return nil, evidence, fmt.Errorf("provider soy identities differ from source contract")
+	}
+	for _, row := range recipes.rows {
+		id := row.fields["Recipe_ID"]
+		if id == "" || recipeByID[id].number != 0 || row.fields["Recipe_Name"] == "" {
+			return nil, evidence, fmt.Errorf("provider recipe identity missing or duplicated at row %d", row.number)
+		}
+		items, err := ingredients(row.values)
+		if err != nil {
+			return nil, evidence, fmt.Errorf("provider recipe %s: %w", id, err)
+		}
+		recipeByID[id], itemsByRecipe[id] = row, items
+	}
+	type key struct {
+		id      string
+		ordinal int
+	}
+	mappingByKey := map[key]providerRow{}
+	mappingIDs := map[string]bool{}
+	for _, row := range mappings.rows {
+		if err := ctx.Err(); err != nil {
+			return nil, evidence, err
+		}
+		f := row.fields
+		id := f["Recipe_ID"]
+		seq, err := strconv.Atoi(f["Sequence_No"])
+		k := key{id, seq}
+		items := itemsByRecipe[id]
+		if err != nil || seq < 1 || seq > len(items) || mappingByKey[k].number != 0 ||
+			f["Mapping_ID"] != fmt.Sprintf("MAP-%s-%02d", id, seq) || mappingIDs[f["Mapping_ID"]] {
+			return nil, evidence, fmt.Errorf("provider mapping row %d has unknown recipe, invalid identity or duplicate ordinal", row.number)
+		}
+		item, recipe := items[seq-1], recipeByID[id]
+		master, exists := ingredientByID[strings.TrimSpace(item.RawID)]
+		mappingQuantity, ok := new(big.Rat).SetString(f["Quantity"])
+		recipeQuantity, _ := new(big.Rat).SetString(item.Grams)
+		if !exists || f["Ingredient_ID"] != strings.TrimSpace(item.RawID) || f["Ingredient_Name_EN"] != strings.TrimSpace(item.RawName) ||
+			f["Unit"] != "g" || !decimal.MatchString(f["Quantity"]) || !ok || mappingQuantity.Cmp(recipeQuantity) != 0 ||
+			f["Recipe_Name"] != recipe.fields["Recipe_Name"] || f["Country"] != recipe.fields["Country"] ||
+			f["Region_Culture"] != recipe.fields["Region_Culture"] || f["Ingredient_Allergen_Tag"] != master.fields["Allergen_Tags"] {
+			return nil, evidence, fmt.Errorf("provider mapping row %d ingredient/quantity/scope join differs for %s ordinal %d", row.number, id, seq)
+		}
+		mappingByKey[k], mappingIDs[f["Mapping_ID"]] = row, true
+	}
+	var out []TriageRecipe
+	for _, row := range recipes.rows {
+		if err := ctx.Err(); err != nil {
+			return nil, evidence, err
+		}
+		f, items := row.fields, itemsByRecipe[row.fields["Recipe_ID"]]
+		id, region := f["Recipe_ID"], f["Region_Culture"]
+		inScope := false
+		for _, allowed := range evidence.Regions {
+			inScope = inScope || region == allowed
+		}
+		country := "India"
+		if region == "Bangladesh" || region == "Nepal" {
+			country = region
+		}
+		if (!inScope && region != "Nepal") || f["Country"] != country {
+			return nil, evidence, fmt.Errorf("provider recipe %s has unknown or inconsistent source scope", id)
+		}
+		hasTofu, hasMixed := false, false
+		for _, item := range items {
+			if mappingByKey[key{id, item.Ordinal}].number == 0 {
+				return nil, evidence, fmt.Errorf("provider recipe %s is missing mapping ordinal %d", id, item.Ordinal)
+			}
+			hasTofu = hasTofu || strings.TrimSpace(item.RawID) == "ING0075"
+			hasMixed = hasMixed || strings.TrimSpace(item.RawID) == "ING0074"
+		}
+		if !inScope {
+			evidence.OutOfScopeRecipes++
+			continue
+		}
+		evidence.InScopeRecipes++
+		if !hasTofu && !hasMixed {
+			continue
+		}
+		source := providerEvidence(recipes, row, id, "Recipe_ID", "Recipe_Name", "Country", "Region_Culture", "Ingredient_IDs", "Ingredient_Names", "Ingredient_Quantities_g", "Allergen_Tags", "Review_Status")
+		r := TriageRecipe{SourceKind: "provider_observation", Source: source.Source, RawRowSHA256: &source.RawRowSHA256,
+			Current: map[string]*string{}, Ingredients: []Occurrence{}, Holds: []PolicyHold{}, DataGaps: []PolicyHold{},
+			Findings: []Finding{{Code: "provider_snapshot_only", RecipeID: id, Sheet: recipes.spec.Sheet, Row: row.number,
+				Evidence: map[string]string{"reason": "Version-bound workbook rows under committed source scope; not current database state, a runtime revision or clinical approval."}}},
+			Required: []SourceRequirement{}, ProviderEvidence: &ProviderRecipeEvidence{Recipe: source, Ingredients: []ProviderIngredientEvidence{}}}
+		for _, field := range []string{"Recipe_Name", "Country", "Region_Culture", "Clinical_Tag", "Review_Status", "Serving_Size_g", "Cost_per_Serving_INR", "Allergen_Tags", "Energy_kcal", "Protein_g", "Carb_g", "Fat_g", "Fibre_g", "Iron_mg", "Calcium_mg"} {
+			r.Current[field] = sourceValue(f[field])
+		}
+		for _, item := range items {
+			mapping := mappingByKey[key{id, item.Ordinal}]
+			master := ingredientByID[strings.TrimSpace(item.RawID)]
+			r.Ingredients = append(r.Ingredients, Occurrence{Ordinal: item.Ordinal, RawID: item.RawID, RawName: item.RawName, RawGrams: item.RawGrams, Grams: item.Grams})
+			r.ProviderEvidence.Ingredients = append(r.ProviderEvidence.Ingredients, ProviderIngredientEvidence{item.Ordinal,
+				providerEvidence(mappings, mapping, id, "Mapping_ID", "Recipe_ID", "Sequence_No", "Ingredient_ID", "Ingredient_Name_EN", "Quantity", "Unit", "Region_Culture", "Country", "Ingredient_Allergen_Tag", "Ingredient_Review_Status", "Recipe_Review_Status", "Mapping_Status", "Notes"),
+				providerEvidence(ingredientsSheet, master, "", "Ingredient_ID", "English_Name", "Allergen_Tags", "Source_ID", "Review_Status", "Data_Quality", "Validation_Required", "Preparation_Safety_Note")})
+			if item.RawName != master.fields["English_Name"] {
+				r.Findings = append(r.Findings, Finding{Code: "provider_ingredient_name_differs", RecipeID: id, Sheet: recipes.spec.Sheet, Row: row.number,
+					Evidence: map[string]string{"ordinal": strconv.Itoa(item.Ordinal), "ingredient_id": item.RawID, "recipe_name": item.RawName, "master_name": master.fields["English_Name"], "meaning": "Explicit ID join; both source names retained without inferred name equivalence."}})
+			}
+		}
+		if hasTofu {
+			r.Holds = append(r.Holds, PolicyHold{"whole_soy_reformulation_missing", "Ingredient_IDs", "Source tofu formulation has no supplied whole-bean replacement.", "ING0075 joined by Recipe_ID and Sequence_No to ingredient master Tofu."})
+			r.Required = append(r.Required, reformulationRequirements()...)
+		}
+		if hasMixed {
+			r.DataGaps = append(r.DataGaps, PolicyHold{"soy_form_ambiguous", "Ingredient_IDs", "Ingredient master combines whole soybean and soy chunks; source form needs clarification.", "ING0074: Soybean/soy chunks. No blanket exclusion or inferred whole-bean formulation."})
 		}
 		out = append(out, r)
 	}
-	return out, nil
+	sort.Slice(out, func(i, j int) bool { return out[i].Source.RecipeID < out[j].Source.RecipeID })
+	return out, evidence, nil
 }
 
 type CorrectionManifest struct {

@@ -1,10 +1,15 @@
 package casesource
 
 import (
+	"bytes"
+	"path/filepath"
+	"strconv"
+
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/xuri/excelize/v2"
 	"os"
 	"reflect"
 	"slices"
@@ -32,7 +37,7 @@ func triageDelivery(t *testing.T) *Intake {
 
 func TestTriageRealSource(t *testing.T) {
 	i := triageDelivery(t)
-	r, err := Triage(context.Background(), i, nil)
+	r, err := Triage(context.Background(), i, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +132,7 @@ func TestTriageRealSource(t *testing.T) {
 	copyArchive.Workbooks = append([]Workbook(nil), i.Archive.Workbooks...)
 	slices.Reverse(copyArchive.Workbooks)
 	copyIntake.Archive = &copyArchive
-	reordered, err := Triage(context.Background(), &copyIntake, nil)
+	reordered, err := Triage(context.Background(), &copyIntake, "")
 	first, _ := json.Marshal(r)
 	second, _ := json.Marshal(reordered)
 	if err != nil || string(first) != string(second) {
@@ -136,82 +141,299 @@ func TestTriageRealSource(t *testing.T) {
 	t.Logf("TRIAGE_SOURCE_OK recipes=%d pending_case=%d all_nutrition_null=%d general=%d zero_cells=%d dairy_recipes=%d mixed_soy=%d", recipes, pending, allMissing, general, zeroes, dairy, mixed)
 }
 
-func TestTriageProviderSupplement(t *testing.T) {
-	if _, err := providerTriage([]byte(`{"tofu":{"provider_records":[]}}`)); err == nil {
-		t.Fatal("unbound provider records accepted")
+func providerTestSheets(t *testing.T) []providerSheet {
+	t.Helper()
+	var out []providerSheet
+	for _, spec := range providerWorkbookSpecs() {
+		s, err := readProviderWorkbook(context.Background(), "../../data/provider", spec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, s)
 	}
-	path := os.Getenv("CASE_SOURCE_PROVIDER_TRIAGE_REPORT")
-	if path == "" {
-		t.Skip("exact external intake observation not supplied; no provider completion claim")
-	}
-	b, err := os.ReadFile(path)
+	return out
+}
+
+func TestProviderSourceTuples(t *testing.T) {
+	rows, evidence, err := providerTriage(context.Background(), "../../data/provider")
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := Triage(context.Background(), triageDelivery(t), b)
-	if err != nil {
-		t.Fatal(err)
+	raw := map[string][][]string{}
+	for _, spec := range providerWorkbookSpecs() {
+		book, err := excelize.OpenFile(filepath.Join("../../data/provider", spec.Workbook))
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw[spec.Workbook], err = book.GetRows(spec.Sheet, excelize.Options{RawCellValue: true})
+		closeErr := book.Close()
+		if err != nil || closeErr != nil {
+			t.Fatal(err, closeErr)
+		}
 	}
-	var evidence struct {
-		Tofu struct {
-			Rows []struct {
-				ID        string `json:"recipe_id"`
-				Allergens string `json:"allergen_tags"`
-				IDs       string `json:"ingredient_ids"`
-				Names     string `json:"ingredient_names"`
-				Grams     string `json:"raw_grams"`
-			} `json:"provider_records"`
-		} `json:"tofu"`
+	specs := providerWorkbookSpecs()
+	master := map[string][]string{}
+	for _, row := range raw[specs[2].Workbook][4:] {
+		master[row[0]] = row
 	}
-	if err := json.Unmarshal(b, &evidence); err != nil {
-		t.Fatal(err)
-	}
-	want := map[string]int{}
-	for n, row := range evidence.Tofu.Rows {
-		want[row.ID] = n
-	}
-	seen, dairy := 0, 0
-	for _, row := range r.Recipes {
-		if row.SourceKind != "provider_observation" {
+	want, wantDairy := map[string]int{}, map[string]bool{}
+	var sourceIn, sourceOut, tofu, mixed int
+	for n, row := range raw[specs[0].Workbook][4:] {
+		if row[2] != "India" && row[2] != "Bangladesh" {
+			sourceOut++
 			continue
 		}
-		n, exists := want[row.Source.RecipeID]
-		if !exists || row.RawRowSHA256 != nil || row.RevisionID != "" || row.Source.MemberSHA256 == "" || row.EvidenceRecordSHA256 == "" || !hasHold(row.Holds, "whole_soy_reformulation_missing") {
-			t.Fatal("provider observation invented a revision or lost provenance", row.Source.RecipeID)
+		sourceIn++
+		ids := strings.Split(row[11], ";")
+		isTofu, isMixed := slices.Contains(ids, "ING0075"), slices.Contains(ids, "ING0074")
+		if !isTofu && !isMixed {
+			continue
 		}
-		source := evidence.Tofu.Rows[n]
-		ids, names, grams := strings.Split(source.IDs, ";"), strings.Split(source.Names, ";"), strings.Split(source.Grams, ";")
-		if row.Current["Allergen_Tags"] == nil || *row.Current["Allergen_Tags"] != source.Allergens || len(row.Ingredients) != len(ids) {
-			t.Fatal("provider source allergens or occurrences changed", row.Source.RecipeID)
-		}
-		for j, ing := range row.Ingredients {
-			if ing.Ordinal != j+1 || ing.RawID != ids[j] || ing.RawName != names[j] || ing.RawGrams != grams[j] {
-				t.Fatal("provider ingredient occurrence changed", row.Source.RecipeID)
+		want[row[0]] = n + 5
+		if isTofu {
+			tofu++
+			for _, id := range ids {
+				if slices.Contains(strings.Split(master[id][19], ";"), "Milk") {
+					wantDairy[row[0]] = true
+				}
 			}
 		}
-		if slices.Contains(strings.Split(source.Allergens, ";"), "Milk") {
-			dairy++
+		if isMixed {
+			mixed++
 		}
-		seen++
-		delete(want, row.Source.RecipeID)
 	}
-	if len(want) != 0 || dairy == 0 || r.ProviderPending == nil || *r.ProviderPending != seen || r.CombinedPending == nil || *r.CombinedPending != r.CasePending+seen {
-		t.Fatal("provider scope/combined count differs")
+	tuples := map[string][]string{}
+	for _, row := range raw[specs[1].Workbook][4:] {
+		tuples[row[1]+"/"+row[3]] = row
 	}
-	b[len(b)-1] ^= 1
-	if _, err := providerTriage(b); err == nil {
-		t.Fatal("changed provider observation accepted")
+	assertEvidence := func(e ProviderRowEvidence) {
+		t.Helper()
+		source := raw[e.Source.Workbook]
+		if e.Source.Row < 5 || e.Source.Row > len(source) || !validDigest(e.Source.MemberSHA256) {
+			t.Fatal("invalid source locator", e.Source)
+		}
+		header, row := source[3], source[e.Source.Row-1]
+		padded := make([]string, len(header))
+		copy(padded, row)
+		b, _ := json.Marshal(padded)
+		if e.RawRowSHA256 != hash(b) {
+			t.Fatal("raw row hash changed", e.Source)
+		}
+		for field, cell := range e.Cells {
+			col, n, err := excelize.CellNameToCoordinates(cell.Ref)
+			if err != nil || n != e.Source.Row || col < 1 || col > len(header) || header[col-1] != field || padded[col-1] != cell.Value {
+				t.Fatal("cell evidence differs from original workbook", field, cell)
+			}
+		}
 	}
-	t.Logf("TRIAGE_PROVIDER_OK case=%d provider=%d combined=%d provider_milk_controls=%d", r.CasePending, seen, *r.CombinedPending, dairy)
+	gotTofu, gotMixed, gotDairy := 0, 0, map[string]bool{}
+	for _, row := range rows {
+		id := row.Source.RecipeID
+		n, exists := want[id]
+		if !exists || row.Source.Row != n || row.RevisionID != "" || row.RawRowSHA256 == nil || row.ProviderEvidence == nil {
+			t.Fatal("provider scope or identity differs", id)
+		}
+		original := raw[specs[0].Workbook][n-1]
+		ids, names, grams := strings.Split(original[11], ";"), strings.Split(original[12], ";"), strings.Split(original[13], ";")
+		if len(row.Ingredients) != len(ids) || len(row.ProviderEvidence.Ingredients) != len(ids) ||
+			*row.Current["Allergen_Tags"] != original[27] || *row.Current["Review_Status"] != original[36] ||
+			*row.RawRowSHA256 != row.ProviderEvidence.Recipe.RawRowSHA256 {
+			t.Fatal("source flags or ingredient lengths differ", id)
+		}
+		assertEvidence(row.ProviderEvidence.Recipe)
+		for j, item := range row.Ingredients {
+			if item.Ordinal != j+1 || item.RawID != ids[j] || item.RawName != names[j] || item.RawGrams != grams[j] {
+				t.Fatal("raw occurrence differs", id, j)
+			}
+			e := row.ProviderEvidence.Ingredients[j]
+			mapping := tuples[id+"/"+strconv.Itoa(j+1)]
+			if e.Ordinal != j+1 || e.Mapping.Cells["Mapping_ID"].Value != mapping[0] || e.Mapping.Cells["Ingredient_ID"].Value != ids[j] ||
+				e.Mapping.Cells["Quantity"].Value != mapping[8] || e.Mapping.Cells["Unit"].Value != "g" ||
+				e.IngredientMaster.Cells["Ingredient_ID"].Value != ids[j] || e.IngredientMaster.Cells["English_Name"].Value != master[ids[j]][1] {
+				t.Fatal("ingredient mapping/master tuple changed", id, j)
+			}
+			assertEvidence(e.Mapping)
+			assertEvidence(e.IngredientMaster)
+		}
+		if hasHold(row.Holds, "whole_soy_reformulation_missing") != slices.Contains(ids, "ING0075") ||
+			hasHold(row.DataGaps, "soy_form_ambiguous") != slices.Contains(ids, "ING0074") {
+			t.Fatal("ingredient identities do not match holds/gaps", id)
+		}
+		if slices.Contains(ids, "ING0075") {
+			gotTofu++
+			if slices.Contains(strings.Split(original[27], ";"), "Milk") {
+				gotDairy[id] = true
+			}
+		}
+		if slices.Contains(ids, "ING0074") {
+			gotMixed++
+			if !slices.Contains(ids, "ING0075") && len(row.Holds) != 0 {
+				t.Fatal("mixed soy became a blanket hold", id)
+			}
+		}
+		delete(want, id)
+	}
+	if len(want) != 0 || tofu == 0 || mixed == 0 || len(wantDairy) == 0 || gotTofu != tofu || gotMixed != mixed || !reflect.DeepEqual(gotDairy, wantDairy) ||
+		evidence.InScopeRecipes != sourceIn || evidence.OutOfScopeRecipes != sourceOut || evidence.RecipeRows != sourceIn+sourceOut {
+		t.Fatal("provider coverage does not match source identities", evidence)
+	}
+	if !gotDairy["MG-R-00904"] {
+		t.Fatal("original row 908 tofu/ghee control missing")
+	}
+	first, _ := json.Marshal(struct {
+		Rows   []TriageRecipe
+		Source ProviderSourceEvidence
+	}{rows, evidence})
+	for repeat := 0; repeat < 2; repeat++ {
+		dir := t.TempDir()
+		for _, spec := range specs {
+			data, err := os.ReadFile(filepath.Join("../../data/provider", spec.Workbook))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, spec.Workbook), data, 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		copied, source, err := providerTriage(context.Background(), dir)
+		second, _ := json.Marshal(struct {
+			Rows   []TriageRecipe
+			Source ProviderSourceEvidence
+		}{copied, source})
+		if err != nil || !bytes.Equal(first, second) || bytes.Contains(second, []byte(dir)) {
+			t.Fatal("provider output depends on filesystem location", err)
+		}
+	}
+	t.Logf("PORTABLE_PROVIDER_TUPLES_OK observed=%d tofu=%d mixed=%d dairy_controls=%d scope=%d excluded=%d", len(rows), gotTofu, gotMixed, len(gotDairy), sourceIn, sourceOut)
+}
+
+func TestProviderInputRejections(t *testing.T) {
+	spec := providerWorkbookSpecs()[0]
+	data, err := os.ReadFile(filepath.Join("../../data/provider", spec.Workbook))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parseProviderWorkbook(context.Background(), data, spec); err != nil {
+		t.Fatal("positive source rejected", err)
+	}
+	for _, tc := range []struct {
+		name   string
+		change func([]byte, *providerWorkbookSpec) []byte
+		want   string
+	}{
+		{"wrong_hash", func(b []byte, _ *providerWorkbookSpec) []byte { b[len(b)-1] ^= 1; return b }, "SHA-256"},
+		{"empty", func(_ []byte, _ *providerWorkbookSpec) []byte { return nil }, "size"},
+		{"oversized", func(_ []byte, _ *providerWorkbookSpec) []byte { return make([]byte, maxProviderWorkbookBytes+1) }, "size"},
+		{"malformed_workbook", func(_ []byte, s *providerWorkbookSpec) []byte {
+			b := []byte("not a workbook")
+			s.SHA256 = hash(b)
+			return b
+		}, "open provider workbook"},
+		{"missing_sheet", func(b []byte, s *providerWorkbookSpec) []byte { s.Sheet = "missing"; return b }, "provider sheet"},
+		{"wrong_header", func(b []byte, s *providerWorkbookSpec) []byte {
+			book, err := excelize.OpenReader(bytes.NewReader(b))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer book.Close()
+			if err := book.SetCellValue(s.Sheet, "A4", "Wrong_ID"); err != nil {
+				t.Fatal(err)
+			}
+			buf, err := book.WriteToBuffer()
+			if err != nil {
+				t.Fatal(err)
+			}
+			s.SHA256 = hash(buf.Bytes())
+			return buf.Bytes()
+		}, "header row"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixtureSpec := spec
+			fixture := tc.change(append([]byte(nil), data...), &fixtureSpec)
+			if _, err := parseProviderWorkbook(context.Background(), fixture, fixtureSpec); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatal("invalid provider input not rejected at expected boundary", err)
+			}
+		})
+	}
+	dir := t.TempDir()
+	if _, _, err := providerTriage(context.Background(), dir); err == nil {
+		t.Fatal("missing provider files accepted")
+	}
+	if err := os.Mkdir(filepath.Join(dir, spec.Workbook), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readProviderWorkbook(context.Background(), dir, spec); err == nil || !strings.Contains(err.Error(), "regular file") {
+		t.Fatal("nonregular provider input accepted", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, _, err := providerTriage(ctx, "../../data/provider"); !errors.Is(err, context.Canceled) {
+		t.Fatal("provider cancellation ignored", err)
+	}
+	t.Log("PORTABLE_PROVIDER_INPUT_REJECTIONS_OK")
+}
+
+func TestProviderJoinRejections(t *testing.T) {
+	sheets := providerTestSheets(t)
+	if _, _, err := joinProviderTriage(context.Background(), sheets[0], sheets[1], sheets[2]); err != nil {
+		t.Fatal("positive join rejected", err)
+	}
+	for _, tc := range []struct {
+		name  string
+		sheet int
+		field string
+		value string
+	}{
+		{"unknown_recipe", 1, "Recipe_ID", "MG-R-99999"},
+		{"ordinal_mismatch", 1, "Sequence_No", "2"},
+		{"unknown_ingredient", 1, "Ingredient_ID", "ING9999"},
+		{"wrong_quantity", 1, "Quantity", "999"},
+		{"wrong_unit", 1, "Unit", "mg"},
+		{"mapping_scope", 1, "Region_Culture", "Bangladesh"},
+		{"mapping_name", 1, "Ingredient_Name_EN", "different source name"},
+		{"blank_recipe_id", 0, "Recipe_ID", ""},
+		{"master_id_missing", 2, "Ingredient_ID", "ING9999"},
+		{"duplicate_recipe_id", 0, "Recipe_ID", "MG-R-00002"},
+		{"invalid_arrays", 0, "Ingredient_IDs", "ING0019"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			copySheets := append([]providerSheet(nil), sheets...)
+			s := &copySheets[tc.sheet]
+			s.rows = append([]providerRow(nil), s.rows...)
+			row := &s.rows[0]
+			row.values = append([]string(nil), row.values...)
+			row.fields = make(map[string]string)
+			for j, name := range s.headers {
+				if name == tc.field {
+					row.values[j] = tc.value
+				}
+				row.fields[name] = row.values[j]
+			}
+			if _, _, err := joinProviderTriage(context.Background(), copySheets[0], copySheets[1], copySheets[2]); err == nil {
+				t.Fatal("invalid source join accepted")
+			}
+		})
+	}
+	missing := sheets[1]
+	missing.rows = missing.rows[1:]
+	if _, _, err := joinProviderTriage(context.Background(), sheets[0], missing, sheets[2]); err == nil || !strings.Contains(err.Error(), "missing mapping ordinal") {
+		t.Fatal("missing mapping accepted", err)
+	}
+	duplicate := sheets[1]
+	duplicate.rows = append(append([]providerRow(nil), duplicate.rows...), duplicate.rows[0])
+	if _, _, err := joinProviderTriage(context.Background(), sheets[0], duplicate, sheets[2]); err == nil {
+		t.Fatal("duplicate occurrence accepted")
+	}
+	t.Log("PORTABLE_PROVIDER_JOIN_REJECTIONS_OK")
 }
 
 func TestTriageCancellationAndMissingInput(t *testing.T) {
-	if _, err := Triage(context.Background(), nil, nil); err == nil {
+	if _, err := Triage(context.Background(), nil, ""); err == nil {
 		t.Fatal("missing intake accepted")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := Triage(ctx, triageDelivery(t), nil); !errors.Is(err, context.Canceled) {
+	if _, err := Triage(ctx, triageDelivery(t), ""); !errors.Is(err, context.Canceled) {
 		t.Fatal("cancellation ignored", err)
 	}
 }

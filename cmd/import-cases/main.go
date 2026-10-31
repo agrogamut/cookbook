@@ -38,7 +38,7 @@ func execute(ctx context.Context, args []string, output io.Writer) error {
 	activate := flags.Bool("activate", false, "explicitly activate v1 or the accepted final-source contract; no production connection is implicit")
 	details := flags.Bool("details", false, "include per-row v2 validation findings in JSON output")
 	triage := flags.Bool("triage", false, "with -check, report per-recipe source gaps without database access")
-	providerReport := flags.String("provider-report", "", "optional hash-bound provider intake observation for -triage")
+	providerDir := flags.String("provider-dir", "", "explicit directory of version-bound provider workbooks for -check -triage")
 	corrections := flags.String("corrections", "", "with -check, validate a nonactivating source-correction-v1 manifest")
 	candidatePath := flags.String("candidate-archive", "", "candidate ZIP required by -corrections; never imported")
 	if err := flags.Parse(args); err != nil {
@@ -47,15 +47,18 @@ func execute(ctx context.Context, args []string, output io.Writer) error {
 	if flags.NArg() != 0 {
 		return fmt.Errorf("unexpected positional arguments")
 	}
-	checkOnly := *triage || *corrections != "" || *candidatePath != "" || *providerReport != ""
+	checkOnly := *triage || *corrections != "" || *candidatePath != "" || *providerDir != ""
 	if checkOnly && (!*check || *activate) {
 		return fmt.Errorf("triage/correction paths require -check and forbid -activate")
 	}
 	if (*corrections == "") != (*candidatePath == "") {
 		return fmt.Errorf("-corrections and -candidate-archive must be supplied together")
 	}
-	if *providerReport != "" && !*triage {
-		return fmt.Errorf("-provider-report requires -triage")
+	if *providerDir != "" && !*triage {
+		return fmt.Errorf("-provider-dir requires -triage")
+	}
+	if *providerDir != "" && *corrections != "" {
+		return fmt.Errorf("-provider-dir cannot be combined with correction validation")
 	}
 	if !*check && *databaseURL == "" {
 		return fmt.Errorf("-database-url is required for staging import")
@@ -90,14 +93,7 @@ func execute(ctx context.Context, args []string, output io.Writer) error {
 	if checkOnly {
 		result := map[string]any{}
 		if *triage {
-			var provider []byte
-			if *providerReport != "" {
-				provider, err = readCheckFile(*providerReport, 16<<20)
-				if err != nil {
-					return err
-				}
-			}
-			r, err := casesource.Triage(ctx, i, provider)
+			r, err := casesource.Triage(ctx, i, *providerDir)
 			if err != nil {
 				return err
 			}

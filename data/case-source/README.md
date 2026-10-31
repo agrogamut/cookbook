@@ -98,25 +98,64 @@ dairy ingredients and the `ING0074` mixed-soy ambiguity remain intact. No
 recipe-name heuristic substitutes for ingredient evidence, and mixed soy alone is
 not a blanket exclusion.
 
-The other 54 provider holds are a separate source observation. They are included
-only when an operator explicitly supplies the existing compatibility JSON whose
-SHA-256 is
-`7f7690d207692f5adfefe32656e2fab2ca9f4a609991e508ad1f4b94c110cfeb`:
+The provider observation can be reproduced from an ordinary checkout by supplying
+the tracked workbook directory explicitly:
 
 ```fish
-go run ./cmd/import-cases -check -triage -provider-report /path/to/compatibility.json > /tmp/combined-triage.json
+go run ./cmd/import-cases -check -triage -provider-dir data/provider > /tmp/combined-triage.json
 ```
 
-There is no implicit receipt, profile, cache or private-directory dependency. The
-optional supplement's `provider_inputs` and `tofu.provider_records` bind workbook
-hashes, RecipeIDs, worksheet rows and ingredient occurrences. Counts come from
-those records, never a hard-coded addition of 54. The report labels them
-`provider_observation`; their full raw-row hash and runtime revision are unavailable
-and remain null/absent. This is a hash-bound intake observation, not verification
-of current database state. All 11 provider dairy control rows retain their source
-allergen tags and ingredient occurrences. Without it, provider and combined counts remain null,
-and case-only 287 is never labelled complete 341 coverage. An unknown supplement
-hash is rejected.
+Only these three version-bound files are read. A missing file, changed hash,
+unexpected header or inconsistent join rejects the observation.
+
+| Workbook in data/provider | SHA-256 |
+| --- | --- |
+| MadamGY_Recipe_Master_1000_Detailed_V2.xlsx | 7501efae36375161612218887f1db34e9c6205bab3173f88e021a3674be7ed87 |
+| MadamGY_Recipe_Ingredient_Mapping_Master_V1.xlsx | 1887cf4fcb68fd7feb117cbf2c48b9cd8f8e0ad872cd3e2b45f30b8fdb6a2d88 |
+| MadamGY_Ingredient_Super_Master_Complete_V1_Cost_Filled.xlsx | 8e09de5d28c69f6f2e90cc4aa5be2543d0285eac06580271c6bdf5abd47ce613 |
+
+The source observation uses `Recipe_Master`, `Recipe-Ingredient Mapping` and
+`Ingredient_Master`, each with an exact header contract at physical row 4.
+It joins `Recipe_ID` plus one-based ingredient occurrence ordinal to mapping
+`Recipe_ID`/`Sequence_No`, then joins the explicit `Ingredient_ID` to the
+ingredient master. Mapping IDs, names, quantities in grams, region/country and
+ingredient allergen tags must agree with their source rows. Recipe/mapping names
+can differ from the ingredient master's English name; both supplied strings are
+retained and the difference is reported. No name heuristic resolves identity.
+
+Scope reproduces the committed `region_focus` seed in
+`internal/db/migrations/0002_annotations_and_seeds.up.sql` followed by the Nepal
+removal in `0004_scope_india_bangladesh.up.sql`: Bangladesh, Central / Tribal India,
+Himalayan India, North India, Northeast India, South India, West Bengal / East India
+and West India. Country must agree with that region. All source joins are checked,
+including excluded rows; Nepal is counted separately. This is a source snapshot
+under a named committed scope, never a query of current database state.
+
+Provider entries include scoped recipes containing explicit ingredient ID
+`ING0075` (master identity `Tofu`) or `ING0074` (master identity
+`Soybean/soy chunks`). The pending-reformulation count is the number of distinct
+scoped RecipeIDs with `ING0075`; combined pending is that count plus the accepted
+case-source pending count. Mixed soy produces a source-form gap, not a hold or
+an assumption that a recipe's shorter `Soybean` label establishes whole beans.
+The known source versions yield 54 provider tofu holds and retain all 11
+dairy-containing tofu controls. These are measured observations, never constants
+used to populate the report or establish test correctness.
+
+Each entry preserves recipe, mapping and ingredient-master workbook hashes,
+physical rows, selected cell references and raw values, ingredient ordinals,
+recipe allergen tags and provider review/quality flags. The provider raw-row
+digest is SHA-256 over the UTF-8 JSON array of unformatted cell-value strings,
+padded to the exact header width. Header digests use the same JSON serialization
+over the exact header strings. Formulas are not evaluated; the whole-file hash
+also binds their original bytes. Runtime revision IDs remain absent. Output
+contains no absolute input directory or timestamp, so copied directories produce
+identical JSON.
+
+There is no assessment JSON, receipt, cache or private-directory input. The
+unpublished `-provider-report` option has been replaced. Without `-provider-dir`,
+provider and combined counts remain null; case-only 287 is never labelled
+complete 341 coverage. Supplier reformulations, final corrected nutrition and
+clinical review have not been supplied by this tool.
 
 ## Nonactivating correction validation
 
@@ -187,18 +226,21 @@ global approval workflow and changes no per-book review or release behavior.
 
 All new flags require `-check`, reject `-activate` and return before database
 creation. `-corrections` and `-candidate-archive` must be supplied together;
-`-provider-report` requires `-triage`. Both report modes may be combined. Existing
+`-provider-dir` requires `-triage` and cannot be combined with correction validation.
+Case-only triage and correction validation may still be combined. Existing
 `-check`, `-archive`, `-baseline`, `-database-url`, `-details` and ordinary
 import/activation behavior are preserved. Manifests are limited to 4 MiB and
-optional provider observations to 16 MiB; candidate ZIP limits match the parser.
+each provider file to 2 MiB (regular files only), 32 MiB expanded and 5,000 physical
+rows. Candidate ZIP limits match the parser.
 
 Focused checks use the retained real archives and temporary negative-control
 fixtures. No database is required:
 
 ```fish
-go test ./internal/casesource ./cmd/import-cases -run 'Test(Triage|CorrectionManifest|CLI|CheckInput)' -count=1
+go test ./internal/casesource ./cmd/import-cases -run 'Test(Triage|Provider|CorrectionManifest|CLI|CheckInput)' -count=1
 ```
 
-Set `CASE_SOURCE_PROVIDER_TRIAGE_REPORT` explicitly to the hash-bound supplement
-to exercise its positive control. Without it that optional check reports a skip;
-case triage, invalid-supplement rejection and correction checks still run.
+Provider checks use the tracked workbooks directly, with no optional private
+fixture or skipped positive control. They compare actual RecipeIDs and occurrence
+tuples, preserve dairy/mixed-soy evidence, compare bytes across copied directories,
+and reject wrong hashes, headers, IDs, ordinals, units and missing joins.

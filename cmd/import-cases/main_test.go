@@ -40,7 +40,11 @@ func TestCLICheckOnlyArguments(t *testing.T) {
 		{[]string{"-check", "-corrections", "missing", "-candidate-archive", "missing", "-activate"}, "forbid -activate"},
 		{[]string{"-check", "-corrections", "missing"}, "must be supplied together"},
 		{[]string{"-check", "-candidate-archive", "missing"}, "must be supplied together"},
-		{[]string{"-check", "-provider-report", "missing"}, "requires -triage"},
+		{[]string{"-check", "-provider-dir", "missing"}, "requires -triage"},
+		{[]string{"-triage", "-provider-dir", "missing"}, "require -check"},
+		{[]string{"-check", "-triage", "-provider-dir", "missing", "-activate"}, "forbid -activate"},
+		{[]string{"-check", "-triage", "-provider-dir", "missing", "-corrections", "missing", "-candidate-archive", "missing"}, "cannot be combined"},
+		{[]string{"-check", "-triage", "-provider-report", "missing"}, "flag provided but not defined"},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {
 			var output bytes.Buffer
@@ -78,6 +82,49 @@ func TestCLITriage(t *testing.T) {
 		t.Fatal("check-only triage lost source/scope or granted approval")
 	}
 	t.Log("TRIAGE_CLI_OK source gaps emitted without a database; provider coverage remains unknown")
+}
+
+func TestCLIProviderTriage(t *testing.T) {
+	archive, baseline := cliSourcePaths()
+	args := []string{"-check", "-triage", "-archive", archive, "-baseline", baseline, "-database-url", "postgres://127.0.0.1:1/never_connect", "-provider-dir", "../../data/provider"}
+	var output bytes.Buffer
+	if err := execute(context.Background(), args, &output); err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Triage casesource.TriageReport `json:"triage"`
+	}
+	if err := json.Unmarshal(output.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	r := result.Triage
+	pending := 0
+	for _, row := range r.Recipes {
+		if row.SourceKind == "provider_observation" {
+			if row.ProviderEvidence == nil || row.RawRowSHA256 == nil || row.RevisionID != "" {
+				t.Fatal("provider source binding missing or runtime revision invented")
+			}
+			for _, hold := range row.Holds {
+				if hold.Code == "whole_soy_reformulation_missing" {
+					pending++
+					break
+				}
+			}
+		}
+	}
+	if r.ProviderSource == nil || len(r.ProviderSource.Workbooks) != 3 || r.ProviderPending == nil || *r.ProviderPending != pending || pending == 0 || r.CombinedPending == nil || *r.CombinedPending != r.CasePending+pending || r.ActivationPermitted || r.SupplierApprovalVerified {
+		t.Fatal("provider source counts or nonactivation contract differs")
+	}
+	invalid := t.TempDir()
+	if err := os.WriteFile(filepath.Join(invalid, r.ProviderSource.Workbooks[0].Workbook), []byte("wrong source bytes"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	args[len(args)-1] = invalid
+	output.Reset()
+	if err := execute(context.Background(), args, &output); err == nil || !strings.Contains(err.Error(), "SHA-256") || output.Len() != 0 {
+		t.Fatal("invalid provider source reached output or database path", err)
+	}
+	t.Logf("PORTABLE_PROVIDER_CLI_OK pending=%d combined=%d; invalid input rejected without database access", pending, *r.CombinedPending)
 }
 
 func TestCLICorrectionSourceBinding(t *testing.T) {
