@@ -41,13 +41,13 @@ jobs:
           python3 -B -m unittest discover -s scripts/ci -p '*_test.py' -v
           or exit $status
           mkdir -p $RUNNER_TEMP/source-reports
-          python3 scripts/ci/check.py --reports $RUNNER_TEMP/source-reports --name build --timeout 600 -- go build ./...
+          python3 -B scripts/ci/check.py --reports $RUNNER_TEMP/source-reports --name build --timeout 600 -- go build ./...
           or exit $status
-          python3 scripts/ci/check.py --reports $RUNNER_TEMP/source-reports --name vet --timeout 600 -- go vet ./...
+          python3 -B scripts/ci/check.py --reports $RUNNER_TEMP/source-reports --name vet --timeout 600 -- go vet ./...
           or exit $status
           command -v cc
           or exit $status
-          python3 scripts/ci/check.py --reports $RUNNER_TEMP/source-reports --name focused-race --timeout 600 -- go test -race -json -count=1 -run 'TestNative(Fallback|Identity)' ./internal/book
+          python3 -B scripts/ci/check.py --reports $RUNNER_TEMP/source-reports --name focused-race --timeout 600 -- go test -race -json -count=1 -run 'TestNative(Fallback|Identity)' ./internal/book
       - name: Provision and run native suite
         run: python3 -B scripts/ci/native_host.py
       - name: Retain actual verification output
@@ -86,15 +86,15 @@ jobs:
           or exit $status
           mkdir -p $RUNNER_TEMP/frontend-reports
           cd web
-          python3 ../scripts/ci/check.py --reports $RUNNER_TEMP/frontend-reports --name install --timeout 600 -- pnpm install --frozen-lockfile --store-dir $RUNNER_TEMP/pnpm-store
+          python3 -B ../scripts/ci/check.py --reports $RUNNER_TEMP/frontend-reports --name install --timeout 600 -- pnpm install --frozen-lockfile --store-dir $RUNNER_TEMP/pnpm-store
           or exit $status
-          python3 ../scripts/ci/check.py --reports $RUNNER_TEMP/frontend-reports --name test --timeout 300 -- pnpm test --maxWorkers=2
+          python3 -B ../scripts/ci/check.py --reports $RUNNER_TEMP/frontend-reports --name test --timeout 300 -- pnpm test --maxWorkers=2
           or exit $status
-          python3 ../scripts/ci/check.py --reports $RUNNER_TEMP/frontend-reports --name lint --timeout 300 -- pnpm lint
+          python3 -B ../scripts/ci/check.py --reports $RUNNER_TEMP/frontend-reports --name lint --timeout 300 -- pnpm lint
           or exit $status
-          python3 ../scripts/ci/check.py --reports $RUNNER_TEMP/frontend-reports --name build --timeout 600 -- pnpm build --webpack
+          python3 -B ../scripts/ci/check.py --reports $RUNNER_TEMP/frontend-reports --name build --timeout 600 -- pnpm build --webpack
           or exit $status
-          python3 ../scripts/ci/check.py --reports $RUNNER_TEMP/frontend-reports --name types --timeout 300 -- pnpm exec tsc --noEmit
+          python3 -B ../scripts/ci/check.py --reports $RUNNER_TEMP/frontend-reports --name types --timeout 300 -- pnpm exec tsc --noEmit
       - if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:

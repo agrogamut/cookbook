@@ -4,11 +4,36 @@ The `Verify source and native output` workflow runs on branch pushes and pull re
 
 The Go job builds the pinned renderer image, adds Fish, Python and Git only to a test derivative, and provisions three disposable PostgreSQL 17 databases: enriched provider data, a case-source fixture driver, and portal fixtures. The test derivative copies its Go toolchain from the pinned builder; host build/vet and focused race use the same patch version. The lock is `docker/pdf-runtime.lock`. The unfiltered suite enables both native opt-ins and requires the 13 named source/native tests plus the database release-inspection control in `scripts/ci/events.py` to pass. Only the named GAP-017 coverage skip and optional browser-fixture-server skip are permitted, with their recorded reasons. A missing browser, converter, font tool, database or terminal event fails verification. Raw logs and whole-command results are retained even on failure.
 
-The native job currently requires 10 GiB available RAM and 20 GiB free disk. The public Ubuntu runner documents 14 GB storage, so the current disk admission does not establish hosted viability. Capacity acceptance remains open pending a measured cold-job budget and continuous 2 GiB reserve; do not lower the threshold without that evidence or disable native checks. During testing, PostgreSQL is limited to 3 GiB and native verification to 3 GiB, sharing two CPUs. Image builds, fixture preparation and tests have separate bounded deadlines. Runtime and system-font assertions are those in the pinned image, not claims that the host runner has equivalent fonts.
+Native admission requires 10 GiB available RAM and the phase-specific storage budget below. PostgreSQL and native verification each have a 3 GiB memory limit with no additional swap, sharing two CPUs. Each image build also has a 3 GiB memory limit and two-CPU quota. Image builds, fixture preparation and tests have separate deadlines. Runtime and system-font assertions are those in the pinned image, not claims that the host runner has equivalent fonts.
 
 Both image builds explicitly use the normal daemon with `DOCKER_BUILDKIT=0`, matching the method used for capacity measurements. Preflight retains the installed CLI/daemon versions, requires a reachable Linux amd64 daemon and checks classic-builder CLI flags. Those checks establish prerequisites; the actual image-build exits establish execution. An unavailable capability or failed build stops verification without switching builders or installing Buildx. Docker deprecates the classic builder, so a future removal requires a reviewed builder and capacity-contract update. Prepared-image mode skips this build preflight and continues to perform no builds or pulls.
 
 Frontend checks follow the Go job: frozen pnpm lock, component tests, lint, TypeScript and production build. Canonical Next fonts must be downloadable; the workflow does not substitute fonts. No provider, payment or identity-service secrets are supplied to verification. Known accepted translation responses are tested locally without provider calls. Unknown production text retains its existing provider behavior.
+
+## Capacity contract
+
+The [public Ubuntu runner specification](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) lists 14 GB storage. That is not a guarantee of free space after checkout and host tool installation. Admission samples actual available blocks after the host build/vet/race steps; existing host toolchains, caches and checkout are already charged to that free-space measurement. No historical local database or image charge is added as a fresh hosted requirement.
+
+The normal-daemon production and test-image build at source `b18e946e8d7f95ae5d55d41b6d53301a58aec5d1` supplies the observed components. Its capacity receipt SHA256 is `c1372f5a75dc20040b7718f062a6e1d6adfe8d0ab436f616af0405652b768cfe`. The measurement used the lock and CI Dockerfile hashes bound in `scripts/ci/capacity.py`; changing either requires a reviewed capacity update. It was a local normal-cache build, not a cold or hosted run.
+
+| Component | Bytes | Evidence or bound |
+| --- | ---: | --- |
+| Selected base union plus observed build increment | 6,845,239,296 | Conservative sampled inode high-water; includes builder, runtime and derivative work |
+| Compressed Go and Debian parents | 325,060,003 | Unique official registry descriptor sizes; additional cold transfer allowance |
+| Unobserved cold/transient margin | 1,073,741,824 | Configured allowance, not a measured cold peak |
+| Context and build-side reports | 134,217,728 | Configured allowance |
+| Resident image/base/cache union after build | 3,437,273,088 | Observed physical union, shared parents counted once |
+| PostgreSQL image and pull overhead | 805,306,368 | Configured allowance; separate from database data |
+| Fresh fixture databases, clones and WAL | 2,147,483,648 | Configured allowance, to be validated by the final native run |
+| Native source/archive/external inputs, modules, compiler cache, temporary files and reports | 2,684,354,560 | Configured allowance, to be validated by the final native run |
+| Native container writable layers | 268,435,456 | Configured allowance |
+| Free reserve per distinct filesystem | 2,147,483,648 | Required throughout guarded commands |
+
+With all paths on one filesystem, the cold build phase requires 10,525,742,499 free bytes. The later resident-image plus native phase requires 11,490,336,768 bytes from the original baseline. Initial admission uses the larger phase, not their sum. This replaces the unsupported fixed 20 GiB requirement. After image preparation, fresh admission requires the remaining 7.5 GiB (native work, PostgreSQL pull/data, writable layers and reserve); existing images are already occupied blocks. A colder build exceeding its declared allowance fails visibly. Neither these bounds nor local build success assert that a hosted run has passed.
+
+Paths are grouped by their actual filesystem device. Work and PostgreSQL data share their allowances when co-located; Docker storage on a different device needs its own reserve. The default fixture uses an explicit run-owned `pgdata` bind so database growth is included. No global image prune, cache deletion or automatic guard relaxation is used to obtain a pass.
+
+`check.py` samples VFS availability during host/frontend checks. The native host additionally samples Docker, work and PostgreSQL filesystems throughout build/provision/test commands, with a 0.5-second sampling interval. Capacity failure terminates the active command, retains its observed process exit and returns verification failure (125); a missing measurement has a distinct reason. Timeouts remain 124. Reports contain admission, samples, minimum free space and maximum sampled net occupancy growth. VFS growth includes unrelated allocations and can be affected by concurrent frees; it is not an owner-specific inode audit or a filesystem quota. Coordinated local runs also retain their independent ownership/allocation guards. The final native run must validate the declared working-set allowances; hosted execution remains unobserved until an actual Actions result exists.
 
 ## Release preflight
 
@@ -41,15 +66,15 @@ The default Actions path builds the production and test images and creates its o
 
 Run the following from the exact clean committed checkout:
 
-    python3 -B scripts/ci/native_host.py --existing-images /private/images.json --work-dir /private/fresh-native-run --fixture-env /private/fixture.env --external-data /private/verified-external-data --run-id unique-run-token
+    python3 -B scripts/ci/native_host.py --existing-images /private/images.json --work-dir /private/fresh-native-run --fixture-env /private/fixture.env --pg-data-dir /private/guarded-pgdata --external-data /private/verified-external-data --run-id unique-run-token
 
 The image handoff is a version 1 JSON object with exactly these fields: version, source_sha, runtime_image, ci_image, lock_sha256, ci_dockerfile_sha256 and go_version. Both image values must be immutable SHA256 IDs. The runner verifies their platform, source and lock labels, test-image toolchain and Dockerfile labels, and inherited runtime layers. The test image also checks the actual Go executable version and installed lock before fixtures or tests.
 
-The fixture file must be owned by the operator and readable only by that user. It contains exactly TEST_DATABASE_URL, CASE_SOURCE_TEST_DATABASE_URL and PORTAL_TEST_DATABASE_URL, targeting ci_legacy, ci_cases and ci_portal through the same loopback port and ci_fixture role. The fixture factory writes only to these disposable test databases. Keep them separate from application and retained source databases. PostgreSQL creation, cluster identity and resource admission belong to the local coordinator; this mode does not manage the supplied cluster.
+The fixture file must be owned by the operator and readable only by that user. It contains exactly TEST_DATABASE_URL, CASE_SOURCE_TEST_DATABASE_URL and PORTAL_TEST_DATABASE_URL, targeting ci_legacy, ci_cases and ci_portal through the same loopback port and ci_fixture role. The fixture factory writes only to these disposable test databases. Keep them separate from application and retained source databases. PostgreSQL creation and cluster identity belong to the local coordinator; this mode does not manage the supplied cluster. Supply its actual retained bind directory with `--pg-data-dir` for filesystem accounting. The path alone does not prove database identity; keep the coordinator's verified container/bind/cluster receipt with the fixture file.
 
 The work directory must be new. Source comes from a verified Git archive, with every file, mode and blob checked against the commit; ignored worktree files are not mounted. The two external enrichment CSVs are separate inputs, verified against the archived SHA256SUMS and mounted read-only. Actions downloads them from the existing dataset sources; prepared-image mode requires retained files and never downloads them. Keep source-archive.json, external-fixtures.json, prepared image metadata, tool/package versions, raw command results and native-result.json together. The same fixture factory, unfiltered test command and required native-event checks run in either mode. A prepared image is not a passing test result.
 
-Local admission checks require at least 10 GiB available RAM and 2 GiB free storage, in addition to the coordinator's continuous aggregate storage and memory guards. The native container is bounded to two CPUs, 3 GiB memory and no swap allowance. Its bind-mounted test files and PostgreSQL data must be counted separately from shared image layers.
+Prepared mode requires 10 GiB available RAM and the remaining native budget, without cold build or pull costs. With work and PostgreSQL on one filesystem, require 6.5 GiB free (2.5 GiB work, 2 GiB database growth, 2 GiB reserve); a separate Docker filesystem requires 2.25 GiB free for writable layers and reserve. When all three share a device, require 6.75 GiB once. Retained database and image bytes remain occupied baseline space; new growth is not omitted. These checks supplement the coordinator's aggregate storage and memory guards. No allowance is silently increased after a failed run.
 
 ## Deliberate staging and activation
 

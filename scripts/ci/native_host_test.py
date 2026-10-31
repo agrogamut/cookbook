@@ -4,10 +4,12 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
-from native_host import DATASETS, FIXTURES, archive_source, fixture_environment, native_command, prepare_external, remove_owned, require_unused_names, select_images, verify_images
+from capacity import BOUND_CI_DOCKERFILE, BOUND_LOCK
+from native_host import DATASETS, FIXTURES, archive_source, fixture_environment, main, native_command, prepare_external, provision, remove_owned, require_unused_names, select_images, verify_images
 
 
 class LegacyBuilderTest(unittest.TestCase):
@@ -17,7 +19,7 @@ class LegacyBuilderTest(unittest.TestCase):
         self.help = 'Usage: docker build\n --cpu-period int\n --memory-swap bytes\n --force-rm\n'
         self.calls = []
 
-    def runner(self, command, reports, name, timeout, env):
+    def runner(self, command, reports, name, timeout, env, **kwargs):
         self.calls.append((command, env))
         text = json.dumps(self.version) if command[1] == 'version' else self.help
         (reports/(name+'.log')).write_text(text)
@@ -35,6 +37,10 @@ class LegacyBuilderTest(unittest.TestCase):
             self.assertEqual(self.select(reports), 'verified-image')
             builds = [call for call in self.calls if call[0][:2] == ['docker', 'build'] and '--help' not in call[0]]
             self.assertEqual(len(builds), 2)
+            for command, _ in builds:
+                self.assertIn('--memory=3g', command)
+                self.assertIn('--memory-swap=3g', command)
+                self.assertIn('--cpu-quota=200000', command)
             self.assertTrue(all(env['DOCKER_BUILDKIT'] == '0' for _, env in self.calls))
             receipt = json.loads((reports/'builder-contract.json').read_text())
             self.assertEqual(receipt['mode'], 'legacy')
@@ -63,7 +69,7 @@ class LegacyBuilderTest(unittest.TestCase):
         for failed_step in ('docker-version', 'legacy-build-help'):
             with self.subTest(failed_step=failed_step), tempfile.TemporaryDirectory() as directory:
                 self.calls = []
-                def failed(command, reports, name, timeout, env):
+                def failed(command, reports, name, timeout, env, **kwargs):
                     self.runner(command, reports, name, timeout, env)
                     return 127 if name == failed_step else 0
                 with patch('native_host.run', side_effect=failed):
@@ -73,7 +79,7 @@ class LegacyBuilderTest(unittest.TestCase):
 
     def test_failed_build_stops_without_alternate_builder(self):
         with tempfile.TemporaryDirectory() as directory:
-            def failed(command, reports, name, timeout, env):
+            def failed(command, reports, name, timeout, env, **kwargs):
                 self.runner(command, reports, name, timeout, env)
                 return 1 if name == 'runtime-build' else 0
             with patch('native_host.run', side_effect=failed):
@@ -95,6 +101,45 @@ class ExistingImageTest(unittest.TestCase):
         ci['Config']['Labels'].update({'recipe.ci.dockerfile': self.expected['ci_dockerfile_sha256'], 'recipe.go.version': self.expected['go_version']})
         ci['RootFS']['Layers'].append('sha256:'+'4'*64)
         self.images = [runtime, ci]
+
+    def test_prepared_main_guards_real_pg_filesystem_without_provision_or_build(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name in ('pg', 'external', 'docker'):
+                (root/name).mkdir()
+            fixture = root/'fixture.env'
+            fixture.write_text('\n'.join(key+'=postgres://ci_fixture:local@127.0.0.1:5432/'+db+'?sslmode=disable' for key, db in FIXTURES.items()))
+            fixture.chmod(0o600)
+            manifest = root/'images.json'
+            manifest.write_text(json.dumps(self.manifest))
+            expected = dict(self.expected, lock_sha256=BOUND_LOCK, ci_dockerfile_sha256=BOUND_CI_DOCKERFILE)
+            arguments = ['native_host.py', '--existing-images', str(manifest), '--work-dir', str(root/'run'),
+                         '--fixture-env', str(fixture), '--pg-data-dir', str(root/'pg'),
+                         '--external-data', str(root/'external'), '--run-id', 'fixture']
+            original_read = Path.read_text
+            def read(path, *args, **kwargs):
+                return 'MemAvailable: 16777216 kB\n' if path == Path('/proc/meminfo') else original_read(path, *args, **kwargs)
+            def execute(command, reports, name, timeout, env, **kwargs):
+                self.assertEqual(command[:3], ['docker', 'run', '--rm'])
+                self.assertIn('--pull=never', command)
+                self.assertIsNotNone(kwargs['guard'])
+                (reports/'native-result.json').write_text(json.dumps({'command_exit': 0, 'errors': []}))
+                return 0
+            with patch.object(sys, 'argv', arguments), patch('pathlib.Path.read_text', read), \
+                 patch('native_host.source_contract', return_value=expected), \
+                 patch('native_host.checked', return_value=str(root/'docker')) as checked, \
+                 patch('native_host.admission', return_value={}) as admit, \
+                 patch('native_host.SpaceGuard'), patch('native_host.require_unused_names'), \
+                 patch('native_host.select_images', return_value=self.manifest['ci_image']) as images, \
+                 patch('native_host.archive_source'), patch('native_host.prepare_external'), \
+                 patch('native_host.provision') as provision, patch('native_host.remove_owned') as remove, \
+                 patch('native_host.run', side_effect=execute):
+                self.assertEqual(main(), 0)
+            provision.assert_not_called()
+            self.assertEqual(images.call_args.args[0], self.manifest)
+            self.assertEqual(admit.call_args.args[0]['pg'], root/'pg')
+            self.assertEqual(checked.call_args_list[0].args[0][:2], ['docker', 'info'])
+            remove.assert_called_once_with('recipe-native-run-fixture', 'fixture')
 
     @patch('native_host.checked')
     def test_existing_container_refused_before_launch_or_cleanup(self, checked):
@@ -208,6 +253,20 @@ class ExistingImageTest(unittest.TestCase):
 
 
 class CleanupTest(unittest.TestCase):
+    def test_new_fixture_data_uses_accounted_run_bind(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root/'reports').mkdir()
+            responses = ['owned-container', 'ready', json.dumps({'5432/tcp': [{'HostIp': '127.0.0.1', 'HostPort': '34567'}]}), '123456', '', '', '']
+            with patch('native_host.checked', side_effect=responses) as checked:
+                result = provision(root, root/'reports', 'owned-name', 'owned-token')
+            command = checked.call_args_list[0].args[0]
+            self.assertEqual(command[command.index('-v')+1], str(root/'pgdata')+':/var/lib/postgresql/data')
+            self.assertTrue((root/'pgdata').is_dir())
+            self.assertIn('--memory-swap=3g', command)
+            self.assertEqual(result.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(set(fixture_environment(result)), set(FIXTURES))
+
     @patch('native_host.checked')
     def test_absent_or_matching_container_only(self, checked):
         checked.return_value = ''

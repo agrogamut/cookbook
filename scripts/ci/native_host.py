@@ -10,7 +10,8 @@ import tarfile
 import time
 from urllib.parse import parse_qs, unquote, urlsplit
 from urllib.request import urlopen
-from check import environment, run
+from check import environment, run, wait
+from capacity import PG_IMAGE, SpaceGuard, admission, phases, verify_contract
 
 POSTGRES = 'postgres@sha256:639ab7ceb90e13123085b741fb31ef493fba25463002f6da665352e7b534b652'
 IMAGE_ID = re.compile(r'sha256:[0-9a-f]{64}')
@@ -19,10 +20,19 @@ DATASETS = {
     'ifct2017_index.csv': 'https://huggingface.co/datasets/NUTRIC/IFCT-2017-Data/resolve/main/compositions-master/index.csv',
     'indian_food_dataset.csv': 'https://huggingface.co/datasets/Anupam007/indian-recipe-dataset/resolve/main/Cleaned_Indian_Food_Dataset.csv',
 }
+ACTIVE_GUARD = None
 
 
-def checked(args, **kwargs):
-    return subprocess.check_output(args, text=True, timeout=120, **kwargs).strip()
+def checked(args, timeout=120, **kwargs):
+    if ACTIVE_GUARD is None:
+        return subprocess.check_output(args, text=True, timeout=timeout, **kwargs).strip()
+    ACTIVE_GUARD.check()
+    with subprocess.Popen(args, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          start_new_session=True, **kwargs) as process:
+        output, error = wait(process, timeout, ACTIVE_GUARD)
+        if process.returncode:
+            raise subprocess.CalledProcessError(process.returncode, args, output, error)
+        return output.strip()
 
 
 def digest(path):
@@ -70,7 +80,7 @@ def legacy_builder_preflight(reports, env):
         ('docker-version', ['docker', 'version', '--format', '{{json .}}']),
         ('legacy-build-help', ['docker', 'build', '--help']),
     ):
-        if run(command, reports, name, 30, build_env):
+        if run(command, reports, name, 30, build_env, guard=ACTIVE_GUARD):
             raise RuntimeError('legacy builder prerequisite failed: '+name+'; no alternate builder attempted')
     required = ('--cpu-period', '--memory-swap', '--force-rm')
     try:
@@ -101,16 +111,18 @@ def select_images(prepared, expected, reports, token, env):
     toolchain = checked(['python3', '-B', 'docker/pdf_runtime_lock_test.py', '--get', 'BUILD_IMAGE'])
     labels = ['--label', 'org.opencontainers.image.revision='+expected['source_sha'],
               '--label', 'recipe.runtime.lock='+expected['lock_sha256']]
+    limits = ['--cpuset-cpus=0,1', '--cpu-period=100000', '--cpu-quota=200000',
+              '--memory=3g', '--memory-swap=3g', '--force-rm']
     commands = [
-        ('runtime-build', ['docker', 'build', '--platform=linux/amd64', *labels, '-t', runtime, '.']),
-        ('test-runtime-build', ['docker', 'build', '--platform=linux/amd64', *labels,
+        ('runtime-build', ['docker', 'build', '--platform=linux/amd64', *limits, *labels, '-t', runtime, '.']),
+        ('test-runtime-build', ['docker', 'build', '--platform=linux/amd64', *limits, *labels,
                                '--label', 'recipe.ci.dockerfile='+expected['ci_dockerfile_sha256'],
                                '--label', 'recipe.go.version='+expected['go_version'],
                                '-f', 'scripts/ci/Dockerfile', '--build-arg', 'TEST_RUNTIME='+runtime,
                                '--build-arg', 'BUILD_IMAGE='+toolchain, '-t', tests, '.']),
     ]
     for name, command in commands:
-        if run(command, reports, name, 1800, build_env):
+        if run(command, reports, name, 1800, build_env, guard=ACTIVE_GUARD):
             raise RuntimeError(name+' failed; actual result retained')
     manifest = dict(expected, version=1,
                     runtime_image=checked(['docker', 'image', 'inspect', '--format', '{{.Id}}', runtime]),
@@ -172,16 +184,25 @@ def session_labels():
 
 
 def provision(root, reports, pg, token):
+    (root/'pgdata').mkdir()
     container = checked(['docker', 'run', '-d', '--name', pg, '--label', 'recipe.ci.run='+token,
                          *session_labels(),
                          '--cpuset-cpus', '0,1', '--cpus=1', '--memory=3g', '--memory-swap=3g',
+                         '-v', str(root/'pgdata')+':/var/lib/postgresql/data',
                          '-p', '127.0.0.1::5432', '-e', 'POSTGRES_USER=ci_fixture',
                          '-e', 'POSTGRES_PASSWORD=ci-disposable-only', POSTGRES])
     deadline = time.monotonic()+120
     while time.monotonic() < deadline:
-        if subprocess.run(['docker', 'exec', container, 'pg_isready', '-U', 'ci_fixture'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5).returncode == 0:
+        if ACTIVE_GUARD is not None:
+            ACTIVE_GUARD.check()
+        try:
+            checked(['docker', 'exec', container, 'pg_isready', '-U', 'ci_fixture'], timeout=5)
             break
-        time.sleep(2)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            for _ in range(4):
+                time.sleep(0.5)
+                if ACTIVE_GUARD is not None:
+                    ACTIVE_GUARD.check()
     else:
         raise RuntimeError('disposable PostgreSQL did not become ready')
     bindings = json.loads(checked(['docker', 'inspect', '--format', '{{json .NetworkSettings.Ports}}', container]))['5432/tcp']
@@ -223,6 +244,8 @@ def archive_source(root, source_sha):
     tree = subprocess.check_output(['git', 'ls-tree', '-rz', '--full-tree', source_sha], timeout=120)
     entries = {}
     for row in tree.split(b'\0'):
+        if ACTIVE_GUARD is not None:
+            ACTIVE_GUARD.check()
         if not row:
             continue
         header, raw_path = row.split(b'\t', 1)
@@ -262,6 +285,8 @@ def prepare_external(root, retained):
         with source, (target/name).open('xb') as output:
             size = 0
             while chunk := source.read(1024*1024):
+                if ACTIVE_GUARD is not None:
+                    ACTIVE_GUARD.check()
                 size += len(chunk)
                 if size > 32*1024**2:
                     raise ValueError('external fixture exceeds its 32 MiB bound')
@@ -273,25 +298,29 @@ def prepare_external(root, retained):
 
 
 def main():
+    global ACTIVE_GUARD
     parser = argparse.ArgumentParser()
     parser.add_argument('--existing-images', type=Path)
     parser.add_argument('--work-dir', type=Path)
     parser.add_argument('--fixture-env', type=Path)
     parser.add_argument('--run-id')
     parser.add_argument('--external-data', type=Path)
+    parser.add_argument('--pg-data-dir', type=Path)
     args = parser.parse_args()
     env = environment(os.environ)
     local = args.existing_images is not None
     if local:
-        if not args.work_dir or not args.fixture_env or not args.external_data or not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9-]{0,63}', args.run_id or ''):
-            parser.error('existing-image mode requires work-dir, fixture-env, external-data and run-id')
+        if not args.work_dir or not args.fixture_env or not args.external_data or not args.pg_data_dir or not re.fullmatch(r'[a-zA-Z0-9][a-zA-Z0-9-]{0,63}', args.run_id or ''):
+            parser.error('existing-image mode requires work-dir, fixture-env, external-data, pg-data-dir and run-id')
+        if not args.pg_data_dir.is_dir():
+            parser.error('prepared PostgreSQL data path must exist')
         token, root = args.run_id, args.work_dir.resolve()
         fixture_environment(args.fixture_env)
         if args.existing_images.stat().st_size > 16384:
             parser.error('image handoff exceeds its bound')
         prepared = json.loads(args.existing_images.read_text())
     else:
-        if args.work_dir or args.fixture_env or args.run_id or args.external_data:
+        if args.work_dir or args.fixture_env or args.run_id or args.external_data or args.pg_data_dir:
             parser.error('local options require an existing-image handoff')
         token = os.environ.get('GITHUB_RUN_ID', '')+'-'+os.environ.get('GITHUB_RUN_ATTEMPT', '')
         if not re.fullmatch(r'[0-9]+-[0-9]+', token):
@@ -299,27 +328,46 @@ def main():
         root = Path(os.environ['RUNNER_TEMP'])/('recipe-ci-'+token)
         prepared = None
     expected = source_contract()
+    verify_contract(expected['lock_sha256'], expected['ci_dockerfile_sha256'])
     root.mkdir(mode=0o700)
     for name in ('reports', 'mod', 'cache', 'tmp', 'home', 'source'):
         (root/name).mkdir()
     reports = root/'reports'
     memory = int(next(line.split()[1] for line in Path('/proc/meminfo').read_text().splitlines() if line.startswith('MemAvailable:')))*1024
-    floor = 2 if local else 20
-    vfs = os.statvfs(root)
-    if memory < 10*1024**3 or vfs.f_bavail*vfs.f_frsize < floor*1024**3:
-        raise RuntimeError('native verification resource admission failed; no opt-out')
-    image = select_images(prepared, expected, reports, token, env)
-    if source_contract() != expected:
-        raise ValueError('source changed during image preparation')
-    (reports/'source-contract.json').write_text(json.dumps(expected, indent=2)+'\n')
-    archive_source(root, expected['source_sha'])
-    prepare_external(root, args.external_data)
+    if memory < 10*1024**3:
+        raise RuntimeError('native verification RAM admission failed; no opt-out')
+    docker_root = Path(checked(['docker', 'info', '--format', '{{.DockerRootDir}}']))
+    if not docker_root.is_absolute() or not docker_root.is_dir():
+        raise ValueError('Docker filesystem root is unavailable')
+    paths = {'work': root, 'docker': docker_root,
+             'pg': args.pg_data_dir.resolve() if local else root/'pgdata'}
+    plan = phases(local)
+    try:
+        receipt = admission(paths, plan)
+    except RuntimeError as error:
+        (reports/'capacity-admission.json').write_text(json.dumps({'error': str(error), 'phases': plan})+'\n')
+        raise
+    (reports/'capacity-admission.json').write_text(json.dumps(receipt, indent=2)+'\n')
     pg = 'recipe-pg-'+token
     require_unused_names(['recipe-native-run-'+token] + ([] if local else [pg]))
     try:
+        ACTIVE_GUARD = SpaceGuard(paths, reports, 'prepared' if local else 'build', plan['native' if local else 'build'])
+        ACTIVE_GUARD.check(force=True)
+        image = select_images(prepared, expected, reports, token, env)
+        if source_contract() != expected:
+            raise ValueError('source changed during image preparation')
+        if not local:
+            ACTIVE_GUARD.finish()
+            native = phases(True)['native']
+            native['docker'] += PG_IMAGE
+            ACTIVE_GUARD = SpaceGuard(paths, reports, 'native', native)
+            ACTIVE_GUARD.check(force=True)
+        (reports/'source-contract.json').write_text(json.dumps(expected, indent=2)+'\n')
+        archive_source(root, expected['source_sha'])
+        prepare_external(root, args.external_data)
         env_file = args.fixture_env.resolve() if local else provision(root, reports, pg, token)
         fixture_environment(env_file)
-        code = run(native_command(image, root, env_file, token), reports, 'native-container', 3600, env)
+        code = run(native_command(image, root, env_file, token), reports, 'native-container', 3600, env, guard=ACTIVE_GUARD)
         result = reports/'native-result.json'
         if code or not result.is_file():
             return 1
@@ -327,10 +375,15 @@ def main():
         return int(value.get('command_exit') != 0 or value.get('errors') != [])
     finally:
         try:
-            remove_owned('recipe-native-run-'+token, token)
+            if ACTIVE_GUARD is not None:
+                ACTIVE_GUARD.finish()
         finally:
-            if not local:
-                remove_owned(pg, token)
+            ACTIVE_GUARD = None
+            try:
+                remove_owned('recipe-native-run-'+token, token)
+            finally:
+                if not local:
+                    remove_owned(pg, token)
 
 
 if __name__ == '__main__':
