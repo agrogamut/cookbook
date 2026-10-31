@@ -29,6 +29,46 @@ func TestAppendPrescriptionWithoutUploadKeepsBytes(t *testing.T) {
 	}
 }
 
+func TestPrescriptionMixedScriptNativeFonts(t *testing.T) {
+	if os.Getenv("BOOK_READER_NATIVE") != "1" {
+		t.Skip("set BOOK_READER_NATIVE=1 for mixed-script annex fonts")
+	}
+	defer ShutdownBrowser()
+	var scan bytes.Buffer
+	if err := png.Encode(&scan, image.NewRGBA(image.Rect(0, 0, 20, 30))); err != nil {
+		t.Fatal(err)
+	}
+	photo, err := ParsePhoto("data:image/png;base64,"+base64.StdEncoding.EncodeToString(scan.Bytes()), "LatinRetention 0.005 g")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, language := range []string{"en", "bn", "hi"} {
+		t.Run(language, func(t *testing.T) {
+			b := Book1{Metadata: Metadata{Language: language, PrescriptionPhoto: photo}, Child: ChildSummary{DisplayName: "নব্য 72 व्यक्तिगत"}}
+			drafter := &translateFakeDrafter{transform: func(s string) string { return "Localized " + s }}
+			document, footer, _, err := prescriptionDocument(context.Background(), b, drafter)
+			if err != nil {
+				t.Fatal(err)
+			}
+			browser, err := sharedBrowser()
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			pdf, err := printIn(ctx, browser, document, b.Metadata, footer)
+			if err != nil {
+				t.Fatal(err)
+			}
+			latinFamily := "Poppins"
+			if language == "bn" {
+				latinFamily = "NotoSans"
+			}
+			assertMixedScriptPDFFonts(t, pdf, latinFamily)
+		})
+	}
+}
+
 func prescriptionPageResources(t *testing.T, pdf []byte) []any {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "document.pdf")

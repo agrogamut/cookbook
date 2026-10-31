@@ -1,9 +1,11 @@
 package book
 
 import (
+	"bytes"
 	"context"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"os/exec"
@@ -16,6 +18,151 @@ import (
 	"github.com/madamgy/recipie/internal/bookdocx"
 	"golang.org/x/text/unicode/norm"
 )
+
+func assertMixedScriptPDFFonts(t *testing.T, pdf []byte, latinFamily string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "mixed-script.pdf")
+	if err := os.WriteFile(path, pdf, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if dir := os.Getenv("BOOK_READER_EVIDENCE_DIR"); dir != "" {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, strings.ReplaceAll(t.Name(), "/", "-")+".pdf"), pdf, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if output, err := exec.CommandContext(ctx, "qpdf", "--check", path).CombinedOutput(); err != nil {
+		t.Fatalf("PDF structure: %v: %s", err, output)
+	}
+	fontList, err := exec.CommandContext(ctx, "pdffonts", path).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range strings.Split(string(fontList), "\n")[2:] {
+		fields := strings.Fields(row)
+		if strings.Contains(row, "FreeSans") {
+			t.Errorf("unapproved fallback font: %s", row)
+		}
+		if len(fields) >= 6 && fields[len(fields)-5] != "yes" {
+			t.Errorf("font is not embedded: %s", row)
+		}
+	}
+	output, err := exec.CommandContext(ctx, "pdftohtml", "-xml", "-i", "-stdout", path).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document struct {
+		Pages []struct {
+			Fonts []struct {
+				ID     string `xml:"id,attr"`
+				Family string `xml:"family,attr"`
+			} `xml:"fontspec"`
+			Text []struct {
+				Font string `xml:"font,attr"`
+				Body string `xml:",innerxml"`
+			} `xml:"text"`
+		} `xml:"page"`
+	}
+	if err := xml.Unmarshal(output, &document); err != nil {
+		t.Fatal(err)
+	}
+	families := map[string]string{}
+	seen := map[string]bool{}
+	for _, page := range document.Pages {
+		for _, font := range page.Fonts {
+			families[font.ID] = font.Family
+		}
+		for _, run := range page.Text {
+			decoder := xml.NewDecoder(strings.NewReader("<text>" + run.Body + "</text>"))
+			var text strings.Builder
+			for {
+				token, err := decoder.Token()
+				if err == io.EOF {
+					break
+				}
+				if err != nil {
+					t.Fatal(err)
+				}
+				if chars, ok := token.(xml.CharData); ok {
+					text.Write(chars)
+				}
+			}
+			s := text.String()
+			family := families[run.Font]
+			for _, script := range []struct {
+				name  string
+				runes *unicode.RangeTable
+			}{{"Bengali", unicode.Bengali}, {"Devanagari", unicode.Devanagari}} {
+				if strings.ContainsFunc(s, func(r rune) bool { return unicode.Is(script.runes, r) }) {
+					seen[script.name] = true
+					if !strings.Contains(family, "Noto") || !strings.Contains(family, script.name) {
+						t.Errorf("%s text %q uses %s", script.name, s, family)
+					}
+				}
+			}
+			if strings.Contains(s, "LatinRetention") {
+				seen["Latin"] = true
+				if !strings.Contains(family, latinFamily) {
+					t.Errorf("Latin text changed font: %s", family)
+				}
+			}
+		}
+	}
+	compact := func(s string) string { return strings.Join(strings.Fields(norm.NFC.String(s)), "") }
+	all, err := exec.CommandContext(ctx, "pdftotext", "-raw", path, "-").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, text := range []string{"নব্য 72", "व्यक्तिगत", "LatinRetention", "0.005 g"} {
+		if !strings.Contains(compact(string(all)), compact(text)) {
+			t.Errorf("missing exact text %q", text)
+		}
+	}
+	if !seen["Bengali"] || !seen["Devanagari"] || !seen["Latin"] {
+		t.Fatalf("missing script controls: %v", seen)
+	}
+}
+
+func TestReaderMixedScriptNativeFonts(t *testing.T) {
+	if os.Getenv("BOOK_READER_NATIVE") != "1" {
+		t.Skip("set BOOK_READER_NATIVE=1 for mixed-script native fonts")
+	}
+	defer ShutdownBrowser()
+	for _, language := range []string{"en", "bn", "hi"} {
+		for _, number := range []int{1, 2} {
+			t.Run(fmt.Sprintf("%s/book%d", language, number), func(t *testing.T) {
+				d := readerFixture(t, number, language)
+				d.Nodes = []bookdocx.ReaderNode{{Paragraph: &bookdocx.ReaderParagraph{Paragraph: bookdocx.Paragraph{Runs: []bookdocx.Run{{Text: "LatinRetention নব্য 72 व्यक्तिगत 0.005 g"}}}}}}
+				child := ChildSummary{DisplayName: "নব্য 72 व्यक्तिगत"}
+				opts := ReaderOptions{Book1: &Book1{Child: child}, Book2: &Book2{Child: child}}
+				var html bytes.Buffer
+				if err := RenderReaderHTML(&html, d, opts); err != nil {
+					t.Fatal(err)
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+				meta := Metadata{Language: language}
+				footer, err := readerFooter(meta)
+				if err != nil {
+					t.Fatal(err)
+				}
+				browser, err := sharedBrowser()
+				if err != nil {
+					t.Fatal(err)
+				}
+				pdf, err := printIn(ctx, browser, html.Bytes(), meta, footer)
+				if err != nil {
+					t.Fatal(err)
+				}
+				assertMixedScriptPDFFonts(t, pdf, "Poppins")
+			})
+		}
+	}
+}
 
 func TestReaderFixedTableNativeContinuation(t *testing.T) {
 	if os.Getenv("BOOK_READER_NATIVE") != "1" {

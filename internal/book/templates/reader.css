@@ -8,7 +8,7 @@
   line-height: 1.55;
   break-before: page;
 }
-html[lang="bn"], html[lang="hi"] {
+html:root {
   --font-serif: "Poppins", var(--font-indic);
   --font-sans: "Poppins", var(--font-indic-sans);
 }
