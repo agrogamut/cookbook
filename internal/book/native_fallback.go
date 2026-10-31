@@ -23,7 +23,7 @@ import (
 //go:embed native_fallback.json
 var nativeFallbackData []byte
 
-const nativeFallbackDataSHA = "3cea2d3bad38fcbde73ef5c13e51104af8534417bb8a46e4d8b1b7fe87eeb22f"
+const nativeFallbackDataSHA = "93b75983f9088c3bde3e03d545501414ac0c029a9e7ca5c4b741008d55fae5fc"
 const nativeFallbackContract = "native-protected-response-v1"
 const nativeFallbackBuilder = "native-bindings-v1"
 
@@ -63,12 +63,21 @@ type nativeFallbackAllowance struct {
 }
 
 type nativeFallbackCatalog struct {
-	Version        int                   `json:"version"`
-	Contract       string                `json:"contract"`
-	ManifestSHA256 string                `json:"manifest_sha256"`
-	AuditSHA256    string                `json:"audit_sha256"`
-	Entries        []nativeFallbackEntry `json:"entries"`
+	Version        int                      `json:"version"`
+	Contract       string                   `json:"contract"`
+	ManifestSHA256 string                   `json:"manifest_sha256"`
+	AuditSHA256    string                   `json:"audit_sha256"`
+	Supplement     nativeFallbackSupplement `json:"supplement"`
+	Entries        []nativeFallbackEntry    `json:"entries"`
 	byInput        map[string][]int
+}
+
+type nativeFallbackSupplement struct {
+	ManifestSHA256   string `json:"manifest_sha256"`
+	AuditSHA256      string `json:"audit_sha256"`
+	CandidatesSHA256 string `json:"candidates_sha256"`
+	FirstEntry       int    `json:"first_entry"`
+	EntryCount       int    `json:"entry_count"`
 }
 
 type nativeIdentitySpan struct {
@@ -124,10 +133,18 @@ func parseNativeFallback(data []byte, expected string) (*nativeFallbackCatalog, 
 	if err := d.Decode(&c); err != nil {
 		return nil, fmt.Errorf("native fallback catalog: %w", err)
 	}
-	if d.Decode(new(any)) != io.EOF || c.Version != 1 || c.Contract != nativeFallbackContract || len(c.Entries) != 525 ||
+	if d.Decode(new(any)) != io.EOF || c.Version != 2 || c.Contract != nativeFallbackContract || len(c.Entries) != 547 ||
 		c.ManifestSHA256 != "e72e207c2f1480e4bc86609d603860de41989eafa50b67822c2905ca00c28f9f" ||
 		c.AuditSHA256 != "9b9fba6c7c147dfc6fddbc984cd224a8f0816e2eeeca38e49c2468811a2ccbcd" {
 		return nil, fmt.Errorf("native fallback catalog: incomplete or unsupported contract")
+	}
+	if c.Supplement != (nativeFallbackSupplement{
+		ManifestSHA256:   "0c8b5b7a723a993a10f8d6f25b2b5aeb0989dba49aebeb2d590ac94283ca1755",
+		AuditSHA256:      "d50c3ce7d32b0bf594a938c242e003d00b414c52f079a8c3ef5de3bc55adbaab",
+		CandidatesSHA256: "d9a478767e5a4dc11e96fa5e19dfd8ac187985fd213a1ba78d7922303c89c12f",
+		FirstEntry:       525, EntryCount: 22,
+	}) {
+		return nil, fmt.Errorf("native fallback catalog: unsupported supplement provenance")
 	}
 	c.byInput = map[string][]int{}
 	seen := map[string]bool{}

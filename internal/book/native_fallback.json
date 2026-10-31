@@ -1,8 +1,15 @@
 {
-  "version": 1,
+  "version": 2,
   "contract": "native-protected-response-v1",
   "manifest_sha256": "e72e207c2f1480e4bc86609d603860de41989eafa50b67822c2905ca00c28f9f",
   "audit_sha256": "9b9fba6c7c147dfc6fddbc984cd224a8f0816e2eeeca38e49c2468811a2ccbcd",
+  "supplement": {
+    "manifest_sha256": "0c8b5b7a723a993a10f8d6f25b2b5aeb0989dba49aebeb2d590ac94283ca1755",
+    "audit_sha256": "d50c3ce7d32b0bf594a938c242e003d00b414c52f079a8c3ef5de3bc55adbaab",
+    "candidates_sha256": "d9a478767e5a4dc11e96fa5e19dfd8ac187985fd213a1ba78d7922303c89c12f",
+    "first_entry": 525,
+    "entry_count": 22
+  },
   "entries": [
     {
       "language": "bn",
@@ -31895,6 +31902,862 @@
       ],
       "request_sha256": "c3cafa6e46f37af312dfa6eb6e9b2b84a7a5790478bb10f2dccf0a71b49fb6e2",
       "response_sha256": "b0845de2ae16d6d04e0fdeb17eddbb66ded7da91314b3a261e3c7e378a52cfc6"
+    },
+    {
+      "language": "bn",
+      "input": "ZXQ0QXZ) Wash/clean all ingredients; peel, deseed, debone, chop, mash or grind as appropriate for age. ZXQ1QXZ) Cook components with about ZXQ2QXZ liquid until soft. ZXQ3QXZ) Mash and combine. ZXQ4QXZ) Shape into soft age-safe pieces and cook gently until set without creating a hard crust. ZXQ5QXZ) Cool to a comfortable serving temperature and serve the prescribed portion under adult supervision.",
+      "input_sha256": "239bc18545281254f08d692138f9672d50be6a702d42837f7b3cdae99d7e9ba0",
+      "output": "ZXQ0QXZ) সমস্ত উপকরণ ধুয়ে/পরিষ্কার করুন; বয়স উপযোগী খোসা ছাড়ানো, বীজ ফেলে দেওয়া, কাঁটা ছাড়ানো, কুচানো, চটকানো বা পেস্ট করার কাজ করুন। ZXQ1QXZ) উপাদানগুলো প্রায় ZXQ2QXZ তরল দিয়ে নরম হওয়া পর্যন্ত রান্না করুন। ZXQ3QXZ) চটকে একসাথে মিশিয়ে নিন। ZXQ4QXZ) বয়সের জন্য নিরাপদ নরম আকারে তৈরি করুন এবং শক্ত আস্তরণ তৈরি না করে হালকা আঁচে সেট হওয়া পর্যন্ত রান্না করুন। ZXQ5QXZ) খাওয়ার উপযোগী আরামদায়ক তাপমাত্রায় ঠান্ডা করুন এবং প্রাপ্তবয়স্কদের পর্যবেক্ষণে নির্ধারিত পরিমাণে পরিবেশন করুন।",
+      "output_sha256": "af84e15035df73bde604f6438249955bac6a1bec650a0c0e2d15b879729917f6",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "0b0ac0b136b815abf576e40606dbe304549826f5fef71e9d01a351aa8fd37c90",
+            "field": "Preparation_Method_FULL/0/Paragraph/Runs/0/Text",
+            "ordinal": 1,
+            "recipe_id": "MG-R-00111",
+            "revision": "d94f6da3b53bb989340fe316a74deb32a4c6be23020cd9fb3fb396743a2b8513",
+            "source": "provider-recipe"
+          },
+          "slots": [
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "number",
+              "unit": "mL"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "number"
+            }
+          ]
+        }
+      ],
+      "request_sha256": "3ddbbc02deef48e0d149cbcd43d6bb8c15628999edc6b6582ce838e1f69c4659",
+      "response_sha256": "2d318a9946d051a86a1a8db9449d6c2ce92807fd61205cde7228babe4de72a12"
+    },
+    {
+      "language": "bn",
+      "input": "Bhetki []: ZXQ0QXZ (ZXQ1QXZ)",
+      "input_sha256": "33f9e98c2bd5505a3bd9260f6f5a25e05f50ac53f73e08575ed0190ffa6b622a",
+      "output": "ভেটকি []: ZXQ0QXZ (ZXQ1QXZ)",
+      "output_sha256": "0a6eb5718baedcc9b72d65d113f6e01cfe2f31ce8610afd209e5700f58746569",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "9fc3c20af1d7e43653bdb9f9f1c406fff30882af1dfbcc5d0ff07d0f4da438c6",
+            "field": "ingredient//0/Paragraph/Runs/0/Text",
+            "revision": "9fc3c20af1d7e43653bdb9f9f1c406fff30882af1dfbcc5d0ff07d0f4da438c6",
+            "source": "ingredient-index"
+          },
+          "slots": [
+            {
+              "kind": "literal",
+              "sha256": "b826643af34aa3e0d1bcb08e5aa325aed4398fee1379a0f36bfc7fb5fe1ab4b2"
+            },
+            {
+              "kind": "number"
+            }
+          ]
+        }
+      ],
+      "request_sha256": "3ddbbc02deef48e0d149cbcd43d6bb8c15628999edc6b6582ce838e1f69c4659",
+      "response_sha256": "2d318a9946d051a86a1a8db9449d6c2ce92807fd61205cde7228babe4de72a12"
+    },
+    {
+      "language": "bn",
+      "input": "ZXQ0QXZ. West Bengal Oats & Spinach Soft finger bites [ZXQ1QXZ]",
+      "input_sha256": "5d107c3c1d2ba1012df312945c6a048278817807925c0536f7e15405b442c0e0",
+      "output": "ZXQ0QXZ. পশ্চিমবঙ্গ ওটস এবং পালং শাকের নরম ফিঙ্গার বাইটস [ZXQ1QXZ]",
+      "output_sha256": "6b108615f9c5bbb982c44104daa0a2fce7c58b35dfa26c3f1e3bb960d6030983",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "90eb6901da517a86b7a7de24e3e61e392806990161b9bc03ee2039fea7d0f83a",
+            "field": "card-part-43/0/Paragraph/Runs/0/Text",
+            "recipe_id": "MG-R-00111",
+            "revision": "d94f6da3b53bb989340fe316a74deb32a4c6be23020cd9fb3fb396743a2b8513",
+            "source": "provider-recipe"
+          },
+          "slots": [
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "b826643af34aa3e0d1bcb08e5aa325aed4398fee1379a0f36bfc7fb5fe1ab4b2"
+            }
+          ]
+        }
+      ],
+      "request_sha256": "3ddbbc02deef48e0d149cbcd43d6bb8c15628999edc6b6582ce838e1f69c4659",
+      "response_sha256": "2d318a9946d051a86a1a8db9449d6c2ce92807fd61205cde7228babe4de72a12"
+    },
+    {
+      "language": "bn",
+      "input": "ZXQ0QXZ: ZXQ1QXZ; source texture: Mashed/Lumpy/Soft finger food",
+      "input_sha256": "7500c2ce54b88ee49806bc3ffbc293c6f60bb85f3cacc08c0ca123a3ddc389b7",
+      "output": "ZXQ0QXZ: ZXQ1QXZ; মূল টেক্সচার: চটকানো/দানাযুক্ত/নরম ফিঙ্গার ফুড",
+      "output_sha256": "adf1c3e4c7f019e8addb9b0d7b7817048a8fc898f4b45d58159f89db10cb404c",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "fa0394a6e9b7f43fe9d83c754b9c15b1080d2183d3fa6f8ea27b9c1730f77428",
+            "field": "Serving_Size_g/Texture/0/Paragraph/Runs/0/Text",
+            "recipe_id": "MG-R-00111",
+            "revision": "d94f6da3b53bb989340fe316a74deb32a4c6be23020cd9fb3fb396743a2b8513",
+            "source": "provider-recipe"
+          },
+          "slots": [
+            {
+              "kind": "literal",
+              "sha256": "b826643af34aa3e0d1bcb08e5aa325aed4398fee1379a0f36bfc7fb5fe1ab4b2"
+            },
+            {
+              "kind": "number",
+              "unit": "g"
+            }
+          ]
+        }
+      ],
+      "request_sha256": "3ddbbc02deef48e0d149cbcd43d6bb8c15628999edc6b6582ce838e1f69c4659",
+      "response_sha256": "2d318a9946d051a86a1a8db9449d6c2ce92807fd61205cde7228babe4de72a12"
+    },
+    {
+      "language": "bn",
+      "input": "ZXQ0QXZ | ZXQ1QXZ. West Bengal Oats & Spinach Soft finger bites | Breakfast | ZXQ2QXZ",
+      "input_sha256": "8c5de3d5e007808d3a961133e76e5e5650697807b8046d4039aa8e75c73d38d9",
+      "output": "ZXQ0QXZ | ZXQ1QXZ. পশ্চিমবঙ্গ ওটস এবং পালং শাকের নরম ফিঙ্গার বাইটস | প্রাতরাশ | ZXQ2QXZ",
+      "output_sha256": "9ec5ded579c5cefee487ab1bd934f9763dda929025a17d5c087618b02f7a89de",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "fa0394a6e9b7f43fe9d83c754b9c15b1080d2183d3fa6f8ea27b9c1730f77428",
+            "field": "selected-recipe-index/0/Paragraph/Runs/0/Text",
+            "recipe_id": "MG-R-00111",
+            "revision": "d94f6da3b53bb989340fe316a74deb32a4c6be23020cd9fb3fb396743a2b8513",
+            "source": "provider-recipe"
+          },
+          "slots": [
+            {
+              "kind": "literal",
+              "sha256": "b826643af34aa3e0d1bcb08e5aa325aed4398fee1379a0f36bfc7fb5fe1ab4b2"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "number",
+              "unit": "g"
+            }
+          ]
+        }
+      ],
+      "request_sha256": "3ddbbc02deef48e0d149cbcd43d6bb8c15628999edc6b6582ce838e1f69c4659",
+      "response_sha256": "2d318a9946d051a86a1a8db9449d6c2ce92807fd61205cde7228babe4de72a12"
+    },
+    {
+      "language": "bn",
+      "input": "Spinach []: ZXQ0QXZ (ZXQ1QXZ), ZXQ2QXZ (ZXQ3QXZ), ZXQ4QXZ (ZXQ5QXZ), ZXQ6QXZ (ZXQ7QXZ), ZXQ8QXZ (ZXQ9QXZ)",
+      "input_sha256": "8cfefab2f564893f6ff4d585203a2706a65d6dcc6407839382cced21e4ebcd48",
+      "output": "পালং শাক []: ZXQ0QXZ (ZXQ1QXZ), ZXQ2QXZ (ZXQ3QXZ), ZXQ4QXZ (ZXQ5QXZ), ZXQ6QXZ (ZXQ7QXZ), ZXQ8QXZ (ZXQ9QXZ)",
+      "output_sha256": "4f63f24f8bafb3f90b311fa7643a15d6144707e38cd6fb0ff35ad533a2d71836",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "4e53168ca467d13b017f462feb7ec108200b9a28571231cc6b1f420dcc195851",
+            "field": "ingredient//0/Paragraph/Runs/0/Text",
+            "revision": "4e53168ca467d13b017f462feb7ec108200b9a28571231cc6b1f420dcc195851",
+            "source": "ingredient-index"
+          },
+          "slots": [
+            {
+              "kind": "literal",
+              "sha256": "c5bc4d44d431ccc325f1943e2bbe32989f855369ee7f669c7b5eb9576da93087"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "b826643af34aa3e0d1bcb08e5aa325aed4398fee1379a0f36bfc7fb5fe1ab4b2"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "adc3d6c8640b93ddcc801049faa919ed800be3bce719e9ca49265794782b60fa"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "7761e05acaf43a45647340d2f8382ba24e0622dc9f00eea82ba893cdb1149a7f"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "970762db8bdeac87232054eb634ac12c16381948e6a17c402ded70a23f9a7d9c"
+            },
+            {
+              "kind": "number"
+            }
+          ]
+        }
+      ],
+      "request_sha256": "3ddbbc02deef48e0d149cbcd43d6bb8c15628999edc6b6582ce838e1f69c4659",
+      "response_sha256": "2d318a9946d051a86a1a8db9449d6c2ce92807fd61205cde7228babe4de72a12"
+    },
+    {
+      "language": "bn",
+      "input": "Oats []: ZXQ0QXZ (ZXQ1QXZ), ZXQ2QXZ (ZXQ3QXZ), ZXQ4QXZ (ZXQ5QXZ), ZXQ6QXZ (ZXQ7QXZ), ZXQ8QXZ (ZXQ9QXZ)",
+      "input_sha256": "98fe24461cd7adb85b558da537e7c3957ecaa252ffd177d83834e4a6a0884cdd",
+      "output": "ওটস []: ZXQ0QXZ (ZXQ1QXZ), ZXQ2QXZ (ZXQ3QXZ), ZXQ4QXZ (ZXQ5QXZ), ZXQ6QXZ (ZXQ7QXZ), ZXQ8QXZ (ZXQ9QXZ)",
+      "output_sha256": "39b4dd85f556c20114da478d1888edf2551c0ff714bc015dd85c588fb02311d0",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "5bd07b4800a0fb2f6c9ee49cdac663cf43d356c10a81ebee4935cc24f8b74016",
+            "field": "ingredient//0/Paragraph/Runs/0/Text",
+            "revision": "5bd07b4800a0fb2f6c9ee49cdac663cf43d356c10a81ebee4935cc24f8b74016",
+            "source": "ingredient-index"
+          },
+          "slots": [
+            {
+              "kind": "literal",
+              "sha256": "b826643af34aa3e0d1bcb08e5aa325aed4398fee1379a0f36bfc7fb5fe1ab4b2"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "88c10db975ca6e3f6cb3cc8b740e5fcfcde33bb8967ebc27526f7e58b874da82"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "33f9234b604ae41af8be5d40de033198eb892f2c782487b60d56361c54b2dc57"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "499c13acdc75ba2375099e99581a91a45a8376b516735f9bb25cb1c0c8e16eba"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "db0843104e00b401f75d81e7c7bb002ccf07ef3c1dfd7679dc7e71f03fc5ac45"
+            },
+            {
+              "kind": "number"
+            }
+          ]
+        }
+      ],
+      "request_sha256": "3ddbbc02deef48e0d149cbcd43d6bb8c15628999edc6b6582ce838e1f69c4659",
+      "response_sha256": "2d318a9946d051a86a1a8db9449d6c2ce92807fd61205cde7228babe4de72a12"
+    },
+    {
+      "language": "bn",
+      "input": "Sesame oil []: ZXQ0QXZ (ZXQ1QXZ), ZXQ2QXZ (ZXQ3QXZ), ZXQ4QXZ (ZXQ5QXZ), ZXQ6QXZ (ZXQ7QXZ), ZXQ8QXZ (ZXQ9QXZ)",
+      "input_sha256": "c09d35438b57b494d83c9be560317e7e557a5c479de0af43ec6d80ee747cbc0c",
+      "output": "তিল তেল []: ZXQ0QXZ (ZXQ1QXZ), ZXQ2QXZ (ZXQ3QXZ), ZXQ4QXZ (ZXQ5QXZ), ZXQ6QXZ (ZXQ7QXZ), ZXQ8QXZ (ZXQ9QXZ)",
+      "output_sha256": "0926ba6515af28ffbdbdb706de098709eb9b436524a0fd2dbb1959a0b77421a0",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "357d578a2b39d8bcba436a06fbc03741281c93a71369e08715f38ca8989fd42e",
+            "field": "ingredient//0/Paragraph/Runs/0/Text",
+            "revision": "357d578a2b39d8bcba436a06fbc03741281c93a71369e08715f38ca8989fd42e",
+            "source": "ingredient-index"
+          },
+          "slots": [
+            {
+              "kind": "literal",
+              "sha256": "74094ce5cafad489034a4e44f6a2a6ab823d88a1137139daa832b0454217807a"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "33f9234b604ae41af8be5d40de033198eb892f2c782487b60d56361c54b2dc57"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "970762db8bdeac87232054eb634ac12c16381948e6a17c402ded70a23f9a7d9c"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "db231fec62b0f81a81746623e7058a9ae73ab9c4ae2ddaea329f3832f9ce17fb"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "91cefeb46f5c70883e69e46ada0087278949b03a8c41d3c1b36c7aaa0798d77d"
+            },
+            {
+              "kind": "number"
+            }
+          ]
+        }
+      ],
+      "request_sha256": "3ddbbc02deef48e0d149cbcd43d6bb8c15628999edc6b6582ce838e1f69c4659",
+      "response_sha256": "2d318a9946d051a86a1a8db9449d6c2ce92807fd61205cde7228babe4de72a12"
+    },
+    {
+      "language": "bn",
+      "input": "ZXQ0QXZ. Bhetki: ZXQ1QXZ",
+      "input_sha256": "d93466adfb68e1a6c60d849c7071dd52d4048c1bb82bf7a8e8fd2e6be71b8282",
+      "output": "ZXQ0QXZ. ভেটকি: ZXQ1QXZ",
+      "output_sha256": "208e5e620c5b28dafba252eec90853badc8e599df5f923339d5a85011202cc7c",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "6f8c3760644ec29c7d9b4be1f1bf29aa59b100a81497d39981de966dd3f1ee45",
+            "field": "Ingredient_Names/0/Paragraph/Runs/0/Text",
+            "ordinal": 3,
+            "recipe_id": "MG-R-00111",
+            "revision": "d94f6da3b53bb989340fe316a74deb32a4c6be23020cd9fb3fb396743a2b8513",
+            "source": "provider-recipe"
+          },
+          "slots": [
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "number",
+              "unit": "g"
+            }
+          ]
+        }
+      ],
+      "request_sha256": "3ddbbc02deef48e0d149cbcd43d6bb8c15628999edc6b6582ce838e1f69c4659",
+      "response_sha256": "2d318a9946d051a86a1a8db9449d6c2ce92807fd61205cde7228babe4de72a12"
+    },
+    {
+      "language": "bn",
+      "input": "West Bengal / East India",
+      "input_sha256": "e7749707cee2e3528b3e60a6bdb6b07b1fb0fa5227096b433cf2487a146e7292",
+      "output": "পশ্চিমবঙ্গ / পূর্ব ভারত",
+      "output_sha256": "4cdb69f4bac01bd9c76501e988dd5935f85cb1290942a0e1a293886cd35cb6f2",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "e7749707cee2e3528b3e60a6bdb6b07b1fb0fa5227096b433cf2487a146e7292",
+            "field": "B1-01/Blocks/0/Table/Rows/4/1",
+            "revision": "native-bindings-v1",
+            "source": "builder"
+          },
+          "slots": null
+        },
+        {
+          "owner": {
+            "english_sha256": "e7749707cee2e3528b3e60a6bdb6b07b1fb0fa5227096b433cf2487a146e7292",
+            "field": "B1-06/Blocks/0/Table/Rows/2/1",
+            "revision": "native-bindings-v1",
+            "source": "builder"
+          },
+          "slots": null
+        },
+        {
+          "owner": {
+            "english_sha256": "e7749707cee2e3528b3e60a6bdb6b07b1fb0fa5227096b433cf2487a146e7292",
+            "field": "B2-01/Blocks/0/Table/Rows/4/1",
+            "revision": "native-bindings-v1",
+            "source": "builder"
+          },
+          "slots": null
+        },
+        {
+          "owner": {
+            "english_sha256": "e7749707cee2e3528b3e60a6bdb6b07b1fb0fa5227096b433cf2487a146e7292",
+            "field": "B2-02/Blocks/0/Table/Rows/2/1",
+            "revision": "native-bindings-v1",
+            "source": "builder"
+          },
+          "slots": null
+        }
+      ],
+      "request_sha256": "3ddbbc02deef48e0d149cbcd43d6bb8c15628999edc6b6582ce838e1f69c4659",
+      "response_sha256": "2d318a9946d051a86a1a8db9449d6c2ce92807fd61205cde7228babe4de72a12"
+    },
+    {
+      "language": "bn",
+      "input": "West Bengal Oats & Spinach Soft finger bites",
+      "input_sha256": "ebd7ed7d71a1bbf223af8abe235f15a25cab15333e0a4e6f24aac34b4a3669c3",
+      "output": "পশ্চিমবঙ্গ ওটস এবং পালং শাকের নরম ফিঙ্গার বাইটস",
+      "output_sha256": "c6f3c0dbb32072327ddf1beef5def358ed2410219e1677bff3c69d64cf0846f0",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "ebd7ed7d71a1bbf223af8abe235f15a25cab15333e0a4e6f24aac34b4a3669c3",
+            "field": "index/Recipe_Name/column/1",
+            "recipe_id": "MG-R-00111",
+            "revision": "d94f6da3b53bb989340fe316a74deb32a4c6be23020cd9fb3fb396743a2b8513",
+            "source": "provider-recipe"
+          },
+          "slots": null
+        }
+      ],
+      "request_sha256": "3ddbbc02deef48e0d149cbcd43d6bb8c15628999edc6b6582ce838e1f69c4659",
+      "response_sha256": "2d318a9946d051a86a1a8db9449d6c2ce92807fd61205cde7228babe4de72a12"
+    },
+    {
+      "language": "hi",
+      "input": "ZXQ0QXZ) Wash/clean all ingredients; peel, deseed, debone, chop, mash or grind as appropriate for age. ZXQ1QXZ) Cook components with about ZXQ2QXZ liquid until soft. ZXQ3QXZ) Mash and combine. ZXQ4QXZ) Shape into soft age-safe pieces and cook gently until set without creating a hard crust. ZXQ5QXZ) Cool to a comfortable serving temperature and serve the prescribed portion under adult supervision.",
+      "input_sha256": "239bc18545281254f08d692138f9672d50be6a702d42837f7b3cdae99d7e9ba0",
+      "output": "ZXQ0QXZ) सभी सामग्रियों को धोएं/साफ़ करें; उम्र के अनुसार छीलें, बीज निकालें, कांटे/हड्डी निकालें, काटें, मैश करें या पीसें। ZXQ1QXZ) घटकों को लगभग ZXQ2QXZ तरल के साथ नरम होने तक पकाएं। ZXQ3QXZ) मैश करें और मिलाएं। ZXQ4QXZ) उम्र के अनुसार सुरक्षित नरम टुकड़ों का आकार दें और सख्त पपड़ी बनाए बिना सेट होने तक धीरे-धीरे पकाएं। ZXQ5QXZ) परोसने के आरामदायक तापमान तक ठंडा करें और वयस्क की देखरेख में निर्धारित मात्रा में परोसें।",
+      "output_sha256": "9622bf23ed41b9489ca54d5d299493331f014be7605aa86b25f380932c65e80a",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "0b0ac0b136b815abf576e40606dbe304549826f5fef71e9d01a351aa8fd37c90",
+            "field": "Preparation_Method_FULL/0/Paragraph/Runs/0/Text",
+            "ordinal": 1,
+            "recipe_id": "MG-R-00111",
+            "revision": "d94f6da3b53bb989340fe316a74deb32a4c6be23020cd9fb3fb396743a2b8513",
+            "source": "provider-recipe"
+          },
+          "slots": [
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "number",
+              "unit": "mL"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "number"
+            }
+          ]
+        }
+      ],
+      "request_sha256": "4b84ac3e4717bd4ab379dd7708df5877c5c377d1ea0e15bb8001c8b9c4ca3778",
+      "response_sha256": "50d2de61fe9019bba65d321b6a5ea7ccac944c4c19d7855a5d28cb6f10155074"
+    },
+    {
+      "language": "hi",
+      "input": "Bhetki []: ZXQ0QXZ (ZXQ1QXZ)",
+      "input_sha256": "33f9e98c2bd5505a3bd9260f6f5a25e05f50ac53f73e08575ed0190ffa6b622a",
+      "output": "भेटकी []: ZXQ0QXZ (ZXQ1QXZ)",
+      "output_sha256": "95a5e29a04e6de8fdbf763534c1b4742f017dd76d6dcac769b072b12037a318f",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "9fc3c20af1d7e43653bdb9f9f1c406fff30882af1dfbcc5d0ff07d0f4da438c6",
+            "field": "ingredient//0/Paragraph/Runs/0/Text",
+            "revision": "9fc3c20af1d7e43653bdb9f9f1c406fff30882af1dfbcc5d0ff07d0f4da438c6",
+            "source": "ingredient-index"
+          },
+          "slots": [
+            {
+              "kind": "literal",
+              "sha256": "b826643af34aa3e0d1bcb08e5aa325aed4398fee1379a0f36bfc7fb5fe1ab4b2"
+            },
+            {
+              "kind": "number"
+            }
+          ]
+        }
+      ],
+      "request_sha256": "4b84ac3e4717bd4ab379dd7708df5877c5c377d1ea0e15bb8001c8b9c4ca3778",
+      "response_sha256": "50d2de61fe9019bba65d321b6a5ea7ccac944c4c19d7855a5d28cb6f10155074"
+    },
+    {
+      "language": "hi",
+      "input": "ZXQ0QXZ. West Bengal Oats & Spinach Soft finger bites [ZXQ1QXZ]",
+      "input_sha256": "5d107c3c1d2ba1012df312945c6a048278817807925c0536f7e15405b442c0e0",
+      "output": "ZXQ0QXZ. पश्चिम बंगाल ओट्स और पालक सॉफ्ट फिंगर बाइट्स [ZXQ1QXZ]",
+      "output_sha256": "c13b8a48060a40c824f0ba322d56e994a330a63a2b38b30b24371d8aafb3588d",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "90eb6901da517a86b7a7de24e3e61e392806990161b9bc03ee2039fea7d0f83a",
+            "field": "card-part-43/0/Paragraph/Runs/0/Text",
+            "recipe_id": "MG-R-00111",
+            "revision": "d94f6da3b53bb989340fe316a74deb32a4c6be23020cd9fb3fb396743a2b8513",
+            "source": "provider-recipe"
+          },
+          "slots": [
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "b826643af34aa3e0d1bcb08e5aa325aed4398fee1379a0f36bfc7fb5fe1ab4b2"
+            }
+          ]
+        }
+      ],
+      "request_sha256": "4b84ac3e4717bd4ab379dd7708df5877c5c377d1ea0e15bb8001c8b9c4ca3778",
+      "response_sha256": "50d2de61fe9019bba65d321b6a5ea7ccac944c4c19d7855a5d28cb6f10155074"
+    },
+    {
+      "language": "hi",
+      "input": "ZXQ0QXZ: ZXQ1QXZ; source texture: Mashed/Lumpy/Soft finger food",
+      "input_sha256": "7500c2ce54b88ee49806bc3ffbc293c6f60bb85f3cacc08c0ca123a3ddc389b7",
+      "output": "ZXQ0QXZ: ZXQ1QXZ; मूल बनावट: मैश किया हुआ/गांठदार/मुलायम फिंगर फूड",
+      "output_sha256": "68ad0c52fdf8a4f91020f1e8d10ba45cf31b3038b9b645e58b2df14e86d9ca5a",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "fa0394a6e9b7f43fe9d83c754b9c15b1080d2183d3fa6f8ea27b9c1730f77428",
+            "field": "Serving_Size_g/Texture/0/Paragraph/Runs/0/Text",
+            "recipe_id": "MG-R-00111",
+            "revision": "d94f6da3b53bb989340fe316a74deb32a4c6be23020cd9fb3fb396743a2b8513",
+            "source": "provider-recipe"
+          },
+          "slots": [
+            {
+              "kind": "literal",
+              "sha256": "b826643af34aa3e0d1bcb08e5aa325aed4398fee1379a0f36bfc7fb5fe1ab4b2"
+            },
+            {
+              "kind": "number",
+              "unit": "g"
+            }
+          ]
+        }
+      ],
+      "request_sha256": "4b84ac3e4717bd4ab379dd7708df5877c5c377d1ea0e15bb8001c8b9c4ca3778",
+      "response_sha256": "50d2de61fe9019bba65d321b6a5ea7ccac944c4c19d7855a5d28cb6f10155074"
+    },
+    {
+      "language": "hi",
+      "input": "ZXQ0QXZ | ZXQ1QXZ. West Bengal Oats & Spinach Soft finger bites | Breakfast | ZXQ2QXZ",
+      "input_sha256": "8c5de3d5e007808d3a961133e76e5e5650697807b8046d4039aa8e75c73d38d9",
+      "output": "ZXQ0QXZ | ZXQ1QXZ. पश्चिम बंगाल ओट्स और पालक सॉफ्ट फिंगर बाइट्स | नाश्ता | ZXQ2QXZ",
+      "output_sha256": "4074b1830858403f50b3494044f73a47a5457ae8ba5ceefd41db333697d52998",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "fa0394a6e9b7f43fe9d83c754b9c15b1080d2183d3fa6f8ea27b9c1730f77428",
+            "field": "selected-recipe-index/0/Paragraph/Runs/0/Text",
+            "recipe_id": "MG-R-00111",
+            "revision": "d94f6da3b53bb989340fe316a74deb32a4c6be23020cd9fb3fb396743a2b8513",
+            "source": "provider-recipe"
+          },
+          "slots": [
+            {
+              "kind": "literal",
+              "sha256": "b826643af34aa3e0d1bcb08e5aa325aed4398fee1379a0f36bfc7fb5fe1ab4b2"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "number",
+              "unit": "g"
+            }
+          ]
+        }
+      ],
+      "request_sha256": "4b84ac3e4717bd4ab379dd7708df5877c5c377d1ea0e15bb8001c8b9c4ca3778",
+      "response_sha256": "50d2de61fe9019bba65d321b6a5ea7ccac944c4c19d7855a5d28cb6f10155074"
+    },
+    {
+      "language": "hi",
+      "input": "Spinach []: ZXQ0QXZ (ZXQ1QXZ), ZXQ2QXZ (ZXQ3QXZ), ZXQ4QXZ (ZXQ5QXZ), ZXQ6QXZ (ZXQ7QXZ), ZXQ8QXZ (ZXQ9QXZ)",
+      "input_sha256": "8cfefab2f564893f6ff4d585203a2706a65d6dcc6407839382cced21e4ebcd48",
+      "output": "पालक []: ZXQ0QXZ (ZXQ1QXZ), ZXQ2QXZ (ZXQ3QXZ), ZXQ4QXZ (ZXQ5QXZ), ZXQ6QXZ (ZXQ7QXZ), ZXQ8QXZ (ZXQ9QXZ)",
+      "output_sha256": "390f13807f6df4a3ae8318683f72302d9ca73a9b2e6a49ea9c105de41934360f",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "4e53168ca467d13b017f462feb7ec108200b9a28571231cc6b1f420dcc195851",
+            "field": "ingredient//0/Paragraph/Runs/0/Text",
+            "revision": "4e53168ca467d13b017f462feb7ec108200b9a28571231cc6b1f420dcc195851",
+            "source": "ingredient-index"
+          },
+          "slots": [
+            {
+              "kind": "literal",
+              "sha256": "c5bc4d44d431ccc325f1943e2bbe32989f855369ee7f669c7b5eb9576da93087"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "b826643af34aa3e0d1bcb08e5aa325aed4398fee1379a0f36bfc7fb5fe1ab4b2"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "adc3d6c8640b93ddcc801049faa919ed800be3bce719e9ca49265794782b60fa"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "7761e05acaf43a45647340d2f8382ba24e0622dc9f00eea82ba893cdb1149a7f"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "970762db8bdeac87232054eb634ac12c16381948e6a17c402ded70a23f9a7d9c"
+            },
+            {
+              "kind": "number"
+            }
+          ]
+        }
+      ],
+      "request_sha256": "4b84ac3e4717bd4ab379dd7708df5877c5c377d1ea0e15bb8001c8b9c4ca3778",
+      "response_sha256": "50d2de61fe9019bba65d321b6a5ea7ccac944c4c19d7855a5d28cb6f10155074"
+    },
+    {
+      "language": "hi",
+      "input": "Oats []: ZXQ0QXZ (ZXQ1QXZ), ZXQ2QXZ (ZXQ3QXZ), ZXQ4QXZ (ZXQ5QXZ), ZXQ6QXZ (ZXQ7QXZ), ZXQ8QXZ (ZXQ9QXZ)",
+      "input_sha256": "98fe24461cd7adb85b558da537e7c3957ecaa252ffd177d83834e4a6a0884cdd",
+      "output": "ओट्स []: ZXQ0QXZ (ZXQ1QXZ), ZXQ2QXZ (ZXQ3QXZ), ZXQ4QXZ (ZXQ5QXZ), ZXQ6QXZ (ZXQ7QXZ), ZXQ8QXZ (ZXQ9QXZ)",
+      "output_sha256": "8c8f933f19da3403bd109cb6adbe3fc24a5d6b1a5bd194b2554f61db14287dd4",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "5bd07b4800a0fb2f6c9ee49cdac663cf43d356c10a81ebee4935cc24f8b74016",
+            "field": "ingredient//0/Paragraph/Runs/0/Text",
+            "revision": "5bd07b4800a0fb2f6c9ee49cdac663cf43d356c10a81ebee4935cc24f8b74016",
+            "source": "ingredient-index"
+          },
+          "slots": [
+            {
+              "kind": "literal",
+              "sha256": "b826643af34aa3e0d1bcb08e5aa325aed4398fee1379a0f36bfc7fb5fe1ab4b2"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "88c10db975ca6e3f6cb3cc8b740e5fcfcde33bb8967ebc27526f7e58b874da82"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "33f9234b604ae41af8be5d40de033198eb892f2c782487b60d56361c54b2dc57"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "499c13acdc75ba2375099e99581a91a45a8376b516735f9bb25cb1c0c8e16eba"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "db0843104e00b401f75d81e7c7bb002ccf07ef3c1dfd7679dc7e71f03fc5ac45"
+            },
+            {
+              "kind": "number"
+            }
+          ]
+        }
+      ],
+      "request_sha256": "4b84ac3e4717bd4ab379dd7708df5877c5c377d1ea0e15bb8001c8b9c4ca3778",
+      "response_sha256": "50d2de61fe9019bba65d321b6a5ea7ccac944c4c19d7855a5d28cb6f10155074"
+    },
+    {
+      "language": "hi",
+      "input": "Sesame oil []: ZXQ0QXZ (ZXQ1QXZ), ZXQ2QXZ (ZXQ3QXZ), ZXQ4QXZ (ZXQ5QXZ), ZXQ6QXZ (ZXQ7QXZ), ZXQ8QXZ (ZXQ9QXZ)",
+      "input_sha256": "c09d35438b57b494d83c9be560317e7e557a5c479de0af43ec6d80ee747cbc0c",
+      "output": "तिल का तेल []: ZXQ0QXZ (ZXQ1QXZ), ZXQ2QXZ (ZXQ3QXZ), ZXQ4QXZ (ZXQ5QXZ), ZXQ6QXZ (ZXQ7QXZ), ZXQ8QXZ (ZXQ9QXZ)",
+      "output_sha256": "f92b27a527aafb5e06619b69184ff5bf2b349ded57efdf7ef8f0b171cea489f1",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "357d578a2b39d8bcba436a06fbc03741281c93a71369e08715f38ca8989fd42e",
+            "field": "ingredient//0/Paragraph/Runs/0/Text",
+            "revision": "357d578a2b39d8bcba436a06fbc03741281c93a71369e08715f38ca8989fd42e",
+            "source": "ingredient-index"
+          },
+          "slots": [
+            {
+              "kind": "literal",
+              "sha256": "74094ce5cafad489034a4e44f6a2a6ab823d88a1137139daa832b0454217807a"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "33f9234b604ae41af8be5d40de033198eb892f2c782487b60d56361c54b2dc57"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "970762db8bdeac87232054eb634ac12c16381948e6a17c402ded70a23f9a7d9c"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "db231fec62b0f81a81746623e7058a9ae73ab9c4ae2ddaea329f3832f9ce17fb"
+            },
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "literal",
+              "sha256": "91cefeb46f5c70883e69e46ada0087278949b03a8c41d3c1b36c7aaa0798d77d"
+            },
+            {
+              "kind": "number"
+            }
+          ]
+        }
+      ],
+      "request_sha256": "4b84ac3e4717bd4ab379dd7708df5877c5c377d1ea0e15bb8001c8b9c4ca3778",
+      "response_sha256": "50d2de61fe9019bba65d321b6a5ea7ccac944c4c19d7855a5d28cb6f10155074"
+    },
+    {
+      "language": "hi",
+      "input": "ZXQ0QXZ. Bhetki: ZXQ1QXZ",
+      "input_sha256": "d93466adfb68e1a6c60d849c7071dd52d4048c1bb82bf7a8e8fd2e6be71b8282",
+      "output": "ZXQ0QXZ. भेटकी: ZXQ1QXZ",
+      "output_sha256": "23727921f7aebe85f46a23a6e8135b83188bd82f4ee3c08e3f7d9ab48a234bce",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "6f8c3760644ec29c7d9b4be1f1bf29aa59b100a81497d39981de966dd3f1ee45",
+            "field": "Ingredient_Names/0/Paragraph/Runs/0/Text",
+            "ordinal": 3,
+            "recipe_id": "MG-R-00111",
+            "revision": "d94f6da3b53bb989340fe316a74deb32a4c6be23020cd9fb3fb396743a2b8513",
+            "source": "provider-recipe"
+          },
+          "slots": [
+            {
+              "kind": "number"
+            },
+            {
+              "kind": "number",
+              "unit": "g"
+            }
+          ]
+        }
+      ],
+      "request_sha256": "4b84ac3e4717bd4ab379dd7708df5877c5c377d1ea0e15bb8001c8b9c4ca3778",
+      "response_sha256": "50d2de61fe9019bba65d321b6a5ea7ccac944c4c19d7855a5d28cb6f10155074"
+    },
+    {
+      "language": "hi",
+      "input": "West Bengal / East India",
+      "input_sha256": "e7749707cee2e3528b3e60a6bdb6b07b1fb0fa5227096b433cf2487a146e7292",
+      "output": "पश्चिम बंगाल / पूर्वी भारत",
+      "output_sha256": "f5e48bc69e82f7d3882cdd8ce6470ede5c1e065a56fd3a5638ac5269042cf618",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "e7749707cee2e3528b3e60a6bdb6b07b1fb0fa5227096b433cf2487a146e7292",
+            "field": "B1-01/Blocks/0/Table/Rows/4/1",
+            "revision": "native-bindings-v1",
+            "source": "builder"
+          },
+          "slots": null
+        },
+        {
+          "owner": {
+            "english_sha256": "e7749707cee2e3528b3e60a6bdb6b07b1fb0fa5227096b433cf2487a146e7292",
+            "field": "B1-06/Blocks/0/Table/Rows/2/1",
+            "revision": "native-bindings-v1",
+            "source": "builder"
+          },
+          "slots": null
+        },
+        {
+          "owner": {
+            "english_sha256": "e7749707cee2e3528b3e60a6bdb6b07b1fb0fa5227096b433cf2487a146e7292",
+            "field": "B2-01/Blocks/0/Table/Rows/4/1",
+            "revision": "native-bindings-v1",
+            "source": "builder"
+          },
+          "slots": null
+        },
+        {
+          "owner": {
+            "english_sha256": "e7749707cee2e3528b3e60a6bdb6b07b1fb0fa5227096b433cf2487a146e7292",
+            "field": "B2-02/Blocks/0/Table/Rows/2/1",
+            "revision": "native-bindings-v1",
+            "source": "builder"
+          },
+          "slots": null
+        }
+      ],
+      "request_sha256": "4b84ac3e4717bd4ab379dd7708df5877c5c377d1ea0e15bb8001c8b9c4ca3778",
+      "response_sha256": "50d2de61fe9019bba65d321b6a5ea7ccac944c4c19d7855a5d28cb6f10155074"
+    },
+    {
+      "language": "hi",
+      "input": "West Bengal Oats & Spinach Soft finger bites",
+      "input_sha256": "ebd7ed7d71a1bbf223af8abe235f15a25cab15333e0a4e6f24aac34b4a3669c3",
+      "output": "पश्चिम बंगाल ओट्स और पालक सॉफ्ट फिंगर बाइट्स",
+      "output_sha256": "a1e1c7140a28478cf6270aae927b627a23c2a520856227b1e75542000b7e1ac5",
+      "owners": [
+        {
+          "owner": {
+            "english_sha256": "ebd7ed7d71a1bbf223af8abe235f15a25cab15333e0a4e6f24aac34b4a3669c3",
+            "field": "index/Recipe_Name/column/1",
+            "recipe_id": "MG-R-00111",
+            "revision": "d94f6da3b53bb989340fe316a74deb32a4c6be23020cd9fb3fb396743a2b8513",
+            "source": "provider-recipe"
+          },
+          "slots": null
+        }
+      ],
+      "request_sha256": "4b84ac3e4717bd4ab379dd7708df5877c5c377d1ea0e15bb8001c8b9c4ca3778",
+      "response_sha256": "50d2de61fe9019bba65d321b6a5ea7ccac944c4c19d7855a5d28cb6f10155074"
     }
   ]
 }
