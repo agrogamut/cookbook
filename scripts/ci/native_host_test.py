@@ -10,6 +10,80 @@ from unittest.mock import patch
 from native_host import DATASETS, FIXTURES, archive_source, fixture_environment, native_command, prepare_external, remove_owned, require_unused_names, select_images, verify_images
 
 
+class LegacyBuilderTest(unittest.TestCase):
+    def setUp(self):
+        self.version = {'Client': {'Version': '29.2.1', 'ApiVersion': '1.52', 'Os': 'linux'},
+                        'Server': {'Version': '29.2.1', 'ApiVersion': '1.52', 'Os': 'linux', 'Arch': 'amd64'}}
+        self.help = 'Usage: docker build\n --cpu-period int\n --memory-swap bytes\n --force-rm\n'
+        self.calls = []
+
+    def runner(self, command, reports, name, timeout, env):
+        self.calls.append((command, env))
+        text = json.dumps(self.version) if command[1] == 'version' else self.help
+        (reports/(name+'.log')).write_text(text)
+        return 0
+
+    def select(self, reports):
+        expected = {'source_sha': 'a'*40, 'lock_sha256': 'b'*64, 'ci_dockerfile_sha256': 'c'*64, 'go_version': '1.26.10'}
+        with patch('native_host.checked', side_effect=['pinned-builder', 'sha256:'+'1'*64, 'sha256:'+'2'*64]), \
+                patch('native_host.verify_images', return_value='verified-image'):
+            return select_images(None, expected, reports, 'fixture', {'DOCKER_BUILDKIT': '1'})
+
+    def test_default_uses_single_measured_builder(self):
+        with tempfile.TemporaryDirectory() as directory, patch('native_host.run', side_effect=self.runner):
+            reports = Path(directory)
+            self.assertEqual(self.select(reports), 'verified-image')
+            builds = [call for call in self.calls if call[0][:2] == ['docker', 'build'] and '--help' not in call[0]]
+            self.assertEqual(len(builds), 2)
+            self.assertTrue(all(env['DOCKER_BUILDKIT'] == '0' for _, env in self.calls))
+            receipt = json.loads((reports/'builder-contract.json').read_text())
+            self.assertEqual(receipt['mode'], 'legacy')
+            self.assertEqual(receipt['client'], self.version['Client'])
+            self.assertEqual(receipt['server'], self.version['Server'])
+            self.assertEqual(receipt['build_execution_verified'], False)
+
+    def test_missing_capabilities_refuse_before_build(self):
+        for failure in ('missing-server', 'wrong-platform', 'missing-flag', 'malformed-json'):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+                self.setUp()
+                if failure == 'missing-server':
+                    del self.version['Server']
+                elif failure == 'wrong-platform':
+                    self.version['Server']['Os'] = 'windows'
+                elif failure == 'missing-flag':
+                    self.help = self.help.replace('--memory-swap', '--different')
+                elif failure == 'malformed-json':
+                    self.version = []
+                with patch('native_host.run', side_effect=self.runner):
+                    with self.assertRaisesRegex(RuntimeError, 'legacy builder'):
+                        self.select(Path(directory))
+                self.assertFalse(any(command[:2] == ['docker', 'build'] and '--help' not in command for command, _ in self.calls))
+
+    def test_unreachable_daemon_or_missing_cli_does_not_fall_back(self):
+        for failed_step in ('docker-version', 'legacy-build-help'):
+            with self.subTest(failed_step=failed_step), tempfile.TemporaryDirectory() as directory:
+                self.calls = []
+                def failed(command, reports, name, timeout, env):
+                    self.runner(command, reports, name, timeout, env)
+                    return 127 if name == failed_step else 0
+                with patch('native_host.run', side_effect=failed):
+                    with self.assertRaisesRegex(RuntimeError, 'legacy builder'):
+                        self.select(Path(directory))
+                self.assertEqual(len(self.calls), 1 if failed_step == 'docker-version' else 2)
+
+    def test_failed_build_stops_without_alternate_builder(self):
+        with tempfile.TemporaryDirectory() as directory:
+            def failed(command, reports, name, timeout, env):
+                self.runner(command, reports, name, timeout, env)
+                return 1 if name == 'runtime-build' else 0
+            with patch('native_host.run', side_effect=failed):
+                with self.assertRaisesRegex(RuntimeError, 'runtime-build failed'):
+                    self.select(Path(directory))
+            self.assertEqual(self.calls[-1][0][:2], ['docker', 'build'])
+            self.assertEqual(len(self.calls), 3)
+            self.assertTrue(all(env['DOCKER_BUILDKIT'] == '0' for _, env in self.calls))
+
+
 class ExistingImageTest(unittest.TestCase):
     def setUp(self):
         self.expected = {'source_sha': 'a'*40, 'lock_sha256': 'b'*64, 'ci_dockerfile_sha256': 'c'*64, 'go_version': '1.26.10'}

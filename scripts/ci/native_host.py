@@ -64,14 +64,43 @@ def verify_images(manifest, expected):
     return manifest['ci_image']
 
 
+def legacy_builder_preflight(reports, env):
+    build_env = dict(env, DOCKER_BUILDKIT='0')
+    for name, command in (
+        ('docker-version', ['docker', 'version', '--format', '{{json .}}']),
+        ('legacy-build-help', ['docker', 'build', '--help']),
+    ):
+        if run(command, reports, name, 30, build_env):
+            raise RuntimeError('legacy builder prerequisite failed: '+name+'; no alternate builder attempted')
+    required = ('--cpu-period', '--memory-swap', '--force-rm')
+    try:
+        version = json.loads((reports/'docker-version.log').read_text())
+        if not isinstance(version, dict):
+            raise ValueError('invalid Docker version response')
+        client, server = version.get('Client'), version.get('Server')
+        if not all(isinstance(part, dict) and part.get('Os') == 'linux'
+                   and all(isinstance(part.get(key), str) and part[key] for key in ('Version', 'ApiVersion'))
+                   for part in (client, server)) or server.get('Arch') != 'amd64':
+            raise ValueError('Linux client and reachable amd64 daemon required')
+        help_text = (reports/'legacy-build-help.log').read_text()
+        if not all(re.search(r'(?m)^\s+'+re.escape(flag)+r'(?:\s|$)', help_text) for flag in required):
+            raise ValueError('classic build CLI flags unavailable')
+    except (OSError, ValueError) as error:
+        raise RuntimeError('legacy builder capability check failed; no alternate builder attempted') from error
+    receipt = {'mode': 'legacy', 'DOCKER_BUILDKIT': '0', 'client': client, 'server': server,
+               'required_cli_flags': required, 'build_execution_verified': False}
+    (reports/'builder-contract.json').write_text(json.dumps(receipt, indent=2)+'\n')
+    return build_env
+
+
 def select_images(prepared, expected, reports, token, env):
     if prepared is not None:
         return verify_images(prepared, expected)
+    build_env = legacy_builder_preflight(reports, env)
     runtime, tests = 'recipe-native:'+token, 'recipe-native-tests:'+token
     toolchain = checked(['python3', '-B', 'docker/pdf_runtime_lock_test.py', '--get', 'BUILD_IMAGE'])
     labels = ['--label', 'org.opencontainers.image.revision='+expected['source_sha'],
               '--label', 'recipe.runtime.lock='+expected['lock_sha256']]
-    build_env = dict(env, DOCKER_BUILDKIT='1')
     commands = [
         ('runtime-build', ['docker', 'build', '--platform=linux/amd64', *labels, '-t', runtime, '.']),
         ('test-runtime-build', ['docker', 'build', '--platform=linux/amd64', *labels,
