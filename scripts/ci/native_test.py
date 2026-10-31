@@ -1,15 +1,16 @@
 import json
 from pathlib import Path
 import tempfile
+import sys
 import unittest
 from unittest.mock import patch
 
 import native
-from check import environment
+from check import environment, run as run_child
 
 
 class NativeCommandTest(unittest.TestCase):
-    def invoke(self, fixture_exit=0, full_exit=0, complete_events=True):
+    def invoke(self, fixture_exit=0, full_exit=0, complete_events=True, actual_child=False, stdout_extra=''):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             reports = root/'reports'
@@ -36,13 +37,20 @@ class NativeCommandTest(unittest.TestCase):
                     return 'example/package\n'
                 return 'version fixture'
 
-            def run(command, destination, name, timeout, values):
-                calls.append((command, name, timeout, dict(values)))
+            def run(command, destination, name, timeout, values, **kwargs):
+                calls.append((command, name, timeout, dict(values), kwargs))
                 self.assertEqual(destination, reports)
                 if name == 'fixtures':
+                    self.assertEqual(kwargs, {})
                     return fixture_exit
                 self.assertEqual(name, 'native-full')
-                (reports/'native-full.log').write_text(json.dumps({'Action': 'pass', 'Package': 'example/package'})+'\n')
+                self.assertEqual(kwargs, {'stderr_path': reports/'native-full.stderr.log'})
+                output = json.dumps({'Action': 'pass', 'Package': 'example/package'})+'\n'+stdout_extra
+                if actual_child:
+                    script = 'import os; os.write(1, '+repr(output.encode())+'); os.write(2, b"go: downloading example/module v1.0.0\\n"); raise SystemExit('+str(full_exit)+')'
+                    return run_child([sys.executable, '-c', script], reports, name, 5, values, **kwargs)
+                (reports/'native-full.log').write_text(output)
+                kwargs['stderr_path'].write_text('go: downloading example/module v1.0.0\n')
                 return full_exit
 
             validator = native.validate
@@ -60,13 +68,24 @@ class NativeCommandTest(unittest.TestCase):
         result, calls, validation, receipt = self.invoke()
         self.assertEqual(result, 0)
         self.assertEqual(len(calls), 2)
-        command, name, timeout, env = calls[1]
+        command, name, timeout, env, kwargs = calls[1]
         self.assertEqual(command, ['go', 'test', '-p=1', '-json', '-count=1', '-timeout=45m', './...'])
         self.assertEqual((name, timeout), ('native-full', 3300))
         self.assertEqual((env['GOFLAGS'], env['GOMAXPROCS']), ('-p=2', '2'))
         self.assertEqual((env['BOOKDOCX_INTEGRATION'], env['BOOK_READER_NATIVE'], env['CGO_ENABLED']), ('1', '1', '0'))
         self.assertEqual(validation.args[1:], (0, ['example/package']))
         self.assertEqual(receipt['errors'], [])
+
+    def test_actual_child_diagnostics_do_not_enter_json_stream(self):
+        result, calls, validation, receipt = self.invoke(actual_child=True)
+        self.assertEqual(result, 0)
+        self.assertEqual(receipt['errors'], [])
+        self.assertEqual(validation.args[0], [{'Action': 'pass', 'Package': 'example/package'}])
+
+    def test_actual_child_unknown_stdout_is_rejected(self):
+        result, calls, validation, receipt = self.invoke(actual_child=True, stdout_extra='unexpected stdout\n')
+        self.assertEqual(result, 1)
+        self.assertIn('non-JSON command output retained in native-full.log', receipt['errors'])
 
     def test_fixture_failure_prevents_full_command(self):
         result, calls, validation, receipt = self.invoke(fixture_exit=7)
@@ -77,7 +96,7 @@ class NativeCommandTest(unittest.TestCase):
         self.assertIsNone(receipt)
 
     def test_full_failure_reaches_event_validation(self):
-        result, calls, validation, receipt = self.invoke(full_exit=7, complete_events=False)
+        result, calls, validation, receipt = self.invoke(full_exit=7, complete_events=False, actual_child=True)
         self.assertEqual(result, 1)
         self.assertEqual(len(calls), 2)
         self.assertEqual(validation.args[1], 7)
