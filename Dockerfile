@@ -6,7 +6,8 @@
 # ingredient name is worse than one that is absent. No browser means /books/*.pdf returns 503
 # rather than printing something subtly wrong.
 
-FROM golang:1.26-bookworm AS build
+FROM --platform=linux/amd64 golang:1.26.10-bookworm@sha256:2bba1f6b063d0e09c5297fbd0a7b9664c4931afc4476a779d7c9a3062704f949 AS build
+ENV GOTOOLCHAIN=local
 WORKDIR /src
 
 # Dependencies first, so a source-only change does not re-download the module cache.
@@ -24,34 +25,39 @@ RUN go build -o /out/server ./cmd/server && \
     go build -o /out/staff-admin ./cmd/staff-admin && \
     go clean -cache
 
-FROM debian:bookworm-slim
+FROM --platform=linux/amd64 debian:bookworm-slim@sha256:a3bba7dc7dbcc1f37c2856c51fc9a7fac96608f50cb87b1b4e4d8b8c85ae988e
 WORKDIR /app
 
-# fonts-noto-core carries Bengali. Without it Chromium has no glyphs for the ingredient names
-# and prints boxes -- which looks like a rendering bug and is really a missing font, so it is
-# installed explicitly rather than being inherited from whatever the base image happens to
-# ship. fonts-noto-color-emoji is deliberately not installed: nothing in these books uses one.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        chromium \
-        curl \
-        libreoffice-writer \
-        poppler-utils \
-        qpdf \
-        fontconfig \
-        util-linux \
-        fonts-noto-core \
-        ca-certificates \
-    && test "$(fc-match -f "%{family}" "Noto Sans Bengali")" = "Noto Sans Bengali" \
-    && test "$(fc-match -f "%{family}" "Noto Serif Bengali")" = "Noto Serif Bengali" \
-    && rm -rf /var/lib/apt/lists/*
+# The pinned builder supplies trusted certificates before the runtime installs its own.
+COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY docker/pdf-runtime.lock /usr/local/share/pdf-runtime.lock
+RUN set -eu; \
+    . /usr/local/share/pdf-runtime.lock; \
+    test "$(dpkg --print-architecture)" = amd64; \
+    rm -f /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources; \
+    printf '%s\n' "$APT_SOURCES" > /etc/apt/sources.list.d/pdf-runtime.list; \
+    apt-get update; \
+    (cd /var/lib/apt/lists && printf '%s\n' "$APT_RELEASE_SHA256" | sha256sum -c -); \
+    apt-get install -y --no-install-recommends $APT_PACKAGES; \
+    dpkg-query -W -f='${binary:Package}\t${Version}\n' > /tmp/pdf-runtime.packages; \
+    LC_ALL=C sort /tmp/pdf-runtime.packages > /tmp/pdf-runtime.sorted; \
+    printf '%s\n' "$DEBIAN_PACKAGE_SET" > /tmp/pdf-runtime.expected; \
+    diff -u /tmp/pdf-runtime.expected /tmp/pdf-runtime.sorted; \
+    printf '%s  %s\n' "$DEBIAN_PACKAGE_SET_SHA256" /tmp/pdf-runtime.sorted | sha256sum -c -; \
+    printf '%s\n' "$SYSTEM_FONT_SHA256" | sha256sum -c -; \
+    test "$(chromium --version)" = "$CHROMIUM_VERSION"; \
+    test "$(fc-match -f "%{family}" "Noto Sans Bengali")" = "Noto Sans Bengali"; \
+    test "$(fc-match -f "%{family}" "Noto Serif Bengali")" = "Noto Serif Bengali"; \
+    rm -rf /var/lib/apt/lists/* /tmp/pdf-runtime.packages /tmp/pdf-runtime.sorted /tmp/pdf-runtime.expected
 
 # Debian's Writer 7.4 drops the supplied Bengali reference cell's tail and upload.
 RUN set -eu; \
+    . /usr/local/share/pdf-runtime.lock; \
     test "$(dpkg --print-architecture)" = amd64; \
     curl --fail --silent --show-error --max-time 180 --proto '=https' \
-        https://downloadarchive.documentfoundation.org/libreoffice/old/26.2.1.2/deb/x86_64/LibreOffice_26.2.1.2_Linux_x86-64_deb.tar.gz \
+        "$WRITER_URL" \
         -o /tmp/libreoffice.tar.gz; \
-    echo '9807363c8fabf79fc3562f606ce1673c4b29c3c53baca513f84e762845a093b2  /tmp/libreoffice.tar.gz' | sha256sum -c -; \
+    printf '%s  %s\n' "$WRITER_SHA256" /tmp/libreoffice.tar.gz | sha256sum -c -; \
     mkdir /tmp/libreoffice; \
     tar -xzf /tmp/libreoffice.tar.gz -C /tmp/libreoffice; \
     tdf_dir=/tmp/libreoffice/LibreOffice_26.2.1.2_Linux_x86-64_deb/DEBS; \
@@ -68,11 +74,11 @@ RUN set -eu; \
 
 # Native conversion uses the same hashed font bytes as the embedded renderer.
 COPY internal/bookdocx/fonts/ /usr/share/fonts/bookdocx/
-RUN cd /usr/share/fonts/bookdocx && sha256sum -c SHA256SUMS \
+RUN . /usr/local/share/pdf-runtime.lock && cd /usr/share/fonts/bookdocx && sha256sum -c SHA256SUMS \
     && test "$(fc-scan --format '%{family}' NotoSans-Regular.ttf)" = "Noto Sans" \
     && test "$(fc-scan --format '%{family}' NotoSansBengali-Regular.ttf)" = "Noto Sans Bengali" \
     && test "$(fc-scan --format '%{family}' NotoSansDevanagari-Regular.ttf)" = "Noto Sans Devanagari" \
-    && test "$(libreoffice --headless --version)" = "LibreOffice 26.2.1.2 8399f6259d8c87f40e7255cdb3c9b958f5e08948" \
+    && test "$(libreoffice --headless --version)" = "$WRITER_VERSION" \
     && command -v pdffonts && command -v prlimit
 
 # staff-admin creates the first administrator. It ships in the image because there is no
