@@ -33,7 +33,7 @@ def main():
         return 1
     packages = subprocess.check_output(['go', 'list', './...'], env=env, text=True, timeout=120).splitlines()
     (reports/'packages.txt').write_text('\n'.join(packages)+'\n')
-    code = run(['go', 'test', '-json', '-count=1', '-timeout=45m', './...'], reports, 'native-full', 3300, env)
+    code = run(['go', 'test', '-p=1', '-json', '-count=1', '-timeout=45m', './...'], reports, 'native-full', 3300, env)
     events, invalid = [], []
     for line in (reports/'native-full.log').read_text().splitlines():
         if not line.strip():
