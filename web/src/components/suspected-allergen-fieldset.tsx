@@ -42,8 +42,10 @@ export function SuspectedAllergenFieldset({
               disabled={isDeclared}
               onClick={() => { if (!isDeclared) onToggle(a.allergen_group); }}
               title={isDeclared
-                ? "Already declared as a confirmed allergen; the hard filter covers it"
-                : a.note}
+                ? "Already declared as a confirmed allergen; use its confirmed control above."
+                : a.screens
+                  ? `Legacy corpus tag: ${a.corpus_tag}. ${a.note}`
+                  : `No direct legacy corpus tag is mapped for this group. Ingredient overrides and current case-source policies may provide screening evidence; coverage is incomplete. Legacy tag mapping note: ${a.note}`}
               aria-pressed={on}
               className="focus-visible:ring-ring rounded focus-visible:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -52,16 +54,16 @@ export function SuspectedAllergenFieldset({
                 className={a.screens ? "" : "border-dashed opacity-70"}
               >
                 {a.allergen_group}
-                {!a.screens && " - not screened"}
+                {!a.screens && " - legacy tag gap"}
               </Badge>
             </button>
           );
         })}
       </div>
       <p className="text-xs text-muted-foreground">
-        Suspected allergens are ranked down and never excluded - the provider&apos;s AS-002
+        Known matches to suspected allergens rank down without exclusion. The provider&apos;s AS-002
         marks a suspected allergy <span className="font-mono">hard_block = N</span>. For a
-        confirmed allergy use Declared allergens above, which is a hard filter.
+        confirmed allergy use Declared allergens above, which applies the hard filter.
       </p>
       {anyDeclared && (
         <p className="text-xs text-muted-foreground">

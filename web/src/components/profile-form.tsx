@@ -289,7 +289,9 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
                         key={a.allergen_group}
                         type="button"
                         onClick={() => toggleAllergen(a.allergen_group)}
-                        title={a.note}
+                        title={a.screens
+                          ? `Legacy corpus tag: ${a.corpus_tag}. ${a.note}`
+                          : `No direct legacy corpus tag is mapped for this group. Ingredient overrides and current case-source policies may provide screening evidence; coverage is incomplete. Legacy tag mapping note: ${a.note}`}
                         aria-pressed={on}
                         className="focus-visible:ring-ring rounded focus-visible:outline-none focus-visible:ring-2"
                       >
@@ -298,15 +300,16 @@ export function ProfileForm({ onSubmit, loading }: ProfileFormProps) {
                           className={a.screens ? "" : "border-dashed opacity-70"}
                         >
                           {a.allergen_group}
-                          {!a.screens && " - not screened"}
+                          {!a.screens && " - legacy tag gap"}
                         </Badge>
                       </button>
                     );
                   })}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Dashed groups have no tag anywhere in the corpus. They stay selectable so the
-                  allergy can be recorded, and every result is labelled unscreened for them.
+                  Dashed groups lack a direct legacy corpus tag. Ingredient overrides and current
+                  case-source policies provide separate screening evidence. Tag coverage is incomplete;
+                  check recipe ingredients, source evidence and result warnings.
                 </p>
               </fieldset>
 

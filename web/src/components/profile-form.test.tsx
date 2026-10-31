@@ -1,6 +1,7 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { ProfileForm } from "./profile-form";
+import { getAllergens } from "@/lib/api";
 
 // ProfileForm loads six reference vocabularies on mount. Mocking the whole api module
 // keeps the test off the network; the empty arrays are the honest shape for "the
@@ -18,6 +19,43 @@ vi.mock("@/lib/api", () => ({
 describe("ProfileForm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(getAllergens).mockResolvedValue([]);
+  });
+
+  it("scopes legacy tag gaps without claiming ingredient screening is absent", async () => {
+    const legacyNote = "no recipe or ingredient in the corpus carries this tag; genuinely absent, not a naming mismatch";
+    vi.mocked(getAllergens).mockResolvedValue([
+      { allergen_group: "Mustard", corpus_tag: null, screens: false, note: legacyNote },
+      { allergen_group: "Milk", corpus_tag: "Milk", screens: true, note: "exact match" },
+    ]);
+    render(<ProfileForm onSubmit={() => {}} loading={false} />);
+    const declared = within(screen.getByRole("group", { name: "Declared allergens" }));
+    const mustard = await declared.findByRole("button", { name: "Mustard - legacy tag gap" });
+    expect(mustard).toHaveAttribute("title", expect.stringContaining("Ingredient overrides and current case-source policies may provide screening evidence"));
+    expect(mustard).toHaveAttribute("title", expect.stringContaining(`Legacy tag mapping note: ${legacyNote}`));
+    expect(within(mustard).getByText("Mustard - legacy tag gap")).toHaveClass("border-dashed");
+    expect(declared.getByRole("button", { name: "Milk" })).toHaveAttribute("title", "Legacy corpus tag: Milk. exact match");
+    expect(declared.getByText(/Tag coverage is incomplete/)).toBeInTheDocument();
+    expect(screen.queryByText(/no tag anywhere|every result is labelled unscreened/)).not.toBeInTheDocument();
+  });
+
+  it("submits canonical confirmed and suspected values despite coverage labels", async () => {
+    vi.mocked(getAllergens).mockResolvedValue([
+      { allergen_group: "Mustard", corpus_tag: null, screens: false, note: "legacy note" },
+      { allergen_group: "Milk", corpus_tag: "Milk", screens: true, note: "exact match" },
+    ]);
+    const onSubmit = vi.fn();
+    render(<ProfileForm onSubmit={onSubmit} loading={false} />);
+    const declared = within(screen.getByRole("group", { name: "Declared allergens" }));
+    const suspected = within(screen.getByRole("group", { name: "Suspected allergens" }));
+    fireEvent.click(await declared.findByRole("button", { name: "Mustard - legacy tag gap" }));
+    expect(suspected.getByRole("button", { name: "Mustard - legacy tag gap" })).toBeDisabled();
+    fireEvent.click(suspected.getByRole("button", { name: "Milk" }));
+    fireEvent.change(screen.getByLabelText(/age \(months\)/i), { target: { value: "9" } });
+    fireEvent.click(screen.getByRole("button", { name: /search/i }));
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      age_months: 9, allergens: ["Mustard"], suspected_allergens: ["Milk"],
+    })));
   });
 
   it("shows the age field without any interaction", async () => {
