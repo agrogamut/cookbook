@@ -60,11 +60,7 @@ func TestPrescriptionMixedScriptNativeFonts(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			latinFamily := "Poppins"
-			if language == "bn" {
-				latinFamily = "NotoSans"
-			}
-			assertMixedScriptPDFFonts(t, pdf, latinFamily)
+			assertMixedScriptPDFFonts(t, pdf, "Poppins")
 		})
 	}
 }

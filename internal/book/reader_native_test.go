@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -164,6 +165,109 @@ func TestReaderMixedScriptNativeFonts(t *testing.T) {
 	}
 }
 
+type readerPDFWord struct {
+	Text string  `xml:",chardata"`
+	X    float64 `xml:"xMin,attr"`
+	Y    float64 `xml:"yMin,attr"`
+}
+
+func readerFixedTableHeaderMeasure(words []readerPDFWord, first readerPDFWord, secondHeader string) (float64, error) {
+	compact := func(s string) string { return strings.Join(strings.Fields(norm.NFC.String(s)), "") }
+	target := compact(secondHeader)
+	if target == "" {
+		return 0, fmt.Errorf("empty source second header")
+	}
+	var row []readerPDFWord
+	for _, word := range words {
+		if math.Abs(word.Y-first.Y) < 1 && word.X > first.X+5 && compact(word.Text) != "" {
+			row = append(row, word)
+		}
+	}
+	// Poppler can emit a raised Bengali glyph before the word to its left.
+	sort.SliceStable(row, func(i, j int) bool { return row[i].X < row[j].X })
+	var origin float64
+	matches := 0
+	for i := range row {
+		text := ""
+		for _, word := range row[i:] {
+			text = compact(text + word.Text)
+			if text == target {
+				origin = row[i].X
+				matches++
+				break
+			}
+			if !strings.HasPrefix(target, text) {
+				break
+			}
+		}
+	}
+	if matches != 1 {
+		return 0, fmt.Errorf("source second header %q has %d matching origins", secondHeader, matches)
+	}
+	delta := origin - first.X
+	// Original first-cell measure is 26% of 170mm plus its 3mm right padding.
+	if math.Abs(delta-(170*.26+3)*72/25.4) > .75 {
+		return delta, fmt.Errorf("source table column measure changed: %.3fpt", delta)
+	}
+	return delta, nil
+}
+
+func TestReaderFixedTableHeaderMeasure(t *testing.T) {
+	first := readerPDFWord{Text: "নং", X: 56.999998, Y: 406.581276}
+	words := []readerPDFWord{
+		first,
+		{Text: "সাধারণ", X: 190.792965, Y: 406.581276},
+		{Text: "প্র", X: 233.497862, Y: 406.581276},
+		{Text: "শ্", X: 243.738721, Y: 406.581276},
+		{Text: "ন", X: 245.545377, Y: 405.918399},
+	}
+	shifted := append([]readerPDFWord(nil), words...)
+	for i := 1; i < len(shifted); i++ {
+		shifted[i].X += 3
+	}
+	duplicate := append([]readerPDFWord(nil), words...)
+	for _, word := range words[1:] {
+		word.X += 100
+		duplicate = append(duplicate, word)
+	}
+	for _, tt := range []struct {
+		name   string
+		words  []readerPDFWord
+		header string
+		err    string
+	}{
+		{"poppler22_reordered_glyph", []readerPDFWord{words[0], words[4], words[1], words[2], words[3]}, "সাধারণ প্রশ্ন", ""},
+		{"poppler26_word_order", []readerPDFWord{words[0], words[1], words[2], words[4], words[3]}, "সাধারণ প্রশ্ন", ""},
+		{"fragmented_source_header", []readerPDFWord{
+			first,
+			{Text: "রণ", X: 218.792965, Y: first.Y},
+			words[4],
+			{Text: "সা", X: 190.792965, Y: first.Y},
+			words[3],
+			{Text: "ধা", X: 207.792965, Y: first.Y},
+			words[2],
+		}, "সাধারণ প্রশ্ন", ""},
+		{"unrelated_nearer_word", append([]readerPDFWord{first, {Text: "unrelated", X: 100, Y: first.Y}}, words[1:]...), "সাধারণ প্রশ্ন", ""},
+		{"shifted_column_rejected", shifted, "সাধারণ প্রশ্ন", "source table column measure changed"},
+		{"missing_source_fragment_rejected", words[:4], "সাধারণ প্রশ্ন", "has 0 matching origins"},
+		{"wrong_source_header_rejected", words, "Different source header", "has 0 matching origins"},
+		{"duplicate_source_header_rejected", duplicate, "সাধারণ প্রশ্ন", "has 2 matching origins"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			delta, err := readerFixedTableHeaderMeasure(tt.words, first, tt.header)
+			if tt.err != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.err) {
+					t.Fatalf("got delta %.6f, error %v; want %q", delta, err, tt.err)
+				}
+				return
+			}
+			if err != nil || math.Abs(delta-133.792967) > .000001 {
+				t.Fatalf("got delta %.6f, error %v; want saved source-header delta 133.792967", delta, err)
+			}
+		})
+	}
+}
+
 func TestReaderFixedTableNativeContinuation(t *testing.T) {
 	if os.Getenv("BOOK_READER_NATIVE") != "1" {
 		t.Skip("set BOOK_READER_NATIVE=1 for actual fixed-table continuation")
@@ -216,33 +320,27 @@ func TestReaderFixedTableNativeContinuation(t *testing.T) {
 					}
 					var positioned struct {
 						Pages []struct {
-							Words []struct {
-								Text string  `xml:",chardata"`
-								X    float64 `xml:"xMin,attr"`
-								Y    float64 `xml:"yMin,attr"`
-							} `xml:"word"`
+							Words []readerPDFWord `xml:"word"`
 						} `xml:"body>doc>page"`
 					}
 					if err := xml.Unmarshal(bbox, &positioned); err != nil {
 						t.Fatal(err)
 					}
 					firstLabel := paragraph(node.Table.Rows[0].Cells[0][0])
+					var secondLabel strings.Builder
+					for _, p := range node.Table.Rows[0].Cells[1] {
+						secondLabel.WriteString(paragraph(p))
+					}
 					measured := 0
 					for _, page := range positioned.Pages {
-						for i, word := range page.Words {
+						for _, word := range page.Words {
 							if compact(word.Text) != firstLabel {
 								continue
 							}
-							for _, next := range page.Words[i+1:] {
-								if math.Abs(next.Y-word.Y) < 1 && next.X > word.X+5 {
-									// Original first-cell measure is 26% of 170mm plus its 3mm right padding.
-									if math.Abs(next.X-word.X-(170*.26+3)*72/25.4) > .75 {
-										t.Fatalf("source table column measure changed: %.3fpt", next.X-word.X)
-									}
-									measured++
-									break
-								}
+							if _, err := readerFixedTableHeaderMeasure(page.Words, word, secondLabel.String()); err != nil {
+								t.Fatal(err)
 							}
+							measured++
 						}
 					}
 					if measured == 0 {
