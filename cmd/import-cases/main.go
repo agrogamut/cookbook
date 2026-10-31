@@ -37,11 +37,25 @@ func execute(ctx context.Context, args []string, output io.Writer) error {
 	check := flags.Bool("check", false, "validate source bytes without connecting to a database")
 	activate := flags.Bool("activate", false, "explicitly activate v1 or the accepted final-source contract; no production connection is implicit")
 	details := flags.Bool("details", false, "include per-row v2 validation findings in JSON output")
+	triage := flags.Bool("triage", false, "with -check, report per-recipe source gaps without database access")
+	providerReport := flags.String("provider-report", "", "optional hash-bound provider intake observation for -triage")
+	corrections := flags.String("corrections", "", "with -check, validate a nonactivating source-correction-v1 manifest")
+	candidatePath := flags.String("candidate-archive", "", "candidate ZIP required by -corrections; never imported")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 {
 		return fmt.Errorf("unexpected positional arguments")
+	}
+	checkOnly := *triage || *corrections != "" || *candidatePath != "" || *providerReport != ""
+	if checkOnly && (!*check || *activate) {
+		return fmt.Errorf("triage/correction paths require -check and forbid -activate")
+	}
+	if (*corrections == "") != (*candidatePath == "") {
+		return fmt.Errorf("-corrections and -candidate-archive must be supplied together")
+	}
+	if *providerReport != "" && !*triage {
+		return fmt.Errorf("-provider-report requires -triage")
 	}
 	if !*check && *databaseURL == "" {
 		return fmt.Errorf("-database-url is required for staging import")
@@ -72,6 +86,46 @@ func execute(ctx context.Context, args []string, output io.Writer) error {
 	i, err := casesource.ParseIntake(ctx, b, baseline)
 	if err != nil {
 		return err
+	}
+	if checkOnly {
+		result := map[string]any{}
+		if *triage {
+			var provider []byte
+			if *providerReport != "" {
+				provider, err = readCheckFile(*providerReport, 16<<20)
+				if err != nil {
+					return err
+				}
+			}
+			r, err := casesource.Triage(ctx, i, provider)
+			if err != nil {
+				return err
+			}
+			if *corrections != "" {
+				r.CorrectionInput = "supplied_for_nonactivating_validation"
+			}
+			result["triage"] = r
+		}
+		if *corrections != "" {
+			manifest, err := readCheckFile(*corrections, casesource.MaxCorrectionBytes)
+			if err != nil {
+				return err
+			}
+			candidateBytes, err := readCheckFile(*candidatePath, casesource.MaxArchiveBytes)
+			if err != nil {
+				return err
+			}
+			candidate, err := casesource.ParseIntake(ctx, candidateBytes, baseline)
+			if err != nil {
+				return fmt.Errorf("candidate archive: %w", err)
+			}
+			validation, err := casesource.ValidateCorrections(ctx, i, candidate, manifest)
+			if err != nil {
+				return err
+			}
+			result["correction_validation"] = validation
+		}
+		return json.NewEncoder(output).Encode(result)
 	}
 	report := i.Report
 	if !*details {
@@ -125,4 +179,23 @@ func execute(ctx context.Context, args []string, output io.Writer) error {
 		return err
 	}
 	return nil
+}
+
+func readCheckFile(path string, limit int64) ([]byte, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open check input: %w", err)
+	}
+	b, readErr := io.ReadAll(io.LimitReader(f, limit+1))
+	closeErr := f.Close()
+	if readErr != nil {
+		return nil, fmt.Errorf("read check input: %w", readErr)
+	}
+	if closeErr != nil {
+		return nil, fmt.Errorf("close check input: %w", closeErr)
+	}
+	if len(b) == 0 || int64(len(b)) > limit {
+		return nil, fmt.Errorf("check input must contain 1..%d bytes", limit)
+	}
+	return b, nil
 }
