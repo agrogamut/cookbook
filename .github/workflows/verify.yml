@@ -1,0 +1,104 @@
+name: Verify source and native output
+on:
+  push:
+    branches: [main, book-renderer, 'ao/**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  go-native:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 95
+    defaults:
+      run:
+        shell: fish {0}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Provision host Fish
+        shell: python3 {0}
+        run: |
+          import subprocess
+          subprocess.run(['sudo', 'apt-get', 'update'], check=True, timeout=120)
+          subprocess.run(['sudo', 'apt-get', 'install', '-y', '--no-install-recommends', 'fish'], check=True, timeout=120)
+      - name: Validate runtime contract
+        id: runtime
+        run: |
+          python3 -B docker/pdf_runtime_lock_test.py
+          or exit $status
+          printf 'go-version=%s\n' (python3 -B docker/pdf_runtime_lock_test.py --get GO_VERSION) >> $GITHUB_OUTPUT
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: ${{ steps.runtime.outputs.go-version }}
+          cache: false
+      - name: Check verification tools
+        run: |
+          python3 -B -m unittest discover -s scripts/ci -p '*_test.py' -v
+          or exit $status
+          mkdir -p $RUNNER_TEMP/source-reports
+          python3 scripts/ci/check.py --reports $RUNNER_TEMP/source-reports --name build --timeout 600 -- go build ./...
+          or exit $status
+          python3 scripts/ci/check.py --reports $RUNNER_TEMP/source-reports --name vet --timeout 600 -- go vet ./...
+          or exit $status
+          command -v cc
+          or exit $status
+          python3 scripts/ci/check.py --reports $RUNNER_TEMP/source-reports --name focused-race --timeout 600 -- go test -race -json -count=1 -run 'TestNative(Fallback|Identity)' ./internal/book
+      - name: Provision and run native suite
+        run: python3 -B scripts/ci/native_host.py
+      - name: Retain actual verification output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: go-native-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/source-reports/
+            ${{ runner.temp }}/recipe-ci-*/reports/
+          if-no-files-found: error
+          retention-days: 14
+  frontend:
+    needs: go-native
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: fish {0}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Provision host Fish
+        shell: python3 {0}
+        run: |
+          import subprocess
+          subprocess.run(['sudo', 'apt-get', 'update'], check=True, timeout=120)
+          subprocess.run(['sudo', 'apt-get', 'install', '-y', '--no-install-recommends', 'fish'], check=True, timeout=120)
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22.22.0'
+      - name: Locked frontend checks
+        run: |
+          npm install --global pnpm@10.18.0
+          or exit $status
+          mkdir -p $RUNNER_TEMP/frontend-reports
+          cd web
+          python3 ../scripts/ci/check.py --reports $RUNNER_TEMP/frontend-reports --name install --timeout 600 -- pnpm install --frozen-lockfile --store-dir $RUNNER_TEMP/pnpm-store
+          or exit $status
+          python3 ../scripts/ci/check.py --reports $RUNNER_TEMP/frontend-reports --name test --timeout 300 -- pnpm test --maxWorkers=2
+          or exit $status
+          python3 ../scripts/ci/check.py --reports $RUNNER_TEMP/frontend-reports --name lint --timeout 300 -- pnpm lint
+          or exit $status
+          python3 ../scripts/ci/check.py --reports $RUNNER_TEMP/frontend-reports --name build --timeout 600 -- pnpm build --webpack
+          or exit $status
+          python3 ../scripts/ci/check.py --reports $RUNNER_TEMP/frontend-reports --name types --timeout 300 -- pnpm exec tsc --noEmit
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: frontend-${{ github.sha }}
+          path: ${{ runner.temp }}/frontend-reports/
+          if-no-files-found: error
+          retention-days: 14
