@@ -171,6 +171,23 @@ type readerPDFWord struct {
 	Y    float64 `xml:"yMin,attr"`
 }
 
+func readerFixedTableHeaderOrigin(words []readerPDFWord, firstHeader string) (readerPDFWord, error) {
+	compact := func(s string) string { return strings.Join(strings.Fields(norm.NFC.String(s)), "") }
+	var origin readerPDFWord
+	matches := 0
+	for _, word := range words {
+		// The unindented fixture table starts at the configured 20mm page margin.
+		if compact(word.Text) == compact(firstHeader) && math.Abs(word.X-20*72/25.4) <= .75 {
+			origin = word
+			matches++
+		}
+	}
+	if matches != 1 {
+		return readerPDFWord{}, fmt.Errorf("source first-column header %q has %d matching origins", firstHeader, matches)
+	}
+	return origin, nil
+}
+
 func readerFixedTableHeaderMeasure(words []readerPDFWord, first readerPDFWord, secondHeader string) (float64, error) {
 	compact := func(s string) string { return strings.Join(strings.Fields(norm.NFC.String(s)), "") }
 	target := compact(secondHeader)
@@ -268,6 +285,48 @@ func TestReaderFixedTableHeaderMeasure(t *testing.T) {
 	}
 }
 
+func TestReaderFixedTableHeaderRole(t *testing.T) {
+	first := readerPDFWord{Text: "পর্ব", X: 56.999998, Y: 356.331278}
+	second := readerPDFWord{Text: "বিষয়", X: 190.792965, Y: first.Y}
+	body := readerPDFWord{Text: "পর্ব", X: 513.196211, Y: 513.831271}
+	for _, tt := range []struct {
+		name  string
+		words []readerPDFWord
+		err   string
+	}{
+		{"saved_body_label_collision", []readerPDFWord{first, second, body}, ""},
+		{"reordered_body_before_header", []readerPDFWord{body, second, first}, ""},
+		{"fragmented_second_header", []readerPDFWord{
+			body, first,
+			{Text: "য়", X: 208, Y: first.Y},
+			{Text: "বি", X: second.X, Y: first.Y},
+			{Text: "ষ", X: 202, Y: first.Y},
+		}, ""},
+		{"missing_first_column_header_rejected", []readerPDFWord{second, body}, "first-column header \"পর্ব\" has 0 matching origins"},
+		{"missing_second_header_rejected", []readerPDFWord{first, body}, "second header \"বিষয়\" has 0 matching origins"},
+		{"ambiguous_first_column_header_rejected", []readerPDFWord{first, first, second, body}, "first-column header \"পর্ব\" has 2 matching origins"},
+		{"shifted_second_column_rejected", []readerPDFWord{first, {Text: second.Text, X: second.X + 3, Y: second.Y}, body}, "source table column measure changed"},
+		{"shifted_first_column_rejected", []readerPDFWord{{Text: first.Text, X: first.X + 3, Y: first.Y}, second, body}, "first-column header \"পর্ব\" has 0 matching origins"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			origin, err := readerFixedTableHeaderOrigin(tt.words, "পর্ব")
+			var delta float64
+			if err == nil {
+				delta, err = readerFixedTableHeaderMeasure(tt.words, origin, "বিষয়")
+			}
+			if tt.err != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.err) {
+					t.Fatalf("got delta %.6f, error %v; want %q", delta, err, tt.err)
+				}
+				return
+			}
+			if err != nil || math.Abs(delta-133.792967) > .000001 {
+				t.Fatalf("got delta %.6f, error %v; want saved source-header delta 133.792967", delta, err)
+			}
+		})
+	}
+}
+
 func TestReaderFixedTableNativeContinuation(t *testing.T) {
 	if os.Getenv("BOOK_READER_NATIVE") != "1" {
 		t.Skip("set BOOK_READER_NATIVE=1 for actual fixed-table continuation")
@@ -333,15 +392,14 @@ func TestReaderFixedTableNativeContinuation(t *testing.T) {
 					}
 					measured := 0
 					for _, page := range positioned.Pages {
-						for _, word := range page.Words {
-							if compact(word.Text) != firstLabel {
-								continue
-							}
-							if _, err := readerFixedTableHeaderMeasure(page.Words, word, secondLabel.String()); err != nil {
-								t.Fatal(err)
-							}
-							measured++
+						origin, err := readerFixedTableHeaderOrigin(page.Words, firstLabel)
+						if err != nil {
+							t.Fatal(err)
 						}
+						if _, err := readerFixedTableHeaderMeasure(page.Words, origin, secondLabel.String()); err != nil {
+							t.Fatal(err)
+						}
+						measured++
 					}
 					if measured == 0 {
 						t.Fatal("no source header column geometry measured")
