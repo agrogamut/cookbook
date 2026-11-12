@@ -1966,4 +1966,6 @@ Copy `.env.example` to `.env` to start.
 | `DATABASE_URL` | yes | Postgres connection string |
 | `XLSX_DIR` | no, defaults to `data/provider` | Directory holding the 14 provider workbooks |
 | `PORT` | no, defaults to 8080 | HTTP listen port. Unused until Phase 2 |
+| `SHUTDOWN_TIMEOUT` | no, defaults to `5s` | Positive Go duration for HTTP draining on SIGTERM/SIGINT; requests still active at the deadline are cancelled |
+| `SHUTDOWN_CLEANUP_TIMEOUT` | no, defaults to `3s` | Positive Go duration limiting browser and database cleanup after draining or cancellation |
 | `TEST_DATABASE_URL` | no | Throwaway database for the integrity suite. Unset, the suite skips |

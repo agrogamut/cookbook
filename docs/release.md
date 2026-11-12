@@ -14,6 +14,14 @@ Both image builds explicitly use the normal daemon with `DOCKER_BUILDKIT=0`, mat
 
 Frontend checks follow the Go job: frozen pnpm lock, component tests, lint, TypeScript and production build. Canonical Next fonts must be downloadable; the workflow does not substitute fonts. No provider, payment or identity-service secrets are supplied to verification. Known accepted translation responses are tested locally without provider calls. Unknown production text retains its existing provider behavior.
 
+## API termination and downloads
+
+The API handles SIGTERM and SIGINT by closing HTTP listeners and draining active requests. `SHUTDOWN_TIMEOUT` defaults to `5s`; request contexts remain live during this interval. At the deadline the API cancels active requests, closes their connections and reports a nonzero exit. Browser and database cleanup follows draining or explicit cancellation, with a separate `SHUTDOWN_CLEANUP_TIMEOUT` of `3s`. Cleanup exceeding that limit also returns a nonzero exit. Both settings accept positive Go durations. Initialization and serve errors release acquired resources before the process chooses its exit status.
+
+These defaults reserve two seconds within Docker's usual ten-second stop window for scheduling and process exit. Verify the actual host stop window instead of assuming that reserve is guaranteed. It must exceed the sum of both configured durations plus a margin. The print-route timeout is twenty minutes; the default shutdown policy deliberately cancels a generation that cannot finish within five seconds. To drain a full-length generation, configure `SHUTDOWN_TIMEOUT=20m` only with a host stop window longer than twenty minutes plus cleanup and scheduling margin. Do not increase the request timeout to solve termination. A forced host kill cannot run application cleanup.
+
+The console retains one ZIP object URL for the current generation. Delayed desktop download approval and retry after cancellation use the same bytes without another generation. Starting a replacement generation or leaving the component revokes its URLs; approve or save a pending download before doing either. Concurrent clicks share preparation, and results completed after replacement or unmount are discarded. Desktop permission is still required where the host asks for it.
+
 ## Capacity contract
 
 The [public Ubuntu runner specification](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) lists 14 GB storage. That is not a guarantee of free space after checkout and host tool installation. Admission samples actual available blocks after the host build/vet/race steps; existing host toolchains, caches and checkout are already charged to that free-space measurement. No historical local database or image charge is added as a fresh hosted requirement.

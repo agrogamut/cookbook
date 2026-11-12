@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { BookGenerator } from "./book-generator";
@@ -101,7 +101,139 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe("ZIP download lifetime", () => {
+  function downloads() {
+    const links: { url: string; filename: string }[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      links.push({ url: this.href, filename: this.download });
+    });
+    return links;
+  }
+
+  async function ready() {
+    await generate();
+    const button = screen.getByRole("button", { name: /download .zip/i });
+    await waitFor(() => expect(button).toBeEnabled());
+    return button;
+  }
+
+  function pendingRead() {
+    let resolve!: (bytes: ArrayBuffer) => void;
+    let reject!: (error: Error) => void;
+    const promise = new Promise<ArrayBuffer>((yes, no) => { resolve = yes; reject = no; });
+    const read = vi.spyOn(Blob.prototype, "arrayBuffer").mockImplementationOnce(() => promise);
+    return { resolve, reject, read };
+  }
+
+  it("retains one ZIP URL for delayed approval and another click after cancellation", async () => {
+    const links = downloads();
+    const button = await ready();
+    await userEvent.click(button);
+    await waitFor(() => expect(links).toHaveLength(1));
+    const zipURL = links[0].url;
+    expect(revokeObjectURLSpy).not.toHaveBeenCalledWith(zipURL);
+    await userEvent.click(button);
+    expect(links).toEqual([
+      { url: zipURL, filename: "books-books.zip" },
+      { url: zipURL, filename: "books-books.zip" },
+    ]);
+    expect(createObjectURLSpy).toHaveBeenCalledTimes(3);
+    expect(revokeObjectURLSpy).not.toHaveBeenCalledWith(zipURL);
+  });
+
+  it("revokes the ZIP on replacement and gives the next generation a different URL", async () => {
+    const links = downloads();
+    const button = await ready();
+    await userEvent.click(button);
+    await waitFor(() => expect(links).toHaveLength(1));
+    await userEvent.click(screen.getByRole("button", { name: /generate both books/i }));
+    const nextButton = await screen.findByRole("button", { name: /download .zip/i });
+    await waitFor(() => expect(nextButton).toBeEnabled());
+    expect(revokeObjectURLSpy.mock.calls.filter(([url]) => url === links[0].url)).toHaveLength(1);
+    await userEvent.click(nextButton);
+    await waitFor(() => expect(links).toHaveLength(2));
+    expect(links[1].url).not.toBe(links[0].url);
+    expect(revokeObjectURLSpy).not.toHaveBeenCalledWith(links[1].url);
+  });
+
+  it("revokes the current ZIP on unmount", async () => {
+    const links = downloads();
+    const view = render(<BookGenerator />);
+    await userEvent.type(screen.getByLabelText(/date of birth/i), "2022-05-01");
+    await userEvent.click(screen.getByRole("button", { name: /generate both books/i }));
+    const button = screen.getByRole("button", { name: /download .zip/i });
+    await waitFor(() => expect(button).toBeEnabled());
+    await userEvent.click(button);
+    await waitFor(() => expect(links).toHaveLength(1));
+    expect(revokeObjectURLSpy).not.toHaveBeenCalledWith(links[0].url);
+    view.unmount();
+    expect(revokeObjectURLSpy.mock.calls.filter(([url]) => url === links[0].url)).toHaveLength(1);
+  });
+
+  it("coalesces rapid clicks during preparation, then reuses the ready URL", async () => {
+    const links = downloads();
+    const button = await ready();
+    const read = pendingRead();
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await act(async () => read.resolve(new ArrayBuffer(1)));
+    await waitFor(() => expect(links).toHaveLength(1));
+    expect(read.read).toHaveBeenCalledTimes(2);
+    await userEvent.click(button);
+    expect(links).toHaveLength(2);
+    expect(links[1].url).toBe(links[0].url);
+    expect(read.read).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["replacement", "unmount"])("discards preparation completed after %s", async (reason) => {
+    const links = downloads();
+    const view = render(<BookGenerator />);
+    await userEvent.type(screen.getByLabelText(/date of birth/i), "2022-05-01");
+    await userEvent.click(screen.getByRole("button", { name: /generate both books/i }));
+    const button = screen.getByRole("button", { name: /download .zip/i });
+    await waitFor(() => expect(button).toBeEnabled());
+    const read = pendingRead();
+    fireEvent.click(button);
+    if (reason === "replacement") {
+      await userEvent.click(screen.getByRole("button", { name: /generate both books/i }));
+      await waitFor(() => expect(screen.getByRole("button", { name: /download .zip/i })).toBeEnabled());
+    } else {
+      view.unmount();
+    }
+    const urlsBefore = createObjectURLSpy.mock.calls.length;
+    await act(async () => read.resolve(new ArrayBuffer(1)));
+    expect(links).toHaveLength(0);
+    expect(createObjectURLSpy).toHaveBeenCalledTimes(urlsBefore);
+  });
+
+  it("reports read failures and allows preparation to be retried", async () => {
+    const links = downloads();
+    const button = await ready();
+    vi.spyOn(Blob.prototype, "arrayBuffer").mockRejectedValueOnce(new Error("Cannot read PDF bytes"));
+    await userEvent.click(button);
+    expect(await screen.findByText("Cannot read PDF bytes")).toBeInTheDocument();
+    expect(links).toHaveLength(0);
+    expect(createObjectURLSpy).toHaveBeenCalledTimes(2);
+    await userEvent.click(button);
+    await waitFor(() => expect(links).toHaveLength(1));
+    expect(screen.queryByText("Cannot read PDF bytes")).not.toBeInTheDocument();
+  });
+
+  it("reports URL allocation failures without losing retry or cleanup", async () => {
+    const links = downloads();
+    const button = await ready();
+    createObjectURLSpy.mockImplementationOnce(() => { throw new Error("Cannot allocate ZIP URL"); });
+    await userEvent.click(button);
+    expect(await screen.findByText("Cannot allocate ZIP URL")).toBeInTheDocument();
+    expect(links).toHaveLength(0);
+    await userEvent.click(button);
+    await waitFor(() => expect(links).toHaveLength(1));
+    expect(revokeObjectURLSpy).not.toHaveBeenCalledWith(links[0].url);
+  });
 });
 
 describe("BookGenerator", () => {

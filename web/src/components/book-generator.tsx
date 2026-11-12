@@ -21,6 +21,7 @@ type Failed = { kind: "failed"; message: string };
 type Problem = Unavailable | PrintFailed | Failed;
 
 type Which = "book1" | "book2";
+type ZipDownload = { url: string | null; filename: string; pending: boolean };
 
 const NO_PDFS: Record<Which, string | null> = { book1: null, book2: null };
 
@@ -55,6 +56,13 @@ export function BookGenerator({ initialChild, registrationID }: { initialChild?:
   // Mirrors `pdfUrls` outside of React state so the object URLs from the run being replaced or
   // torn down are reachable for revocation without depending on a stale closure over state.
   const heldPdfUrls = useRef<Record<Which, string | null>>(NO_PDFS);
+  const heldZip = useRef<ZipDownload | null>(null);
+  const generation = useRef(0);
+
+  function releaseZip() {
+    if (heldZip.current?.url) URL.revokeObjectURL(heldZip.current.url);
+    heldZip.current = null;
+  }
 
   function revokeHeldPdfUrls() {
     const held = heldPdfUrls.current;
@@ -68,7 +76,11 @@ export function BookGenerator({ initialChild, registrationID }: { initialChild?:
   // Two PDFs per run, held for the component's life: without this an operator running twenty
   // lookups an hour leaks forty documents. Unmount is the other side of that -- the tab-close
   // equivalent for a console the operator simply navigates away from.
-  useEffect(() => () => revokeHeldPdfUrls(), []);
+  useEffect(() => () => {
+    generation.current++;
+    revokeHeldPdfUrls();
+    releaseZip();
+  }, []);
 
   function classify(err: unknown): Problem {
     if (err instanceof RendererUnavailableError) {
@@ -81,6 +93,8 @@ export function BookGenerator({ initialChild, registrationID }: { initialChild?:
   }
 
   async function generate(input: GenerateInput) {
+    const run = ++generation.current;
+    releaseZip();
     setBusy(true);
     setProblem(null);
     setSet(null);
@@ -98,6 +112,7 @@ export function BookGenerator({ initialChild, registrationID }: { initialChild?:
     pdfBlobs.current = { book1: null, book2: null };
     try {
       const printed = await generateBooksPrinted(input, registrationID);
+      if (generation.current !== run) return;
       setSet(printed.set);
       setSubmitted(input);
 
@@ -130,19 +145,17 @@ export function BookGenerator({ initialChild, registrationID }: { initialChild?:
       if (fallbackMessage) setPdfFallbackNote(fallbackMessage);
       if (printProblem) setProblem(printProblem);
     } catch (err) {
-      setProblem(classify(err));
+      if (generation.current === run) setProblem(classify(err));
     } finally {
-      setBusy(false);
+      if (generation.current === run) setBusy(false);
     }
   }
 
-  function save(blob: Blob, filename: string) {
-    const url = URL.createObjectURL(blob);
+  function save(url: string, filename: string) {
     const a = document.createElement("a");
     a.href = url;
     a.download = filename;
     a.click();
-    URL.revokeObjectURL(url);
   }
 
   // Open a printed PDF in a new tab rather than putting it in the downloads folder.
@@ -190,11 +203,27 @@ export function BookGenerator({ initialChild, registrationID }: { initialChild?:
     const { book1, book2 } = pdfBlobs.current;
     if (!book1 || !book2) return;
     const stem = fileStem();
-    const archive = buildZip([
-      { name: `${stem}-book1.pdf`, data: new Uint8Array(await book1.arrayBuffer()) },
-      { name: `${stem}-book2.pdf`, data: new Uint8Array(await book2.arrayBuffer()) },
-    ]);
-    save(new Blob([archive as BlobPart], { type: "application/zip" }), `${stem}-books.zip`);
+    const download = heldZip.current ??= { url: null, filename: `${stem}-books.zip`, pending: false };
+    if (download.pending) return;
+    setProblem(null);
+    download.pending = true;
+    try {
+      if (!download.url) {
+        const [first, second] = await Promise.all([book1.arrayBuffer(), book2.arrayBuffer()]);
+        if (heldZip.current !== download) return;
+        const archive = buildZip([
+          { name: `${stem}-book1.pdf`, data: new Uint8Array(first) },
+          { name: `${stem}-book2.pdf`, data: new Uint8Array(second) },
+        ]);
+        download.url = URL.createObjectURL(new Blob([archive as BlobPart], { type: "application/zip" }));
+      }
+      // Desktop approval can retry this URL long after the click returns.
+      save(download.url, download.filename);
+    } catch (err) {
+      if (heldZip.current === download) setProblem(classify(err));
+    } finally {
+      download.pending = false;
+    }
   }
 
   const html = set === null ? null : shown === "book1" ? set.book1Html : set.book2Html;

@@ -8,12 +8,15 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Config struct {
-	DatabaseURL string // Postgres connection string
-	XlsxDir     string // directory holding the provider workbooks
-	Port        int    // HTTP listen port (unused until phase 2)
+	DatabaseURL            string // Postgres connection string
+	XlsxDir                string // directory holding the provider workbooks
+	Port                   int    // HTTP listen port (unused until phase 2)
+	ShutdownTimeout        time.Duration
+	ShutdownCleanupTimeout time.Duration
 
 	// GeminiAPIKey is optional, unlike everything above. An empty value does not fail
 	// startup -- it means the AI-drafting feature (internal/aidraft) stays off: no
@@ -55,6 +58,23 @@ func Load() (Config, error) {
 	}
 
 	c.GeminiAPIKey = os.Getenv("GEMINI_API_KEY")
+	for _, setting := range []struct {
+		name     string
+		dest     *time.Duration
+		fallback time.Duration
+	}{
+		{"SHUTDOWN_TIMEOUT", &c.ShutdownTimeout, 5 * time.Second},
+		{"SHUTDOWN_CLEANUP_TIMEOUT", &c.ShutdownCleanupTimeout, 3 * time.Second},
+	} {
+		*setting.dest = setting.fallback
+		if value := os.Getenv(setting.name); value != "" {
+			duration, err := time.ParseDuration(value)
+			if err != nil || duration <= 0 {
+				return c, fmt.Errorf("config: %s must be a positive duration", setting.name)
+			}
+			*setting.dest = duration
+		}
+	}
 	c.SupabaseURL = strings.TrimRight(os.Getenv("SUPABASE_URL"), "/")
 	c.SupabaseSecretKey = os.Getenv("SUPABASE_SECRET_KEY")
 	c.RazorpayKeyID = os.Getenv("RAZORPAY_KEY_ID")

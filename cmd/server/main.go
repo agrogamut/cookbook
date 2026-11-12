@@ -4,7 +4,10 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/madamgy/recipie/internal/aidraft"
@@ -16,17 +19,38 @@ import (
 )
 
 func main() {
+	ctx, stop := terminationContext()
+	err := run(ctx)
+	stop()
+	if err != nil {
+		log.Printf("server: %v", err)
+		os.Exit(1)
+	}
+}
+
+func terminationContext() (context.Context, context.CancelFunc) {
+	return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+}
+
+func run(ctx context.Context) error {
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("server: %v", err)
+		return err
 	}
+	return runServer(ctx, shutdownPolicy{cfg.ShutdownTimeout, cfg.ShutdownCleanupTimeout}, func(ctx context.Context) (*http.Server, func(), error) {
+		return prepareServer(ctx, cfg)
+	})
+}
 
-	ctx := context.Background()
+func prepareServer(ctx context.Context, cfg config.Config) (*http.Server, func(), error) {
 	pool, err := db.Connect(ctx, cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("server: %v", err)
+		return nil, nil, err
 	}
-	defer pool.Close()
+	cleanup := func() {
+		book.ShutdownBrowser()
+		pool.Close()
+	}
 
 	// Gemini has always been optional here: NewClient returns a no-op Drafter for an empty
 	// key and only errors when a *present* key fails the SDK's own constructor, so an unset
@@ -34,7 +58,10 @@ func main() {
 	// content, exactly as it always has.
 	drafter, err := aidraft.NewClient(ctx, cfg.GeminiAPIKey)
 	if err != nil {
-		log.Fatalf("server: %v", err)
+		return nil, cleanup, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, cleanup, err
 	}
 
 	// Launch the print browser before the first request needs it.
@@ -50,7 +77,9 @@ func main() {
 	if err := book.WarmUp(); err != nil {
 		log.Printf("server: print browser unavailable, PDF routes will return 503: %v", err)
 	}
-	defer book.ShutdownBrowser()
+	if err := ctx.Err(); err != nil {
+		return nil, cleanup, err
+	}
 
 	srv := &http.Server{
 		Addr: ":" + strconv.Itoa(cfg.Port),
@@ -62,8 +91,5 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	log.Printf("server: listening on %s", srv.Addr)
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("server: %v", err)
-	}
+	return srv, cleanup, nil
 }
