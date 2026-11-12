@@ -74,7 +74,7 @@ Displayed age is derived from the guardian-supplied birth date, relative to the 
 
 A ten-digit Indian mobile number is normalized with `+91`. Other numbers must include their country code. An omitted email stays null. Public payment-status reads require a private registration token and return only a registration identifier and payment state. The current browser tab may store that token for retries; it does not store the submitted names or contact details. Request logs exclude search query strings.
 
-Public intake, login and checkout have bounded in-process rate limits. The server intentionally does not trust arbitrary forwarded IP headers. Configure rate limiting at the deployment edge using its verified client address as well, especially when several API replicas or a shared reverse proxy are used.
+Public intake permits 2,000 requests per remote address in each fixed 60-second window, per server process. Invalid submissions count toward that allowance. The 2,001st request receives HTTP 429 with `Retry-After: 60`; rejected requests do not extend the window. Family authentication and checkout retain their existing limits. The server intentionally does not trust arbitrary forwarded IP headers, so visitors behind a shared reverse proxy can share one allowance. The shared limiter also rejects requests if 10,000 bucket/address entries remain after expired entries are cleaned up. Configure rate limiting at the deployment edge using its verified client address as well, especially when several API replicas or a shared reverse proxy are used.
 
 ## Verification
 
