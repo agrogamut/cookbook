@@ -9,7 +9,7 @@ export function PriceBreakdown({ price }: { price?: Price }) {
         <dd>{money(price.base_paise, "INR")}</dd>
       </div>
       <div className="flex justify-between gap-3">
-        <dt>{price.tax_bps ? `Tax (${price.tax_bps / 100}%)` : "Tax"}</dt>
+        <dt>{price.tax_bps ? `GST (${price.tax_bps / 100}%)` : "GST (inactive)"}</dt>
         <dd>{money(price.tax_paise, "INR")}</dd>
       </div>
       <div className="flex justify-between gap-3 border-t pt-2 font-semibold">

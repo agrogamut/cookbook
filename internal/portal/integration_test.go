@@ -72,10 +72,13 @@ func (f *testIdentity) Delete(_ context.Context, id string) error {
 
 type testGateway struct {
 	*Razorpay
-	mu      sync.Mutex
-	order   GatewayOrder
-	creates int
-	payment Payment
+	mu             sync.Mutex
+	order          GatewayOrder
+	creates        int
+	payment        Payment
+	refunds        map[string][]PaymentRefund
+	refundOverride []PaymentRefund
+	refundError    error
 }
 
 func newTestGateway() *testGateway {
@@ -179,6 +182,7 @@ func TestPortalPersistenceAndAuthorization(t *testing.T) {
 		pool.Exec(ctx, `UPDATE app_private.consultation_settings SET amount_paise=$1,payments_enabled=$2,updated_by=NULL WHERE singleton`, oldSettings.AmountPaise, oldSettings.PaymentsEnabled)
 		if registrationID != "" {
 			pool.Exec(ctx, `DELETE FROM app_private.payment_event WHERE order_id IN(SELECT id FROM app_private.consultation_order WHERE registration_id=$1)`, registrationID)
+			pool.Exec(ctx, `DELETE FROM app_private.payment_refund WHERE order_id IN (SELECT id FROM app_private.consultation_order WHERE registration_id=$1)`, registrationID)
 			pool.Exec(ctx, `DELETE FROM app_private.consultation_order WHERE registration_id=$1`, registrationID)
 			pool.Exec(ctx, `DELETE FROM app_private.consultation_registration WHERE id=$1`, registrationID)
 			pool.Exec(ctx, `DELETE FROM public.child_profile WHERE child_id=$1`, registrationID)
@@ -283,7 +287,7 @@ func TestPortalPersistenceAndAuthorization(t *testing.T) {
 		t.Fatalf("created %d orders, expected one", gateway.creates)
 	}
 	order := gateway.order
-	if order.Amount != 12345 || order.Currency != "INR" {
+	if order.Amount != 14567 || order.Currency != "INR" {
 		t.Fatalf("checkout used client or wrong settings amount: %d %s", order.Amount, order.Currency)
 	}
 	p := Payment{ID: "pay_" + token()[:16], OrderID: order.ID, Amount: order.Amount, Currency: order.Currency, Status: "authorized"}
@@ -486,4 +490,26 @@ func TestResetRevokesLoginAlreadyCheckingOldPassword(t *testing.T) {
 	}
 	expectCode(t, portalRequest(router, "GET", "/api/auth/me", nil, login.Result().Cookies()[0], ""), 401)
 	expectCode(t, portalRequest(router, "POST", "/api/auth/login", map[string]string{"email": doctor.Email, "password": password}, nil, ""), 401)
+}
+
+func (g *testGateway) FetchRefunds(_ context.Context, p Payment) ([]PaymentRefund, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.refundError != nil {
+		return nil, g.refundError
+	}
+	if g.refundOverride != nil {
+		return append([]PaymentRefund{}, g.refundOverride...), nil
+	}
+	if g.refunds == nil {
+		g.refunds = map[string][]PaymentRefund{}
+	}
+	total := 0
+	for _, v := range g.refunds[p.ID] {
+		total += v.Amount
+	}
+	if p.AmountRefunded > total {
+		g.refunds[p.ID] = append(g.refunds[p.ID], PaymentRefund{ID: "rfnd_" + tokenHash(fmt.Sprintf("%s:%d", p.ID, p.AmountRefunded))[:16], PaymentID: p.ID, Amount: p.AmountRefunded - total, Currency: p.Currency, Status: "processed", CreatedAt: time.Now().Unix()})
+	}
+	return append([]PaymentRefund{}, g.refunds[p.ID]...), nil
 }

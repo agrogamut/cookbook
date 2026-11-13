@@ -130,6 +130,7 @@ type PaymentGateway interface {
 	PublicKey() string
 	CreateOrder(context.Context, string, int, string) (GatewayOrder, error)
 	FetchPayment(context.Context, string) (Payment, error)
+	FetchRefunds(context.Context, Payment) ([]PaymentRefund, error)
 	RefundPayment(context.Context, string, int, string) (string, error)
 	VerifyCheckout(string, string, string) bool
 	VerifyWebhook([]byte, string) bool
@@ -245,4 +246,42 @@ func (g *Razorpay) VerifyCheckout(orderID, paymentID, signature string) bool {
 }
 func (g *Razorpay) VerifyWebhook(body []byte, signature string) bool {
 	return signatureMatches(g.WebhookSecret, body, signature)
+}
+
+type PaymentRefund struct {
+	ID        string `json:"id"`
+	PaymentID string `json:"payment_id"`
+	Amount    int    `json:"amount"`
+	Currency  string `json:"currency"`
+	Status    string `json:"status"`
+	CreatedAt int64  `json:"created_at"`
+}
+
+func (g *Razorpay) FetchRefunds(ctx context.Context, p Payment) ([]PaymentRefund, error) {
+	if !validProviderID(p.ID, "pay_") {
+		return nil, errors.New("invalid refund payment")
+	}
+	items := []PaymentRefund{}
+	seen := map[string]bool{}
+	for skip := 0; skip < 10000; skip += 100 {
+		var page struct {
+			Items []PaymentRefund `json:"items"`
+		}
+		if err := g.call(ctx, "GET", fmt.Sprintf("/payments/%s/refunds?count=100&skip=%d", url.PathEscape(p.ID), skip), nil, &page); err != nil {
+			return nil, fmt.Errorf("fetch refund identities: %w", err)
+		}
+		for _, item := range page.Items {
+			if !validProviderID(item.ID, "rfnd_") || item.PaymentID != p.ID || item.Amount <= 0 || item.Amount > p.Amount || item.Currency != p.Currency || item.CreatedAt <= 0 || seen[item.ID] {
+				return nil, errors.New("invalid or overlapping refund page")
+			}
+			seen[item.ID] = true
+			if item.Status == "processed" {
+				items = append(items, item)
+			}
+		}
+		if len(page.Items) < 100 {
+			return items, nil
+		}
+	}
+	return nil, errors.New("refund pagination exceeded reconciliation bound")
 }

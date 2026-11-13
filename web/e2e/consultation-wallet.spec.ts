@@ -15,7 +15,8 @@ test("wallet, meeting links and manual payout", async ({ page, request }) => {
   ).json();
   await fs.mkdir(evidence, { recursive: true });
   const errors: string[] = [];
-  page.on("dialog", (dialog) => dialog.accept());
+  const confirmations: string[] = [];
+  page.on("dialog", (dialog) => { confirmations.push(dialog.message()); return dialog.accept(); });
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/family/login");
   await expect(page.getByLabel("Child’s full name")).toBeVisible();
@@ -124,6 +125,10 @@ test("wallet, meeting links and manual payout", async ({ page, request }) => {
       ),
     )
     .toBeTruthy();
+  const expectedTotal = process.env.PORTAL_BROWSER_INACTIVE_POLICY === "1" ? "₹250.00" : "₹295.00";
+  expect(confirmations.some((message) => message.includes("Total: " + expectedTotal))).toBeTruthy();
+  const checkoutAmount = await page.evaluate(() => (window as unknown as {__checkoutOptions: {amount: number}}).__checkoutOptions.amount);
+  expect(checkoutAmount).toBe(process.env.PORTAL_BROWSER_INACTIVE_POLICY === "1" ? 25000 : 29500);
   const orderID = await page.evaluate(
     () =>
       (window as unknown as { __checkoutOptions: { order_id: string } })
@@ -282,7 +287,7 @@ test("wallet, meeting links and manual payout", async ({ page, request }) => {
     path: path.join(evidence, "doctor-withdrawal.png"),
     fullPage: true,
   });
-  const reviewed = process.env.PORTAL_BROWSER_REVIEWED_POLICY === "1";
+  const reviewed = process.env.PORTAL_BROWSER_INACTIVE_POLICY !== "1";
   if (!reviewed)
     await expect(
       page.getByText(/Final payout is pending policy review/),
@@ -396,6 +401,30 @@ test("wallet, meeting links and manual payout", async ({ page, request }) => {
       path: path.join(evidence, "doctor-partial-refund-hold.png"),
       fullPage: true,
     });
+    await page.context().clearCookies();
+    await page.goto("/login");
+    await page.getByLabel("Email", {exact:true}).fill(fixture.admin_email);
+    await page.getByLabel("Password", {exact:true}).fill(fixture.password);
+    await page.getByRole("button",{name:"Sign in",exact:true}).click();
+    await expect(page).toHaveURL(new RegExp("/admin"));
+    await page.getByRole("tab",{name:"Doctor withdrawals",exact:true}).click();
+    const review = page.getByRole("region",{name:"Refund reconciliation",exact:true});
+    await expect(review.getByText("Original doctor earning")).toBeVisible();
+    await review.scrollIntoViewIfNeeded();
+    await page.screenshot({path:path.join(evidence,"admin-refund-review.png"),fullPage:true});
+    await review.getByLabel("Doctor earning deduction (INR)").fill("4000");
+    await review.getByLabel("Reason for this decision").fill("Synthetic owner-selected adjustment after completed payout.");
+    await review.getByRole("checkbox").check();
+    await review.getByRole("button",{name:"Record refund decision",exact:true}).click();
+    await expect(review.getByText("This decision cannot be edited.")).toBeVisible();
+    await expect(page.getByText(/Available: -₹1,000.00/)).toBeVisible();
+    await review.scrollIntoViewIfNeeded();
+    await page.screenshot({path:path.join(evidence,"admin-refund-decided.png"),fullPage:true});
+    await page.setViewportSize({width:390,height:900});
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+    await review.scrollIntoViewIfNeeded();
+    await page.screenshot({path:path.join(evidence,"admin-refund-mobile.png"),fullPage:true});
+    await page.setViewportSize({width:1440,height:1000});
   }
   expect(errors).toEqual([]);
 });

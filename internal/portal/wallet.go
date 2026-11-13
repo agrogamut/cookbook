@@ -188,7 +188,11 @@ func loadWallet(ctx context.Context, q walletQuerier, doctor string) (WalletBala
         coalesce((SELECT sum(l.amount_paise) FROM app_private.doctor_ledger l WHERE l.doctor_id=a.id),0)::bigint,
         coalesce((SELECT sum(w.requested_paise) FROM app_private.doctor_withdrawal w WHERE w.doctor_id=a.id AND w.status IN ('requested','processing')),0)::bigint,
         EXISTS(SELECT 1 FROM app_private.wallet_reconciliation x WHERE x.doctor_id=a.id) OR
-        EXISTS(SELECT 1 FROM app_private.doctor_ledger l JOIN app_private.appointment p ON p.id=l.appointment_id WHERE l.doctor_id=a.id AND l.kind='earning' AND p.status='refund_required'),
+        EXISTS(SELECT 1 FROM app_private.doctor_ledger l JOIN app_private.appointment p ON p.id=l.appointment_id WHERE l.doctor_id=a.id AND l.kind='earning' AND p.status='refund_required'
+            AND NOT EXISTS(SELECT 1 FROM app_private.consultation_order o WHERE o.appointment_id=p.id AND o.status='partially_refunded'
+                AND NOT EXISTS(SELECT 1 FROM app_private.consultation_refund cr WHERE cr.order_id=o.id)
+                AND o.refunded_paise=(SELECT coalesce(sum(f.amount_paise),0) FROM app_private.payment_refund f WHERE f.order_id=o.id)
+                AND NOT EXISTS(SELECT 1 FROM app_private.payment_refund f LEFT JOIN app_private.refund_decision d ON d.refund_id=f.id WHERE f.order_id=o.id AND d.refund_id IS NULL))),
         coalesce((SELECT masked_details FROM app_private.doctor_destination WHERE doctor_id=a.id),'')
         FROM app_private.staff_account a WHERE a.id=$1 AND a.role='doctor'`, doctor).Scan(&v.DoctorName, &v.Balance, &v.Reserved, &v.ReconciliationRequired, &v.MaskedDestination)
 	v.Available = v.Balance - v.Reserved
@@ -250,7 +254,7 @@ func (s *Server) withdrawals(ctx context.Context, doctor string) ([]Withdrawal, 
 }
 func (s *Server) withdrawalForDisplay(v Withdrawal) Withdrawal {
 	if v.Status == "requested" || v.Status == "processing" {
-		v.PolicyPending = v.PolicyPending || s.options.TaxPolicy.WithdrawalApproval == "" || v.Policy != s.options.TaxPolicy.WithdrawalApproval
+		v.PolicyPending = v.PolicyPending || s.options.TaxPolicy.withdrawalPolicy() == "inactive" || v.Policy != s.options.TaxPolicy.withdrawalPolicy()
 	}
 	return v
 }
@@ -286,7 +290,7 @@ func (s *Server) DoctorWallet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, bps, _ := s.options.TaxPolicy.withdrawal(0)
-	respond(w, 200, map[string]any{"balance": balance, "withdrawals": withdrawals, "ledger": entries, "configured": len(s.options.WalletKey) == 32, "deduction_bps": bps, "deduction_active": s.options.TaxPolicy.WithdrawalApproval != ""})
+	respond(w, 200, map[string]any{"balance": balance, "withdrawals": withdrawals, "ledger": entries, "configured": len(s.options.WalletKey) == 32, "deduction_bps": bps, "deduction_active": s.options.TaxPolicy.withdrawalPolicy() != "inactive"})
 }
 func (s *Server) AdminWallets(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.pool.Query(r.Context(), `SELECT id::text FROM app_private.staff_account WHERE role='doctor' ORDER BY name,id`)
@@ -496,8 +500,8 @@ func (s *Server) changeWithdrawal(w http.ResponseWriter, r *http.Request, cancel
 		return
 	}
 	if b.Action == "paid" {
-		if value.PolicyPending || s.options.TaxPolicy.WithdrawalApproval == "" || value.Policy != s.options.TaxPolicy.WithdrawalApproval {
-			fail(w, 409, "Final payout is pending policy review. Reject this reservation and create a new request under the approved policy; this request cannot be marked paid.")
+		if value.PolicyPending || s.options.TaxPolicy.withdrawalPolicy() == "inactive" || value.Policy != s.options.TaxPolicy.withdrawalPolicy() {
+			fail(w, 409, "Final payout is under an inactive or different policy. Reject this reservation and create a new request under the selected active policy; this request cannot be marked paid.")
 			return
 		}
 		// The transfer form records receipt times to the minute.
@@ -599,28 +603,23 @@ func (s *Server) applyEarning(ctx context.Context, tx pgx.Tx, p Payment, state, 
 			return fmt.Errorf("record captured earning: %w", err)
 		}
 	}
-	if state == "partially_refunded" {
-		// Allocation of a partial refund requires a business decision, not a ledger guess.
-		_, err := tx.Exec(ctx, `INSERT INTO app_private.wallet_reconciliation(appointment_id,doctor_id,reason)
-            SELECT id,earning_doctor_id,'partial_refund' FROM app_private.appointment
-            WHERE id=$1 AND earning_doctor_id IS NOT NULL AND earning_paise>0
-            ON CONFLICT DO NOTHING`, appointment)
-		return err
-	}
 	if state == "refunded" {
 		if err := reverseEarning(ctx, tx, appointment, "patient_refund"); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx, `DELETE FROM app_private.wallet_reconciliation WHERE appointment_id=$1 AND reason='partial_refund'`, appointment)
-		return err
+	}
+	if state == "refunded" || state == "partially_refunded" {
+		return refreshPartialHold(ctx, tx, appointment)
 	}
 	return nil
 }
 func reverseEarning(ctx context.Context, tx pgx.Tx, appointment, reason string) error {
 	_, err := tx.Exec(ctx, `INSERT INTO app_private.doctor_ledger(doctor_id,kind,amount_paise,appointment_id,order_id,payment_id,reason)
-        SELECT doctor_id,'reversal',-amount_paise,appointment_id,order_id,payment_id,$2
-        FROM app_private.doctor_ledger WHERE appointment_id=$1 AND kind='earning'
-        ON CONFLICT(appointment_id,kind) DO NOTHING`, appointment, reason)
+        SELECT l.doctor_id,'reversal',-r.remaining,l.appointment_id,l.order_id,l.payment_id,$2
+        FROM app_private.doctor_ledger l CROSS JOIN LATERAL
+        (SELECT sum(amount_paise) AS remaining FROM app_private.doctor_ledger WHERE appointment_id=$1) r
+        WHERE l.appointment_id=$1 AND l.kind='earning' AND r.remaining>0
+        ON CONFLICT DO NOTHING`, appointment, reason)
 	if err != nil {
 		return fmt.Errorf("reverse consultation earning: %w", err)
 	}

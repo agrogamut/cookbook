@@ -60,7 +60,7 @@ func main() {
 			Origin:   cfg.AppOrigin, SecureCookies: cfg.SecureCookies,
 			LegacyGuardianUntil: cfg.LegacyGuardianUntil,
 			WalletKey:           cfg.WalletEncryptionKey,
-			TaxPolicy:           portal.TaxPolicy{PatientApproval: cfg.PatientTaxApproval, WithdrawalApproval: cfg.WithdrawalDeductionApproval},
+			TaxPolicy:           portal.TaxPolicy{PatientPolicy: cfg.PatientTaxPolicy, WithdrawalPolicy: cfg.WithdrawalDeductionPolicy},
 		})),
 		ReadHeaderTimeout: 5 * time.Second,
 	}

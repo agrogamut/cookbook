@@ -20,9 +20,12 @@ func TestPortalBrowserServer(t *testing.T) {
 	}
 	f := newPaidFixture(t)
 	f.server.options.WalletKey = bytes.Repeat([]byte{42}, 32)
-	if os.Getenv("PORTAL_BROWSER_REVIEWED_POLICY") == "1" {
-		f.server.options.TaxPolicy.WithdrawalApproval = "synthetic-browser-reviewed-v1"
+
+	f.server.options.TaxPolicy = TaxPolicy{}
+	if os.Getenv("PORTAL_BROWSER_INACTIVE_POLICY") == "1" {
+		f.server.options.TaxPolicy = TaxPolicy{PatientPolicy: "inactive", WithdrawalPolicy: "inactive"}
 	}
+
 	expectCode(t, portalRequest(f.router, "PUT", "/api/admin/earnings", map[string]int{"doctor_earning_paise": 500000}, f.adminCookie, ""), 200)
 
 	id, secret := f.register(t, "Browser Child")
@@ -53,6 +56,8 @@ func TestPortalBrowserServer(t *testing.T) {
 		for _, query := range []string{
 			`DELETE FROM app_private.wallet_audit`,
 			`DELETE FROM app_private.doctor_ledger`,
+			`DELETE FROM app_private.refund_decision`,
+			`DELETE FROM app_private.payment_refund`,
 			`DELETE FROM app_private.wallet_reconciliation`,
 			`DELETE FROM app_private.doctor_withdrawal`,
 			`DELETE FROM app_private.doctor_destination`,

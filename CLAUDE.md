@@ -1970,7 +1970,7 @@ Copy `.env.example` to `.env` to start.
 
 | `PORTAL_LEGACY_GUARDIAN_UNTIL` | no, strict by default | Temporary API-first rollout deadline in RFC3339, at most 24 hours ahead at startup. Only omitted guardian fields bypass name matching until expiry; private credentials/grants remain mandatory. Unset after frontend verification. See docs/consultation-wallet.md. |
 | `WALLET_ENCRYPTION_KEY` | no | Server-only payout encryption key: exactly 64 hexadecimal characters. Missing key disables destination saving and withdrawal requests, not captured earnings. Retain securely; do not replace without migrating encrypted history. |
-| `PORTAL_PATIENT_TAX_APPROVAL` | no, inactive by default | Reviewed policy reference for the gated 18% patient-price calculation. Leave unset until the actual supply, invoicing and tax treatment are professionally confirmed. |
-| `PORTAL_WITHDRAWAL_DEDUCTION_APPROVAL` | no, inactive by default | Reviewed policy reference for the gated 18% withdrawal calculation. Unset means provisional estimate only and paid actions are blocked. Old pending requests require cancellation/rejection and recreation. |
+| `PORTAL_PATIENT_TAX_POLICY` | no, owner-selected 18% by default | `owner-18-v1` or empty adds 18% to new orders. Explicit `inactive` preserves base-only pricing during API-first rollout. Existing orders retain their snapshots. Legal tax treatment remains separately unverified. |
+| `PORTAL_WITHDRAWAL_DEDUCTION_POLICY` | no, owner-selected 18% by default | `owner-18-v1` or empty applies 18% to new withdrawals. Explicit `inactive` keeps requests provisional and blocks paid marks. Old provisional requests require cancellation/rejection and recreation. |
 
 Wallet setup, financial invariants and deployment compatibility: [consultation wallet](docs/consultation-wallet.md).

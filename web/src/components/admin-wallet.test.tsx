@@ -3,11 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AdminWallet } from "./admin-wallet";
 import { WithdrawalAmounts } from "./doctor-wallet";
-import { getWallets, getWithdrawals, decideWithdrawal } from "@/lib/api";
+import { getRefundReviews, getWallets, getWithdrawals, decideWithdrawal } from "@/lib/api";
 import type { Withdrawal } from "@/lib/portal-types";
 
 vi.mock("@/lib/api", () => ({
-  getWallets: vi.fn(), getWithdrawals: vi.fn(), decideWithdrawal: vi.fn(),
+  getRefundReviews: vi.fn(), syncRefundReview: vi.fn(), decideRefund: vi.fn(), getWallets: vi.fn(), getWithdrawals: vi.fn(), decideWithdrawal: vi.fn(),
   revealWithdrawalDestination: vi.fn(), getConsultationSettings: vi.fn(),
   saveDoctorEarning: vi.fn(), cancelWithdrawal: vi.fn(), getDoctorWallet: vi.fn(),
   requestWithdrawal: vi.fn(), savePayoutDestination: vi.fn(),
@@ -20,7 +20,7 @@ const request: Withdrawal = {
   transferred_paise: null, transfer_reference: null, transferred_at: null,
   decision_note: "",
 };
-beforeEach(() => { vi.clearAllMocks(); vi.mocked(getWallets).mockResolvedValue([]); });
+beforeEach(() => { vi.clearAllMocks(); vi.mocked(getRefundReviews).mockResolvedValue([]); vi.mocked(getWallets).mockResolvedValue([]); });
 describe("withdrawal policy review", () => {
   it("never presents an inactive-policy estimate as the final payout", () => {
     render(<WithdrawalAmounts amount={200000} bps={1800} pending />);

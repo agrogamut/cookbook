@@ -1,3 +1,4 @@
+import type { RefundReview } from "./portal-types";
 import type {
   ChildProfile, EngineResult, RecipeDetail, Ingredient, NutritionDiscrepancy,
   Gap, ImportRun, Region, Cuisine, NutritionTarget, Book1Block,
@@ -443,3 +444,7 @@ export const getWithdrawals = () => request<Withdrawal[]>("/api/admin/withdrawal
 export const revealWithdrawalDestination = (id:string) => request<PayoutDestination>(`/api/admin/withdrawals/${encodeURIComponent(id)}/destination`,{method:"POST",body:JSON.stringify({manual_transfer_review:true})});
 export const decideWithdrawal = (id:string,input:{action:"processing"|"paid"|"rejected";transferred_paise?:number;transfer_reference?:string;transferred_at?:string;transfer_completed?:boolean;note?:string}) => request<{ok:boolean}>(`/api/admin/withdrawals/${encodeURIComponent(id)}/decision`,{method:"POST",body:JSON.stringify(input)});
 export const saveDoctorEarning = (doctor_earning_paise:number|null) => request<ConsultationSettings>("/api/admin/earnings",{method:"PUT",body:JSON.stringify({doctor_earning_paise})});
+
+export const getRefundReviews = () => request<RefundReview[]>("/api/admin/refund-reviews");
+export const syncRefundReview = (orderID: string) => request<{ok: boolean}>(`/api/admin/refund-reviews/${encodeURIComponent(orderID)}/sync`, {method: "POST", body: "{}"});
+export const decideRefund = (refundID: string, input: {adjustment_paise: number; expected_remaining_paise: number; explanation: string; confirmed: boolean}) => request<{ok: boolean}>(`/api/admin/refund-reviews/${encodeURIComponent(refundID)}/decision`, {method: "POST", body: JSON.stringify(input)});

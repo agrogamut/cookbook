@@ -241,14 +241,10 @@ func (s *Server) settings(ctx context.Context) (Settings, error) {
 	var v Settings
 	err := s.pool.QueryRow(ctx, `SELECT amount_paise,currency,payments_enabled,doctor_earning_paise FROM app_private.consultation_settings WHERE singleton`).Scan(&v.AmountPaise, &v.Currency, &v.PaymentsEnabled, &v.DoctorEarningPaise)
 	v.WalletConfigured = len(s.options.WalletKey) == 32
-	v.PatientTaxActive = s.options.TaxPolicy.PatientApproval != ""
-	v.WithdrawalDeductionActive = s.options.TaxPolicy.WithdrawalApproval != ""
+	v.PatientTaxActive = s.options.TaxPolicy.patientPolicy() != "inactive"
+	v.WithdrawalDeductionActive = s.options.TaxPolicy.withdrawalPolicy() != "inactive"
 	if v.AmountPaise != nil {
 		price := s.options.TaxPolicy.price(*v.AmountPaise)
-		price.Policy = "inactive"
-		if v.PatientTaxActive {
-			price.Policy = "patient-18-v1"
-		}
 		v.Price = &price
 	}
 	v.GatewayConfigured = s.options.Gateway.Enabled()

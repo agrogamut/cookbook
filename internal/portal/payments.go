@@ -63,7 +63,7 @@ func (s *Server) createOrderFor(ctx context.Context, id, guardianID, secret stri
 	}
 	var order GatewayOrder
 	var status string
-	err = tx.QueryRow(ctx, `SELECT id,amount_paise,currency,status,coalesce(base_paise,amount_paise),tax_paise,tax_bps FROM app_private.consultation_order WHERE appointment_id=$1`, appointmentID.String).Scan(&order.ID, &order.Amount, &order.Currency, &status, &order.Price.BasePaise, &order.Price.TaxPaise, &order.Price.TaxBPS)
+	err = tx.QueryRow(ctx, `SELECT id,amount_paise,currency,status,coalesce(base_paise,amount_paise),tax_paise,tax_bps,tax_policy FROM app_private.consultation_order WHERE appointment_id=$1`, appointmentID.String).Scan(&order.ID, &order.Amount, &order.Currency, &status, &order.Price.BasePaise, &order.Price.TaxPaise, &order.Price.TaxBPS, &order.Price.Policy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		price := s.options.TaxPolicy.price(*settings.AmountPaise)
 		order, err = s.options.Gateway.CreateOrder(ctx, appointmentID.String, price.TotalPaise, settings.Currency)
@@ -82,10 +82,6 @@ func (s *Server) createOrderFor(ctx context.Context, id, guardianID, secret stri
 		return GatewayOrder{}, err
 	}
 	order.Price.TotalPaise = order.Amount
-	order.Price.Policy = "inactive"
-	if order.Price.TaxBPS > 0 {
-		order.Price.Policy = "patient-18-v1"
-	}
 	return order, nil
 }
 
@@ -287,6 +283,11 @@ func (s *Server) applyPaymentEvent(ctx context.Context, p Payment, eventID strin
 	if !validProviderID(p.ID, "pay_") || !validProviderID(p.OrderID, "order_") {
 		return errors.New("invalid payment identifiers")
 	}
+	var refunds []PaymentRefund
+	var refundErr error
+	if p.AmountRefunded > 0 {
+		refunds, refundErr = s.options.Gateway.FetchRefunds(ctx, p)
+	}
 	tx, err := s.beginBookingTx(ctx)
 	if err != nil {
 		return fmt.Errorf("begin payment update: %w", err)
@@ -302,12 +303,13 @@ func (s *Server) applyPaymentEvent(ctx context.Context, p Payment, eventID strin
 	if amount != p.Amount || currency != p.Currency {
 		return errors.New("payment amount or currency does not match stored order")
 	}
+
 	if eventID != "" {
-		result, err := tx.Exec(ctx, `INSERT INTO app_private.payment_event(id,order_id) VALUES ($1,$2) ON CONFLICT(id) DO NOTHING`, eventID, p.OrderID)
-		if err != nil {
-			return fmt.Errorf("record payment event: %w", err)
+		var duplicate bool
+		if err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM app_private.payment_event WHERE id=$1)`, eventID).Scan(&duplicate); err != nil {
+			return err
 		}
-		if result.RowsAffected() == 0 {
+		if duplicate {
 			return tx.Commit(ctx)
 		}
 	}
@@ -350,6 +352,18 @@ func (s *Server) applyPaymentEvent(ctx context.Context, p Payment, eventID strin
 			return fmt.Errorf("clear refunded appointment assignment: %w", err)
 		}
 	}
+
+	if refundErr == nil && p.AmountRefunded > 0 {
+		if _, err = tx.Exec(ctx, "SAVEPOINT refund_identity"); err != nil {
+			return err
+		}
+		refundErr = recordRefunds(ctx, tx, p, refunds)
+		if refundErr != nil && !errors.Is(refundErr, errRefundHistoryIncomplete) {
+			if _, err = tx.Exec(ctx, "ROLLBACK TO SAVEPOINT refund_identity"); err != nil {
+				return err
+			}
+		}
+	}
 	if appointmentID.Valid {
 		if err = s.applyEarning(ctx, tx, p, state, appointmentID.String); err != nil {
 			return err
@@ -366,7 +380,27 @@ func (s *Server) applyPaymentEvent(ctx context.Context, p Payment, eventID strin
 			}
 		}
 	}
-	return tx.Commit(ctx)
+
+	if refundErr != nil && appointmentID.Valid && (state == "partially_refunded" || state == "refunded") {
+		_, err = tx.Exec(ctx, `INSERT INTO app_private.wallet_reconciliation(appointment_id,doctor_id,reason)
+            SELECT id,earning_doctor_id,'partial_refund' FROM app_private.appointment WHERE id=$1 AND earning_doctor_id IS NOT NULL
+            ON CONFLICT DO NOTHING`, appointmentID.String)
+		if err != nil {
+			return err
+		}
+	}
+	if eventID != "" && refundErr == nil {
+		if _, err = tx.Exec(ctx, `INSERT INTO app_private.payment_event(id,order_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, eventID, p.OrderID); err != nil {
+			return err
+		}
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return err
+	}
+	if refundErr != nil {
+		return fmt.Errorf("refund identity refresh pending; wallet held: %w", refundErr)
+	}
+	return nil
 }
 
 func (s *Server) Webhook(w http.ResponseWriter, r *http.Request) {

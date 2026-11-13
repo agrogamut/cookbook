@@ -16,6 +16,7 @@ import type {
 } from "@/lib/portal-types";
 import { errorMessage, indiaInstant, money } from "@/lib/portal-utils";
 import { parseRupees } from "@/lib/wallet";
+import { RefundReviews } from "./refund-review";
 import { WithdrawalSummary } from "./doctor-wallet";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -105,19 +106,20 @@ export function EarningSettings() {
           <p>
             Patient tax:{" "}
             {settings.patient_tax_active
-              ? "approved policy enabled"
+              ? "owner-selected 18% active"
               : "inactive"}
             . Withdrawal deduction:{" "}
             {settings.withdrawal_deduction_active
-              ? "approved policy enabled"
+              ? "owner-selected 18% active"
               : "inactive"}
             .
           </p>
           <p className="text-xs text-muted-foreground">
-            Requested policy example, not an active charge: ₹2,000 requested,
-            ₹360 deduction, final withdrawable amount ₹1,640. An
-            adviser-approved deployment policy is required before collecting tax
-            or making deductions. This screen cannot activate it.
+            Active-policy example: ₹2,000 requested, ₹360 deduction,
+            final withdrawable amount ₹1,640. This is the owner-selected
+            calculation. Legal tax treatment requires separate verification.
+            Existing requests keep their recorded policy. This screen cannot
+            change the deployment policy.
           </p>
         </div>
       )}
@@ -280,7 +282,7 @@ function WithdrawalReview({
             <p role="status" className="rounded-md border p-3 text-sm">
               Final payout pending policy review. Do not transfer or mark paid.
               Reject this reservation and request a fresh withdrawal once the
-              approved policy is active.
+              selected policy is active.
             </p>
           ) : (
             <details className="border-t pt-3">
@@ -425,6 +427,7 @@ export function AdminWallet() {
       ) : (
         <p>No withdrawal requests yet.</p>
       )}
+      <RefundReviews onResolved={() => setRevision((v) => v + 1)} />
     </section>
   );
 }

@@ -7,13 +7,13 @@ import (
 )
 
 func TestWalletPolicyConfiguration(t *testing.T) {
-	for _, name := range []string{"PORT", "SUPABASE_URL", "SUPABASE_SECRET_KEY", "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "APP_ORIGIN", "WALLET_ENCRYPTION_KEY", "PORTAL_PATIENT_TAX_APPROVAL", "PORTAL_WITHDRAWAL_DEDUCTION_APPROVAL", "PORTAL_LEGACY_GUARDIAN_UNTIL"} {
+	for _, name := range []string{"PORT", "SUPABASE_URL", "SUPABASE_SECRET_KEY", "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "APP_ORIGIN", "WALLET_ENCRYPTION_KEY", "PORTAL_PATIENT_TAX_POLICY", "PORTAL_WITHDRAWAL_DEDUCTION_POLICY", "PORTAL_LEGACY_GUARDIAN_UNTIL"} {
 		t.Setenv(name, "")
 	}
 	t.Setenv("DATABASE_URL", "postgres://local.invalid/test")
 	c, err := Load()
-	if err != nil || len(c.WalletEncryptionKey) != 0 || c.PatientTaxApproval != "" || c.WithdrawalDeductionApproval != "" {
-		t.Fatalf("features were not inactive by default: %v", err)
+	if err != nil || len(c.WalletEncryptionKey) != 0 || c.PatientTaxPolicy != "owner-18-v1" || c.WithdrawalDeductionPolicy != "owner-18-v1" {
+		t.Fatalf("owner policy defaults missing: %v", err)
 	}
 	for _, key := range []string{"short", strings.Repeat("z", 64), strings.Repeat("a", 62)} {
 		t.Setenv("WALLET_ENCRYPTION_KEY", key)
@@ -26,23 +26,23 @@ func TestWalletPolicyConfiguration(t *testing.T) {
 	if err != nil || len(c.WalletEncryptionKey) != 32 {
 		t.Fatalf("valid encryption key rejected: %v", err)
 	}
-	for _, name := range []string{"PORTAL_PATIENT_TAX_APPROVAL", "PORTAL_WITHDRAWAL_DEDUCTION_APPROVAL"} {
-		for _, value := range []string{strings.Repeat("x", 201), "line1\nline2"} {
+	for _, name := range []string{"PORTAL_PATIENT_TAX_POLICY", "PORTAL_WITHDRAWAL_DEDUCTION_POLICY"} {
+		for _, value := range []string{strings.Repeat("x", 201), "line1\nline2", "adviser-approved"} {
 			t.Setenv(name, value)
 			if _, err = Load(); err == nil {
 				t.Fatal("invalid approval reference accepted")
 			}
 		}
-		t.Setenv(name, "synthetic-reviewed-policy")
+		t.Setenv(name, "inactive")
 	}
 	c, err = Load()
-	if err != nil || c.PatientTaxApproval != "synthetic-reviewed-policy" || c.WithdrawalDeductionApproval != "synthetic-reviewed-policy" {
+	if err != nil || c.PatientTaxPolicy != "inactive" || c.WithdrawalDeductionPolicy != "inactive" {
 		t.Fatalf("explicit policy not loaded: %v", err)
 	}
 }
 
 func TestGuardianTransitionDeadlineConfiguration(t *testing.T) {
-	for _, name := range []string{"PORT", "SUPABASE_URL", "SUPABASE_SECRET_KEY", "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "APP_ORIGIN", "WALLET_ENCRYPTION_KEY", "PORTAL_PATIENT_TAX_APPROVAL", "PORTAL_WITHDRAWAL_DEDUCTION_APPROVAL", "PORTAL_LEGACY_GUARDIAN_UNTIL"} {
+	for _, name := range []string{"PORT", "SUPABASE_URL", "SUPABASE_SECRET_KEY", "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "APP_ORIGIN", "WALLET_ENCRYPTION_KEY", "PORTAL_PATIENT_TAX_POLICY", "PORTAL_WITHDRAWAL_DEDUCTION_POLICY", "PORTAL_LEGACY_GUARDIAN_UNTIL"} {
 		t.Setenv(name, "")
 	}
 	t.Setenv("DATABASE_URL", "postgres://local.invalid/test")

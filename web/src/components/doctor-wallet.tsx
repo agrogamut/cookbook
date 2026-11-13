@@ -47,7 +47,7 @@ export function WithdrawalAmounts({
           {pending
             ? "Requested deduction estimate (18%)"
             : bps
-              ? `Approved deduction (${bps / 100}%)`
+              ? `Withdrawal deduction (${bps / 100}%)`
               : "Deduction (inactive)"}
         </dt>
         <dd>{money(v.deduction, "INR")}</dd>

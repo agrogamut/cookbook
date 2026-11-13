@@ -21,18 +21,18 @@ type Config struct {
 	// startup -- it means the AI-drafting feature (internal/aidraft) stays off: no
 	// clinical modification notes, no invented-recipe fallback, chapters that fall
 	// short just report the gap the way they always have.
-	GeminiAPIKey                string
-	SupabaseURL                 string
-	SupabaseSecretKey           string
-	RazorpayKeyID               string
-	RazorpayKeySecret           string
-	RazorpayWebhookSecret       string
-	AppOrigin                   string
-	SecureCookies               bool
-	LegacyGuardianUntil         time.Time
-	WalletEncryptionKey         []byte
-	PatientTaxApproval          string
-	WithdrawalDeductionApproval string
+	GeminiAPIKey              string
+	SupabaseURL               string
+	SupabaseSecretKey         string
+	RazorpayKeyID             string
+	RazorpayKeySecret         string
+	RazorpayWebhookSecret     string
+	AppOrigin                 string
+	SecureCookies             bool
+	LegacyGuardianUntil       time.Time
+	WalletEncryptionKey       []byte
+	PatientTaxPolicy          string
+	WithdrawalDeductionPolicy string
 }
 
 // Load reads the environment. It returns an error naming every missing variable at
@@ -74,11 +74,15 @@ func Load() (Config, error) {
 		}
 		c.WalletEncryptionKey = key
 	}
-	c.PatientTaxApproval = strings.TrimSpace(os.Getenv("PORTAL_PATIENT_TAX_APPROVAL"))
-	c.WithdrawalDeductionApproval = strings.TrimSpace(os.Getenv("PORTAL_WITHDRAWAL_DEDUCTION_APPROVAL"))
-	for _, reference := range []string{c.PatientTaxApproval, c.WithdrawalDeductionApproval} {
-		if len(reference) > 200 || strings.ContainsAny(reference, "\r\n") {
-			return c, fmt.Errorf("config: tax approval references must be single-line and at most 200 characters")
+
+	c.PatientTaxPolicy = strings.TrimSpace(os.Getenv("PORTAL_PATIENT_TAX_POLICY"))
+	c.WithdrawalDeductionPolicy = strings.TrimSpace(os.Getenv("PORTAL_WITHDRAWAL_DEDUCTION_POLICY"))
+	for _, value := range []*string{&c.PatientTaxPolicy, &c.WithdrawalDeductionPolicy} {
+		if *value == "" {
+			*value = "owner-18-v1"
+		}
+		if *value != "owner-18-v1" && *value != "inactive" {
+			return c, fmt.Errorf("config: portal tax policy must be owner-18-v1 or inactive")
 		}
 	}
 	c.GeminiAPIKey = os.Getenv("GEMINI_API_KEY")

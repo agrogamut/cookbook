@@ -38,7 +38,7 @@ func newPaidFixture(t *testing.T) *paidFixture {
 		t.Fatal(err)
 	}
 	f := &paidFixture{pool: pool, gateway: newTestGateway()}
-	f.server = New(pool, Options{Identity: newTestIdentity(), Gateway: f.gateway})
+	f.server = New(pool, Options{Identity: newTestIdentity(), Gateway: f.gateway, TaxPolicy: TaxPolicy{PatientPolicy: "inactive"}})
 	router := chi.NewRouter()
 	f.server.Routes(router)
 	f.router = router
@@ -60,12 +60,15 @@ func newPaidFixture(t *testing.T) *paidFixture {
 		for _, a := range append(f.doctors, f.admin) {
 			pool.Exec(ctx, `DELETE FROM app_private.wallet_audit WHERE actor_id=$1 OR withdrawal_id IN (SELECT id FROM app_private.doctor_withdrawal WHERE doctor_id=$1)`, a.ID)
 			pool.Exec(ctx, `DELETE FROM app_private.doctor_ledger WHERE doctor_id=$1`, a.ID)
+			pool.Exec(ctx, `DELETE FROM app_private.refund_decision WHERE refund_id IN (SELECT f.id FROM app_private.payment_refund f JOIN app_private.consultation_order o ON o.id=f.order_id JOIN app_private.appointment ap ON ap.id=o.appointment_id WHERE ap.earning_doctor_id=$1)`, a.ID)
+			pool.Exec(ctx, `DELETE FROM app_private.payment_refund WHERE order_id IN (SELECT o.id FROM app_private.consultation_order o JOIN app_private.appointment ap ON ap.id=o.appointment_id WHERE ap.earning_doctor_id=$1)`, a.ID)
 			pool.Exec(ctx, `DELETE FROM app_private.wallet_reconciliation WHERE doctor_id=$1`, a.ID)
 			pool.Exec(ctx, `DELETE FROM app_private.doctor_withdrawal WHERE doctor_id=$1`, a.ID)
 			pool.Exec(ctx, `DELETE FROM app_private.doctor_destination WHERE doctor_id=$1`, a.ID)
 		}
 		for _, id := range f.registrations {
 			pool.Exec(ctx, `DELETE FROM app_private.payment_event WHERE order_id IN(SELECT id FROM app_private.consultation_order WHERE registration_id=$1)`, id)
+			pool.Exec(ctx, `DELETE FROM app_private.payment_refund WHERE order_id IN (SELECT id FROM app_private.consultation_order WHERE registration_id=$1)`, id)
 			pool.Exec(ctx, `DELETE FROM app_private.consultation_order WHERE registration_id=$1`, id)
 			pool.Exec(ctx, `DELETE FROM app_private.consultation_registration WHERE id=$1`, id)
 			pool.Exec(ctx, `DELETE FROM public.child_profile WHERE child_id=$1`, id)

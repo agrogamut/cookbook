@@ -1,6 +1,6 @@
 # Consultation meetings and doctor wallet
 
-Migration 0047 extends the existing portal. Admin and doctor workspaces remain at `/admin` and `/doctor`. Families use `/family/login` and their existing portal. No shared appointment page, automatic transfer, messaging or reminder service is added.
+Migrations 0047 and 0048 extend the existing portal. Admin and doctor workspaces remain at `/admin` and `/doctor`. Families use `/family/login` and their existing portal. No shared appointment page, automatic transfer, messaging or reminder service is added.
 
 ## Access and meeting links
 
@@ -25,7 +25,23 @@ The ledger has independent unique identities for appointment earnings, payment c
 - Cancellation or rejection releases the reservation without a debit.
 - A credited appointment cannot be reassigned to another doctor. Reconcile/refund it and create a new appointment instead.
 
-A partial refund preserves the original earning and ledger history and places the affected doctor's wallet and requests on reconciliation hold. Even a one-paise refund blocks new withdrawals and paid marks; no proportional or full earning allocation is assumed. A later verified full refund reverses the earning exactly once and clears only the partial-refund hold. Dispute events freeze/reverse the affected earning even if delivered after capture. A later capture replay or dispute-won event does not silently restore it. Negative balances, refund-required appointments and disputes block new requests and paid marks. There is no automatic debt recovery or in-app reconciliation resolver. Admin can review the wallet and reject a pending request to release its reservation, but rejection does not clear a partial-refund hold. The allocation decision and an audited resolution action require a separately authorized policy and implementation; do not bypass the hold with a database edit or issue a full refund merely to clear it. If a manual bank transfer races a refund, preserve its receipt; the app refuses paid recording until reconciliation is resolved.
+## Partial refund decisions
+
+Every processed provider refund has its own immutable ID, amount and time in `app_private.payment_refund`. The API fetches all pages of the current payment's refund list, accepting only processed INR refunds for that payment. Cumulative totals never regress. Missing, inconsistent, overlapping or unavailable provider details retain a reconciliation hold and leave the callback retryable. A bounded pagination failure also requires retry, never a guessed allocation.
+
+At Admin > Doctor withdrawals > Refund reconciliation, admin reviews each refund, appointment, snapshotted doctor, original earning, previous reductions and remaining appointment earning. Admin explicitly chooses an integer-paise deduction from zero through the remaining appointment earning, gives a nonblank explanation (500 characters maximum) and confirms. This is a business allocation, so the bound is the remaining doctor earning, not an assumed ratio of the patient refund. The doctor amount may differ from the patient charge. Zero preserves the earning.
+
+Each decision is permanent through the application and records actor, timestamp, explanation and earning before the decision. Positive deductions append a negative ledger entry; original earnings are never rewritten. A unique refund decision and ledger identity plus the booking transaction lock prevent concurrent/duplicate deductions. Stale remaining-earning values conflict and require refresh. API routes are admin-only:
+
+- `GET /api/admin/refund-reviews`
+- `POST /api/admin/refund-reviews/{order_id}/sync`
+- `POST /api/admin/refund-reviews/{refund_id}/decision`
+
+Resolving the last known case releases only that partial-refund hold. Other unresolved refunds, missing identities, disputes, outstanding full-refund requests, negative balances and reservations exceeding the remaining balance still block new withdrawals or paid marks. An over-reserved request stays held; admin can explicitly reject it with an audit note to release its reservation. A previously paid doctor can have a negative balance after the adjustment. The app does not recover a bank transfer automatically.
+
+A verified full refund reverses only the remaining appointment earning once, after any prior partial adjustments. Dispute events freeze/reverse remaining earnings. Later capture or dispute-won callbacks do not silently restore earnings. Partial-refund cases can now be completed in-app without database edits. Dispute restoration, changing an immutable decision, or settling a negative balance outside future legitimate earnings still requires a separately designed audited correction process; no general manual-credit control is provided.
+
+Webhook/current-provider verification cannot atomically lock a provider against a simultaneous external refund or manual bank transfer. Verify the wallet immediately before a manual transfer, retain its receipt, and reconcile any event arriving in that interval. Request contents and payout details must stay out of logs.
 
 ## Private manual withdrawals
 
@@ -39,43 +55,41 @@ Admin may mark processing, reject, or record paid. A paid record requires the ac
 
 New financial tables use the private schema with RLS and no PUBLIC, anon or authenticated privileges. Route middleware enforces staff roles; family sessions cannot read wallets and doctors cannot access another doctor's withdrawals. Default history lists show the latest 200 ledger entries and 500 withdrawals; balance calculations include all rows.
 
-## Requested tax calculation and inactive policy
+## Owner-selected active 18% calculation
 
-The owner requests 18% added to family fees and an 18% deduction from doctor withdrawals, and states that AgroGamut Services Private Limited is GST registered. This is a requested policy, not a legal conclusion. A qualified Indian GST adviser must confirm the actual supplies, healthcare exemptions, contractual deduction basis, invoicing, place of supply, reporting and any other withholding before activation. Registration alone does not establish that either charge is lawful GST. The implementation is an aggregate calculation, not a complete tax invoice or statutory filing system.
+The owner requests 18% added to family fees and an 18% deduction from doctor withdrawals, and states AgroGamut Services Private Limited is GST registered. The local candidate enables that calculation by default for new orders and requests. `owner-18-v1` records the owner's selection, not professional approval.
 
-Both approval variables default to empty and have no browser activation control:
-
-| Server variable | Empty/default behavior | Explicit reviewed reference |
+| Server variable | Empty or `owner-18-v1` | Explicit `inactive` override |
 | --- | --- | --- |
-| `PORTAL_PATIENT_TAX_APPROVAL` | Family checkout uses the actual current consultation price, without a new charge. | New orders snapshot base, 18% charge and total. |
-| `PORTAL_WITHDRAWAL_DEDUCTION_APPROVAL` | Show the requested 18% estimate as provisional. Final payout is pending review; server rejects paid actions. | New requests snapshot the reviewed 18% deduction and final amount. |
+| `PORTAL_PATIENT_TAX_POLICY` | New orders snapshot base, 18% GST calculation and actual total. | New orders use the base consultation price with zero added tax. |
+| `PORTAL_WITHDRAWAL_DEDUCTION_POLICY` | New requests snapshot the 18% deduction and payable amount. | Requests retain a provisional 18% estimate; final payout is pending and paid recording is blocked. |
 
-References are short, non-sensitive identifiers for a documented review, not booleans. Do not enable these variables solely to make a pending withdrawal payable. Qualified review and operational invoicing/reporting readiness are prerequisites.
+Other values fail startup. Retired `PORTAL_PATIENT_TAX_APPROVAL` and `PORTAL_WITHDRAWAL_DEDUCTION_APPROVAL` names are no longer read. They do not disable the active default. The admin screen displays policy state but cannot change it.
 
-Requested example: gross ₹2,000 (200,000 paise), provisional or reviewed deduction ₹360 (36,000 paise), net ₹1,640 (164,000 paise). Integer rounding is half-up to the nearest paise: `(gross_paise * 1800 + 5000) / 10000`. The wallet always reserves/debits ₹2,000, not ₹1,640.
+Example: gross ₹2,000 (200,000 paise), deduction ₹360 (36,000 paise), final withdrawable ₹1,640 (164,000 paise). Integer half-up rounding: `(gross_paise * 1800 + 5000) / 10000`. The wallet reserves/debits ₹2,000 once. For patient fees, a ₹2,000 base produces a ₹360 addition and ₹2,360 total.
 
-A request made before approval retains `pending_review` permanently. Later approval does not reprice or authorize it. The doctor must cancel it, or admin reject it, then the doctor creates and reconfirms a fresh request. A pending request under a revoked/different policy is also blocked. The current approved reference must match its immutable snapshot before paid. Completed history remains unchanged.
+Existing patient orders retain their stored price and policy, including tax-off orders. The family confirms the actual order price before checkout. Old `pending_review` withdrawals remain provisional even after activation: the doctor cancels, or admin rejects, then the doctor submits and confirms a new request. Requests under a different/inactive current policy cannot be marked paid. Completed history is unchanged.
 
-Existing patient orders keep their exact stored amounts through policy/fee changes. Checkout asks the family to confirm the actual order total before opening the provider. The family screen uses the existing order snapshot where present.
+Legal classification remains unverified. GST registration alone does not establish taxable treatment of each actual supply or that a withdrawal deduction is lawful GST. A qualified Indian GST adviser must assess contracts, healthcare exemptions (including CBIC entry 74 and Circular 32/06/2018), invoicing, reporting and any other withholding. The code does not invent adviser approval, a GSTIN, tax invoices, tax credits or compliance certification. This is the requested calculation, not a complete tax accounting system.
 
 ## Deployment and verification
 
-This feature has not been deployed by this work. Migrations run on API startup. Migration 0047 is additive; its down migration refuses to discard ledger, withdrawal or order-price history. Roll forward once financial data exists.
+This feature has not been deployed by this work. Migrations run on API startup. Migration 0047 adds wallet fields; 0048 adds refund identities/decisions and extends ledger constraints. Their down migrations refuse financial/refund history loss. Roll forward once financial data exists.
 
 Release API and frontend from the same reviewed commit in this order; coordinate the two service rollouts so frontend auto-deployment cannot race ahead of the API:
 
-1. Before API deployment, explicitly set `PORTAL_LEGACY_GUARDIAN_UNTIL` to an absolute RFC3339 timestamp no more than 24 hours ahead. Choose only the short window needed for the frontend rollout. Apply the API migration and verify that revision is serving before deploying the new frontend. During this window only an omitted `guardian_name` is accepted by the legacy access and recovery paths. Every path still requires the correct private registration credential or unused recovery grant, child name and DOB and retains its registration scope. A supplied wrong name, blank, null or non-string is rejected.
-2. Deploy the frontend, which always requires guardian name, then verify its exact serving revision and both access and recovery forms. Verify legacy omission, new correct name, wrong name and missing credentials using authorized synthetic data in a safe acceptance environment. The old API rejects the new fields, so frontend-first deployment is unsafe.
-3. After frontend verification, unset the compatibility variable and restart/redeploy the API to enforce guardian name immediately. The fixed deadline also expires automatically if this step is missed; restarting does not renew it. Empty is the secure strict default. Invalid or more-than-24-hour future deadlines fail startup. Existing authenticated sessions and staff login remain valid. Old tabs must refresh once strict mode takes effect.
+1. Before API deployment, explicitly set BOTH `PORTAL_PATIENT_TAX_POLICY=inactive` and `PORTAL_WITHDRAWAL_DEDUCTION_POLICY=inactive`. This prevents the new API adding tax while an old frontend displays the base price. Blank enables tax and is not a rollout override. Also set `PORTAL_LEGACY_GUARDIAN_UNTIL` to an absolute RFC3339 timestamp no more than 24 hours ahead. Choose only the short window needed for the frontend rollout. Apply the API migration and verify that revision is serving before deploying the new frontend. During this window only an omitted `guardian_name` is accepted by the legacy access and recovery paths. Every path still requires the correct private registration credential or unused recovery grant, child name and DOB and retains its registration scope. A supplied wrong name, blank, null or non-string is rejected.
+2. Deploy the frontend, which always requires guardian name, then verify its exact serving revision, both access/recovery forms, itemized actual checkout confirmation and withdrawal amounts. Keep tax inactive until the new screen is confirmed. Open old checkout tabs must refresh before activation; an independently cached old tab cannot be guaranteed to display a new calculation. Verify legacy omission, new correct name, wrong name and missing credentials using authorized synthetic data in a safe acceptance environment. The old API rejects the new fields, so frontend-first deployment is unsafe.
+3. After frontend verification, set both policy variables to `owner-18-v1` for the requested active calculation, unset the guardian compatibility variable and restart/redeploy the API to enforce guardian name immediately. The fixed deadline also expires automatically if this step is missed; restarting does not renew it. Empty is the secure strict default. Invalid or more-than-24-hour future deadlines fail startup. Existing authenticated sessions and staff login remain valid. Old tabs must refresh once strict mode takes effect.
 
 No production compatibility setting was changed by this work. Do not configure earnings until both services are verified; appointments created by an older API have no earning snapshot.
 
-Keep both tax approval variables unset until their independent reviews are complete. Configure the encryption key before enabling payout destination entry, then set the intended fixed earning amount. Verify both deployed revisions, migration state and health independently. Use authorized synthetic test data for any later acceptance check; local evidence does not establish provider or live deployment status.
+Configure the encryption key before enabling payout destination entry, then set the intended fixed earning amount. Verify both deployed revisions, migration state and health independently. Use authorized synthetic test data for any later acceptance check; local evidence does not establish provider or live deployment status.
 
 Subscribe the existing signed payment webhook to the documented payment/refund events and to `payment.dispute.created`, `payment.dispute.under_review`, `payment.dispute.action_required`, `payment.dispute.won`, `payment.dispute.lost` and `payment.dispute.closed`. Dispute handling verifies the signature and fetches current payment state. An undisclosed/unreceived provider dispute cannot be detected by the app; external notification configuration remains an operational dependency.
 
 Tests use `PORTAL_TEST_DATABASE_URL` for a disposable PostgreSQL database. The wallet suite exercises populated migration upgrade, no backfill, privileges, cross-account authorization, capture replay, competing withdrawals, refunds/disputes, policy transition and manual paid idempotency. `go test ./...`, `go build ./...` and `go vet ./...` remain required. Corpus tests separately need `TEST_DATABASE_URL` and imported provider data.
 
-The browser fixture uses a separate database with synthetic identity and gateway responses only. Run `web/e2e/consultation-wallet.spec.ts` once with default policy and once with `PORTAL_BROWSER_REVIEWED_POLICY=1` on both fixture and test process. It covers real Next.js/Go/PostgreSQL flows, mobile/light/dark views and the exact requested arithmetic without real transfers. Run the existing family-consultation browser regression too.
+The browser fixture uses a separate database with synthetic identity and gateway responses only. Run `web/e2e/consultation-wallet.spec.ts` once with default active policy and once with `PORTAL_BROWSER_INACTIVE_POLICY=1` on both fixture and test process. It covers real Next.js/Go/PostgreSQL flows, mobile/light/dark views, price confirmation, in-app refund decisions and the exact requested arithmetic without real transfers. Run the existing family-consultation browser regression too.
 
 No application request quotas are restored. Hosting, proxies, identity and payment providers may still produce independent HTTP 429 responses.

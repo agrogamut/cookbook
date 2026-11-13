@@ -17,7 +17,7 @@ func walletFixture(t *testing.T) (*paidFixture, *http.Cookie) {
 	t.Helper()
 	f := newPaidFixture(t)
 	f.server.options.WalletKey = bytes.Repeat([]byte{42}, 32)
-	f.server.options.TaxPolicy.WithdrawalApproval = "synthetic-adviser-policy-v1"
+	f.server.options.TaxPolicy.WithdrawalPolicy = "owner-18-v1"
 	expectCode(t, portalRequest(f.router, "PUT", "/api/admin/earnings", map[string]int{"doctor_earning_paise": 500000}, f.adminCookie, ""), 200)
 	w := portalRequest(f.router, "POST", "/api/auth/login", map[string]string{"email": f.doctors[0].Email, "password": "test-password-only-123"}, nil, "")
 	expectCode(t, w, 200)
@@ -210,7 +210,7 @@ func TestWalletWithdrawalRacePrivacyAndManualPaid(t *testing.T) {
 }
 func TestWalletWithdrawalCalculationReplayRejectionAndDispute(t *testing.T) {
 	f, doctor := walletFixture(t)
-	f.server.options.TaxPolicy.WithdrawalApproval = "synthetic-adviser-policy-v1"
+	f.server.options.TaxPolicy.WithdrawalPolicy = "owner-18-v1"
 	_, p := walletCredit(t, f, 0)
 	saveTestDestination(t, f, doctor)
 	body := map[string]any{"amount_paise": 200000, "request_key": testUUID()}
@@ -258,7 +258,7 @@ func TestWalletWithdrawalCalculationReplayRejectionAndDispute(t *testing.T) {
 	walletBalance(t, f, 0, 0)
 }
 func TestTaxGatesAndOrderSnapshot(t *testing.T) {
-	if got := (TaxPolicy{}).price(100000); got.TotalPaise != 100000 || got.TaxPaise != 0 {
+	if got := (TaxPolicy{}).price(100000); got.TotalPaise != 118000 || got.TaxPaise != 18000 {
 		t.Fatal(got)
 	}
 	deduction, bps, _ := (TaxPolicy{}).withdrawal(200000)
@@ -266,14 +266,14 @@ func TestTaxGatesAndOrderSnapshot(t *testing.T) {
 		t.Fatal("pending estimate is incorrect")
 	}
 	f, _ := walletFixture(t)
-	f.server.options.TaxPolicy.PatientApproval = "synthetic-adviser-policy-v1"
+	f.server.options.TaxPolicy.PatientPolicy = "owner-18-v1"
 	id, secret := f.register(t, "Tax snapshot")
 	f.book(t, id, secret, f.doctors[0].ID, f.start)
 	order := f.order(t, id, secret)
 	if order.Amount != 29500 {
 		t.Fatalf("amount %d", order.Amount)
 	}
-	f.server.options.TaxPolicy.PatientApproval = ""
+	f.server.options.TaxPolicy.PatientPolicy = "inactive"
 	again := f.order(t, id, secret)
 	if again.ID != order.ID || again.Amount != order.Amount {
 		t.Fatal("order repriced")
@@ -289,7 +289,7 @@ func TestTaxGatesAndOrderSnapshot(t *testing.T) {
 
 func TestWithdrawalCannotBePaidBeforePolicyReview(t *testing.T) {
 	f, doctor := walletFixture(t)
-	f.server.options.TaxPolicy.WithdrawalApproval = ""
+	f.server.options.TaxPolicy.WithdrawalPolicy = "inactive"
 	walletCredit(t, f, 0)
 	saveTestDestination(t, f, doctor)
 	w := portalRequest(f.router, "POST", "/api/doctor/wallet/withdrawals", map[string]any{"amount_paise": 200000, "request_key": testUUID()}, doctor, "")
@@ -300,7 +300,7 @@ func TestWithdrawalCannotBePaidBeforePolicyReview(t *testing.T) {
 	}
 	paid := map[string]any{"action": "paid", "transferred_paise": 164000, "transfer_reference": "NOT-TRANSFERRED", "transferred_at": time.Now().UTC().Format(time.RFC3339Nano), "transfer_completed": true}
 	expectCode(t, portalRequest(f.router, "POST", "/api/admin/withdrawals/"+v.ID+"/decision", paid, f.adminCookie, ""), 409)
-	f.server.options.TaxPolicy.WithdrawalApproval = "newly-confirmed-local-policy"
+	f.server.options.TaxPolicy.WithdrawalPolicy = "owner-18-v1"
 	expectCode(t, portalRequest(f.router, "POST", "/api/admin/withdrawals/"+v.ID+"/decision", paid, f.adminCookie, ""), 409)
 	walletBalance(t, f, 500000, 200000)
 	expectCode(t, portalRequest(f.router, "POST", "/api/admin/withdrawals/"+v.ID+"/decision", map[string]string{"action": "rejected", "note": "Recreate under confirmed policy"}, f.adminCookie, ""), 200)
@@ -312,9 +312,9 @@ func TestWithdrawalCannotBePaidBeforePolicyReview(t *testing.T) {
 		t.Fatalf("reviewed snapshot %+v", recreated)
 	}
 	paid["transferred_at"] = time.Now().UTC().Truncate(time.Minute).Format(time.RFC3339)
-	f.server.options.TaxPolicy.WithdrawalApproval = ""
+	f.server.options.TaxPolicy.WithdrawalPolicy = "inactive"
 	expectCode(t, portalRequest(f.router, "POST", "/api/admin/withdrawals/"+recreated.ID+"/decision", paid, f.adminCookie, ""), 409)
-	f.server.options.TaxPolicy.WithdrawalApproval = "different-reviewed-policy"
+	f.server.options.TaxPolicy.WithdrawalPolicy = "legacy-snapshot-policy"
 	listed := decodeResponse[[]Withdrawal](t, portalRequest(f.router, "GET", "/api/admin/withdrawals", nil, f.adminCookie, ""))
 	for _, item := range listed {
 		if item.ID == recreated.ID && !item.PolicyPending {
@@ -322,7 +322,7 @@ func TestWithdrawalCannotBePaidBeforePolicyReview(t *testing.T) {
 		}
 	}
 	expectCode(t, portalRequest(f.router, "POST", "/api/admin/withdrawals/"+recreated.ID+"/decision", paid, f.adminCookie, ""), 409)
-	f.server.options.TaxPolicy.WithdrawalApproval = "newly-confirmed-local-policy"
+	f.server.options.TaxPolicy.WithdrawalPolicy = "owner-18-v1"
 	expectCode(t, portalRequest(f.router, "POST", "/api/admin/withdrawals/"+recreated.ID+"/decision", paid, f.adminCookie, ""), 200)
 	walletBalance(t, f, 300000, 0)
 	var originalPolicy, originalStatus string
