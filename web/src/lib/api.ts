@@ -67,7 +67,7 @@ export const listPublicDoctors = () => request<{ id: string; name: string }[]>("
 export const listPublicAvailability = (date: string, doctorID = "") => request<FreeInterval[]>(`/api/public/availability?date=${encodeURIComponent(date)}${doctorID ? `&doctor_id=${encodeURIComponent(doctorID)}` : ""}`);
 export const createPublicAppointment = (id: string, token: string, input: { doctor_id?: string; starts_at: string; ends_at: string }) => request<{ id: string; status: string; hold_expires_at: string }>(`/api/public/registrations/${encodeURIComponent(id)}/appointment`, { method: "POST", headers: { "X-Registration-Token": token }, body: JSON.stringify({ registration_id: id, ...input }) });
 export const cancelPublicAppointment = (id: string, appointmentID: string, token: string) => request<{ ok: boolean }>(`/api/public/registrations/${encodeURIComponent(id)}/appointment/${encodeURIComponent(appointmentID)}/cancel`, { method: "POST", headers: { "X-Registration-Token": token }, body: "{}" });
-export const createCheckoutOrder = (id: string, token: string) => request<CheckoutOrder>(`/api/public/registrations/${encodeURIComponent(id)}/order`, { method: "POST", headers: { "X-Registration-Token": token }, body: "{}" });
+export const createCheckoutOrder = (id: string, token: string) => itemizedOrder(`/api/public/registrations/${encodeURIComponent(id)}/order/itemized-v1`, { method: "POST", headers: { "X-Registration-Token": token }, body: "{}" });
 export const verifyCheckout = (id: string, token: string, result: CheckoutConfirmation) => request<PublicRegistrationStatus>(`/api/public/registrations/${encodeURIComponent(id)}/verify`, { method: "POST", headers: { "X-Registration-Token": token }, body: JSON.stringify(result) });
 export const listRegistrations = (query: URLSearchParams) => request<RegistrationList>(`/api/registrations?${query}`);
 export async function listAllRegistrations(): Promise<Registration[]> {
@@ -99,7 +99,7 @@ export const attachFamilyRegistration = (token: string, id?: string) => request<
 export const listFamilyAvailability = (date: string, doctorID = "") => request<FreeInterval[]>(`/api/family/availability?date=${encodeURIComponent(date)}${doctorID ? `&doctor_id=${encodeURIComponent(doctorID)}` : ""}`);
 export const createFamilyAppointment = (input: { registration_id: string; doctor_id?: string; starts_at: string; ends_at: string }) => request<{ id: string; status: string }>("/api/family/appointments", { method: "POST", body: JSON.stringify(input) });
 export const cancelFamilyAppointment = (id: string) => request<{ ok: boolean }>(`/api/family/appointments/${encodeURIComponent(id)}/cancel`, { method: "POST", body: "{}" });
-export const createFamilyOrder = (id: string) => request<CheckoutOrder>(`/api/family/registrations/${encodeURIComponent(id)}/order`, { method: "POST", body: "{}" });
+export const createFamilyOrder = (id: string) => itemizedOrder(`/api/family/registrations/${encodeURIComponent(id)}/order/itemized-v1`, { method: "POST", body: "{}" });
 export const verifyFamilyCheckout = (id: string, result: CheckoutConfirmation) => request<FamilyRegistration>(`/api/family/registrations/${encodeURIComponent(id)}/verify`, { method: "POST", body: JSON.stringify(result) });
 export const downloadFamilyBook = async (id: string): Promise<Blob> => {
   const res = await apiFetch(`${BASE_URL}/api/family/book-releases/${encodeURIComponent(id)}/download`);
@@ -434,7 +434,7 @@ async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<R
 export const issueFamilyAccess = (id: string) => request<{ token: string; expires_at: string }>(`/api/admin/registrations/${encodeURIComponent(id)}/family-access`, { method: "POST", body: JSON.stringify({ guardian_verified: true }) });
 export const redeemFamilyAccess = (child_name: string, date_of_birth: string, token: string, guardian_name: string) => request<{ id: string; token: string }>("/api/family/auth/recover", { method: "POST", body: JSON.stringify({ child_name, date_of_birth, token, guardian_name }) });
 
-export const saveMeeting = (id: string, meeting_url: string) => request<{ok: boolean}>(`/api/appointments/${encodeURIComponent(id)}/meeting`, {method:"PUT", body:JSON.stringify({meeting_url})});
+export const saveMeeting = (id: string, meeting_url: string, expected: {doctor_id: string; meeting_url: string}) => request<{ok: boolean}>(`/api/appointments/${encodeURIComponent(id)}/meeting`, {method:"PUT", body:JSON.stringify({meeting_url, expected_doctor_id: expected.doctor_id, expected_meeting_url: expected.meeting_url})});
 export const getDoctorWallet = () => request<DoctorWalletData>("/api/doctor/wallet");
 export const savePayoutDestination = (input: PayoutDestination) => request<{masked_destination:string}>("/api/doctor/wallet/destination", {method:"PUT",body:JSON.stringify(input)});
 export const requestWithdrawal = (amount_paise:number,request_key:string) => request<Withdrawal>("/api/doctor/wallet/withdrawals",{method:"POST",body:JSON.stringify({amount_paise,request_key})});
@@ -448,3 +448,13 @@ export const saveDoctorEarning = (doctor_earning_paise:number|null) => request<C
 export const getRefundReviews = () => request<RefundReview[]>("/api/admin/refund-reviews");
 export const syncRefundReview = (orderID: string) => request<{ok: boolean}>(`/api/admin/refund-reviews/${encodeURIComponent(orderID)}/sync`, {method: "POST", body: "{}"});
 export const decideRefund = (refundID: string, input: {adjustment_paise: number; expected_remaining_paise: number; explanation: string; confirmed: boolean}) => request<{ok: boolean}>(`/api/admin/refund-reviews/${encodeURIComponent(refundID)}/decision`, {method: "POST", body: JSON.stringify(input)});
+
+async function itemizedOrder(path: string, init: RequestInit): Promise<CheckoutOrder> {
+  try { return await request<CheckoutOrder>(path, init); }
+  catch (error) {
+    if (error instanceof ApiError && error.status === 404) {
+      throw new ApiError(409, "Checkout is being updated. Please refresh and try again shortly. Your saved registration is unchanged.");
+    }
+    throw error;
+  }
+}

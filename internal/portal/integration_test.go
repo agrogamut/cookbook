@@ -265,8 +265,8 @@ func TestPortalPersistenceAndAuthorization(t *testing.T) {
 	expectCode(t, recorder, 403)
 	expectCode(t, portalRequest(router, "PUT", "/api/admin/settings", map[string]any{"amount_paise": 12345, "payments_enabled": true}, admin, ""), 200)
 	publicPath := "/api/public/registrations/" + registrationID
-	expectCode(t, portalRequest(router, "POST", publicPath+"/order", map[string]string{}, nil, token()), 404)
-	expectCode(t, portalRequest(router, "POST", publicPath+"/order", map[string]string{}, nil, input.Token), 409)
+	expectCode(t, portalRequest(router, "POST", publicPath+"/order/itemized-v1", map[string]string{}, nil, token()), 404)
+	expectCode(t, portalRequest(router, "POST", publicPath+"/order/itemized-v1", map[string]string{}, nil, input.Token), 409)
 	slotStart := time.Now().Add(48 * time.Hour).Truncate(time.Minute)
 	slotEnd := slotStart.Add(30 * time.Minute)
 	expectCode(t, portalRequest(router, "POST", "/api/availability", map[string]string{"doctor_id": actors[1].ID, "starts_at": slotStart.Format(time.RFC3339), "ends_at": slotEnd.Format(time.RFC3339)}, admin, ""), 200)
@@ -275,7 +275,7 @@ func TestPortalPersistenceAndAuthorization(t *testing.T) {
 	responses := make(chan *httptest.ResponseRecorder, 2)
 	for range 2 {
 		wait.Go(func() {
-			responses <- portalRequest(router, "POST", publicPath+"/order", map[string]string{}, nil, input.Token)
+			responses <- portalRequest(router, "POST", publicPath+"/order/itemized-v1", map[string]string{}, nil, input.Token)
 		})
 	}
 	wait.Wait()
@@ -347,7 +347,7 @@ func TestPortalPersistenceAndAuthorization(t *testing.T) {
 	p.Status = "refunded"
 	gateway.set(p)
 	expectCode(t, webhook("refund-"+registrationID), 200)
-	expectCode(t, portalRequest(router, "POST", publicPath+"/order", map[string]string{}, nil, input.Token), 409)
+	expectCode(t, portalRequest(router, "POST", publicPath+"/order/itemized-v1", map[string]string{}, nil, input.Token), 409)
 	public := portalRequest(router, "GET", publicPath, nil, nil, input.Token)
 	expectCode(t, public, 200)
 	if bytes.Contains(public.Body.Bytes(), []byte("guardian")) || bytes.Contains(public.Body.Bytes(), []byte("phone")) {

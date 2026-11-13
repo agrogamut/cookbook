@@ -316,6 +316,19 @@ func (s *Server) applyPaymentEvent(ctx context.Context, p Payment, eventID strin
 	// Failed attempts can arrive after capture. Refund totals and settled status
 	// never move backwards, even with delayed webhooks or simultaneous callbacks.
 	if settled(oldState) && (!settled(state) || oldPaymentID != p.ID || p.AmountRefunded < refunded) {
+		// A newer refund supersedes this payment snapshot, not the signed dispute.
+		if dispute && oldPaymentID == p.ID {
+			if appointmentID.Valid {
+				if err = applyDispute(ctx, tx, appointmentID.String); err != nil {
+					return err
+				}
+			}
+			if eventID != "" {
+				if _, err = tx.Exec(ctx, `INSERT INTO app_private.payment_event(id,order_id) VALUES($1,$2) ON CONFLICT DO NOTHING`, eventID, p.OrderID); err != nil {
+					return err
+				}
+			}
+		}
 		return tx.Commit(ctx)
 	}
 	if oldState == "authorized" && (state == "pending" || (state == "failed" && oldPaymentID != p.ID)) {
@@ -326,7 +339,7 @@ func (s *Server) applyPaymentEvent(ctx context.Context, p Payment, eventID strin
 	if err != nil {
 		return fmt.Errorf("update payment state: %w", err)
 	}
-	if appointmentID.Valid && state == "paid" {
+	if appointmentID.Valid && (state == "paid" || state == "partially_refunded") {
 		if _, err = tx.Exec(ctx, `UPDATE app_private.appointment SET status='paid_pending_admin',hold_expires_at=NULL,updated_at=now()
 			WHERE id=$1 AND (status='pending_admin' OR (status='awaiting_payment' AND hold_expires_at>now()))`, appointmentID.String); err != nil {
 			return fmt.Errorf("advance appointment after payment: %w", err)
@@ -334,6 +347,11 @@ func (s *Server) applyPaymentEvent(ctx context.Context, p Payment, eventID strin
 		if _, err = tx.Exec(ctx, `UPDATE app_private.appointment SET status='refund_required',hold_expires_at=NULL,updated_at=now()
 			WHERE id=$1 AND status IN ('awaiting_payment','expired','cancelled','rejected')`, appointmentID.String); err != nil {
 			return fmt.Errorf("flag expired appointment payment: %w", err)
+		}
+	}
+	if appointmentID.Valid && (state == "paid" || state == "partially_refunded") {
+		if err = creditCapturedEarning(ctx, tx, p, appointmentID.String); err != nil {
+			return err
 		}
 	}
 	if appointmentID.Valid && (state == "refunded" || state == "partially_refunded") {
@@ -365,18 +383,12 @@ func (s *Server) applyPaymentEvent(ctx context.Context, p Payment, eventID strin
 		}
 	}
 	if appointmentID.Valid {
-		if err = s.applyEarning(ctx, tx, p, state, appointmentID.String); err != nil {
+		if err = s.applyEarning(ctx, tx, state, appointmentID.String); err != nil {
 			return err
 		}
 		if dispute {
-			if err = reverseEarning(ctx, tx, appointmentID.String, "payment_dispute"); err != nil {
+			if err = applyDispute(ctx, tx, appointmentID.String); err != nil {
 				return err
-			}
-			_, err = tx.Exec(ctx, `INSERT INTO app_private.wallet_reconciliation(appointment_id,doctor_id,reason)
-                SELECT id,earning_doctor_id,'dispute' FROM app_private.appointment WHERE id=$1 AND earning_doctor_id IS NOT NULL
-                ON CONFLICT(appointment_id) DO UPDATE SET reason='dispute'`, appointmentID.String)
-			if err != nil {
-				return fmt.Errorf("record dispute reconciliation: %w", err)
 			}
 		}
 	}
@@ -484,4 +496,8 @@ func (s *Server) Webhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respond(w, 200, map[string]bool{"received": true})
+}
+
+func checkoutUpgradeRequired(w http.ResponseWriter, r *http.Request) {
+	fail(w, http.StatusConflict, "Checkout was updated. Refresh this page before paying. Your registration and booking are saved.")
 }

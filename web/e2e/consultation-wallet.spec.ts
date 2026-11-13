@@ -114,6 +114,20 @@ test("wallet, meeting links and manual payout", async ({ page, request }) => {
       body: `window.Razorpay = class { constructor(options) { this.options = options; } on() {} open() { window.__checkoutOptions = this.options; } };`,
     }),
   );
+  const legacyResponse = await page.evaluate(async () => {
+    const receipt = JSON.parse(sessionStorage.getItem("madamgy.consultation.receipt")!);
+    const response = await fetch("/api/public/registrations/" + receipt.id + "/order", {
+      method: "POST", headers: {"Content-Type":"application/json","X-Madamgy-Request":"1","X-Registration-Token":receipt.token}, body:"{}",
+    });
+    return {status:response.status,body:await response.json()};
+  });
+  expect(legacyResponse.status).toBe(409);
+  expect(legacyResponse.body.error).toContain("Refresh");
+  await page.route("**/order/itemized-v1", route => route.fulfill({status:404,body:""}));
+  await page.getByRole("button", { name: /Pay .*for consultation/ }).click();
+  await expect(page.getByText(/Checkout is being updated/)).toBeVisible();
+  expect(await page.evaluate(() => Boolean((window as unknown as {__checkoutOptions?:unknown}).__checkoutOptions))).toBe(false);
+  await page.unroute("**/order/itemized-v1");
   await page.getByRole("button", { name: /Pay .*for consultation/ }).click();
   await expect
     .poll(() =>
@@ -220,6 +234,29 @@ test("wallet, meeting links and manual payout", async ({ page, request }) => {
   await expect(
     page.getByRole("link", { name: "Join call", exact: true }),
   ).toHaveAttribute("href", "https://meet.example.invalid/doctor-edited");
+  await page.getByLabel("Meeting link", {exact:true}).fill("https://meet.example.invalid/unsaved-draft");
+  const otherEditor = await page.context().newPage();
+  await otherEditor.goto("/doctor");
+  await otherEditor.getByLabel("Meeting link", {exact:true}).fill("https://meet.example.invalid/external-update");
+  await otherEditor.getByRole("button", {name:"Save link",exact:true}).click();
+  await expect(otherEditor.getByRole("link",{name:"Join call",exact:true})).toHaveAttribute("href","https://meet.example.invalid/external-update");
+  await page.getByRole("button",{name:"Save link",exact:true}).click();
+  await expect(page.getByText(/Your draft is kept/)).toBeVisible();
+  await expect(page.getByLabel("Meeting link",{exact:true})).toHaveValue("https://meet.example.invalid/unsaved-draft");
+  await expect(page.getByRole("button",{name:"Save link",exact:true})).toBeDisabled();
+  await page.screenshot({path:path.join(evidence,"meeting-conflict.png"),fullPage:true});
+  await page.setViewportSize({width:390,height:900});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy();
+  await page.screenshot({path:path.join(evidence,"meeting-conflict-mobile.png"),fullPage:true});
+  await page.setViewportSize({width:1440,height:1000});
+  await page.getByRole("button",{name:"Use current link",exact:true}).click();
+  await expect(page.getByLabel("Meeting link",{exact:true})).toHaveValue("https://meet.example.invalid/external-update");
+  await otherEditor.getByLabel("Meeting link",{exact:true}).fill("https://meet.example.invalid/doctor-edited");
+  await otherEditor.getByRole("button",{name:"Save link",exact:true}).click();
+  await expect(otherEditor.getByRole("link",{name:"Join call",exact:true})).toHaveAttribute("href","https://meet.example.invalid/doctor-edited");
+  await page.getByRole("button",{name:"Refresh calls",exact:true}).click();
+  await expect(page.getByLabel("Meeting link",{exact:true})).toHaveValue("https://meet.example.invalid/doctor-edited");
+  await otherEditor.close();
   await expect(page.getByText(/^Loading (calls|requests|registrations|wallet)\.\.\.$/)).toHaveCount(0);
   await page.screenshot({
     path: path.join(evidence, "doctor-calls-light.png"),

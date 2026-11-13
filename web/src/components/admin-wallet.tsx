@@ -382,7 +382,7 @@ export function AdminWallet() {
           <h2 className="text-xl font-semibold">Doctor withdrawals</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Review requests, transfer manually, then record the completed
-            payment. No automatic transfers.
+            payment. No automatic transfers. All pending requests are shown, followed by the latest 500 closed requests.
           </p>
         </div>
         <Button variant="outline" onClick={() => setRevision((v) => v + 1)}>

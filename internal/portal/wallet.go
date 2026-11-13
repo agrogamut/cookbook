@@ -237,7 +237,14 @@ func scanWithdrawal(row interface{ Scan(...any) error }) (Withdrawal, error) {
 	return v, err
 }
 func (s *Server) withdrawals(ctx context.Context, doctor string) ([]Withdrawal, error) {
-	rows, err := s.pool.Query(ctx, withdrawalSelect+`WHERE ($1='' OR w.doctor_id::text=$1) ORDER BY w.created_at DESC,w.id DESC LIMIT 500`, doctor)
+	rows, err := s.pool.Query(ctx, withdrawalSelect+`WHERE ($1='' OR w.doctor_id::text=$1) AND (
+        w.status IN ('requested','processing') OR w.id IN (
+            SELECT id FROM app_private.doctor_withdrawal
+            WHERE ($1='' OR doctor_id::text=$1) AND status NOT IN ('requested','processing')
+            ORDER BY created_at DESC,id DESC LIMIT 500))
+        ORDER BY (w.status IN ('requested','processing')) DESC,
+            CASE WHEN w.status IN ('requested','processing') THEN w.created_at END ASC,
+            w.created_at DESC,w.id DESC`, doctor)
 	if err != nil {
 		return nil, err
 	}
@@ -590,19 +597,20 @@ func (s *Server) RevealWithdrawalDestination(w http.ResponseWriter, r *http.Requ
 
 // The caller already holds the booking lock, so capture, refund and withdrawals
 // cannot race the balance transition. Unique source identities also guard replay.
-func (s *Server) applyEarning(ctx context.Context, tx pgx.Tx, p Payment, state, appointment string) error {
-	if state == "paid" {
-		_, err := tx.Exec(ctx, `INSERT INTO app_private.doctor_ledger(doctor_id,kind,amount_paise,appointment_id,order_id,payment_id,reason)
+func creditCapturedEarning(ctx context.Context, tx pgx.Tx, p Payment, appointment string) error {
+	_, err := tx.Exec(ctx, `INSERT INTO app_private.doctor_ledger(doctor_id,kind,amount_paise,appointment_id,order_id,payment_id,reason)
             SELECT a.earning_doctor_id,'earning',a.earning_paise,a.id,$2,$3,'verified_capture'
             FROM app_private.appointment a JOIN app_private.consultation_order o ON o.id=$2 AND o.appointment_id=a.id
             WHERE a.id=$1 AND a.earning_policy='fixed-v1' AND a.earning_paise>0
                 AND a.earning_doctor_id=a.doctor_id AND a.status IN ('paid_pending_admin','confirmed')
                 AND o.created_at>=a.created_at AND NOT EXISTS(SELECT 1 FROM app_private.wallet_reconciliation WHERE appointment_id=a.id)
             ON CONFLICT DO NOTHING`, appointment, p.OrderID, p.ID)
-		if err != nil {
-			return fmt.Errorf("record captured earning: %w", err)
-		}
+	if err != nil {
+		return fmt.Errorf("record captured earning: %w", err)
 	}
+	return nil
+}
+func (s *Server) applyEarning(ctx context.Context, tx pgx.Tx, state, appointment string) error {
 	if state == "refunded" {
 		if err := reverseEarning(ctx, tx, appointment, "patient_refund"); err != nil {
 			return err
@@ -622,6 +630,19 @@ func reverseEarning(ctx context.Context, tx pgx.Tx, appointment, reason string) 
         ON CONFLICT DO NOTHING`, appointment, reason)
 	if err != nil {
 		return fmt.Errorf("reverse consultation earning: %w", err)
+	}
+	return nil
+}
+
+func applyDispute(ctx context.Context, tx pgx.Tx, appointment string) error {
+	if err := reverseEarning(ctx, tx, appointment, "payment_dispute"); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `INSERT INTO app_private.wallet_reconciliation(appointment_id,doctor_id,reason)
+        SELECT id,earning_doctor_id,'dispute' FROM app_private.appointment WHERE id=$1 AND earning_doctor_id IS NOT NULL
+        ON CONFLICT(appointment_id) DO UPDATE SET reason='dispute'`, appointment)
+	if err != nil {
+		return fmt.Errorf("record dispute reconciliation: %w", err)
 	}
 	return nil
 }

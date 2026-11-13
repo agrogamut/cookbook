@@ -53,8 +53,18 @@ export function loadCheckout(): Promise<CheckoutConstructor> {
 }
 
 
-export function confirmCheckoutAmount(order:import("./portal-types").CheckoutOrder):boolean {
-  if(!order.price)return true;
-  const money=(value:number)=>new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR"}).format(value/100);
-  return window.confirm(`Consultation fee: ${money(order.price.base_paise)}\nGST (${order.price.tax_bps/100}%): ${money(order.price.tax_paise)}\nTotal: ${money(order.amount_paise)}\nContinue to secure payment?`);
+
+export function confirmCheckoutAmount(order: import("./portal-types").CheckoutOrder): boolean {
+  const price = order.price;
+  if (!price || order.currency !== "INR" ||
+      ![order.amount_paise, price.base_paise, price.tax_paise, price.total_paise, price.tax_bps].every(Number.isSafeInteger) ||
+      price.base_paise <= 0 || price.tax_paise < 0 ||
+      ![0, 1800].includes(price.tax_bps) ||
+      price.tax_paise !== Math.floor((price.base_paise * price.tax_bps + 5000) / 10000) ||
+      price.base_paise + price.tax_paise !== order.amount_paise ||
+      price.total_paise !== order.amount_paise) {
+    throw new Error("Itemized payment details are unavailable or inconsistent. Refresh and try again shortly. Checkout has not opened.");
+  }
+  const money = (value: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(value / 100);
+  return window.confirm(`Consultation fee: ${money(price.base_paise)}\nGST (${price.tax_bps / 100}%): ${money(price.tax_paise)}\nTotal: ${money(order.amount_paise)}\nContinue to secure payment?`);
 }

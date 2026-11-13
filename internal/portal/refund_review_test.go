@@ -299,7 +299,7 @@ func TestActiveTaxRolloutOverrideRoundingAndOldOrder(t *testing.T) {
 	if active.Amount != 29500 {
 		t.Fatal(active)
 	}
-	response := portalRequest(f.router, "POST", "/api/public/registrations/"+id2+"/order", map[string]any{"amount_paise": 1}, nil, secret2)
+	response := portalRequest(f.router, "POST", "/api/public/registrations/"+id2+"/order/itemized-v1", map[string]any{"amount_paise": 1}, nil, secret2)
 	if response.Code == 200 && strings.Contains(response.Body.String(), `"amount_paise":1,`) {
 		t.Fatal("client chose amount")
 	}

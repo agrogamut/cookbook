@@ -76,7 +76,7 @@ func TestMeetingAuthorizationAndPendingFamilyVisibility(t *testing.T) {
 	expectCode(t, w, 200)
 	unrelated := w.Result().Cookies()[0]
 	path := "/api/appointments/" + appointment + "/meeting"
-	body := map[string]string{"meeting_url": "https://meet.example.invalid/test-call"}
+	body := map[string]string{"meeting_url": "https://meet.example.invalid/test-call", "expected_doctor_id": f.doctors[0].ID, "expected_meeting_url": ""}
 	expectCode(t, portalRequest(f.router, "PUT", path, body, nil, ""), 401)
 	expectCode(t, portalRequest(f.router, "PUT", path, body, family, ""), 401)
 	expectCode(t, portalRequest(f.router, "PUT", path, body, unrelated, ""), 404)
@@ -97,6 +97,7 @@ func TestMeetingAuthorizationAndPendingFamilyVisibility(t *testing.T) {
 	if strings.Contains(w.Body.String(), "test-call") {
 		t.Fatal("link leaked to other doctor")
 	}
+	body["expected_meeting_url"] = body["meeting_url"]
 	body["meeting_url"] = "https://zoom.example.invalid/changed"
 	expectCode(t, portalRequest(f.router, "PUT", path, body, f.adminCookie, ""), 200)
 	expectCode(t, portalRequest(f.router, "POST", "/api/public/registrations/"+id+"/appointment/"+appointment+"/cancel", map[string]any{}, nil, secret), 200)

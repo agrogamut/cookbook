@@ -111,7 +111,7 @@ func (f *paidFixture) book(t *testing.T, id, secret, doctor string, start time.T
 
 func (f *paidFixture) order(t *testing.T, id, secret string) GatewayOrder {
 	t.Helper()
-	w := portalRequest(f.router, "POST", "/api/public/registrations/"+id+"/order", map[string]string{}, nil, secret)
+	w := portalRequest(f.router, "POST", "/api/public/registrations/"+id+"/order/itemized-v1", map[string]string{}, nil, secret)
 	expectCode(t, w, 200)
 	var value struct {
 		ID       string `json:"order_id"`
@@ -149,7 +149,7 @@ func TestPaidBookingExpiryRefundAndRebooking(t *testing.T) {
 	}
 	expectCode(t, portalRequest(f.router, "GET", "/api/public/registrations/"+id, nil, nil, secret), 200)
 	f.status(t, first, "expired")
-	expectCode(t, portalRequest(f.router, "POST", "/api/public/registrations/"+id+"/order", map[string]string{}, nil, secret), 409)
+	expectCode(t, portalRequest(f.router, "POST", "/api/public/registrations/"+id+"/order/itemized-v1", map[string]string{}, nil, secret), 409)
 	second := f.book(t, id, secret, "", f.start)
 	secondOrder := f.order(t, id, secret)
 	if order.ID == secondOrder.ID {
@@ -224,7 +224,7 @@ func TestChildAccessIsLimitedToVerifiedRegistration(t *testing.T) {
 		t.Fatal("child token exposed a sibling")
 	}
 	expectCode(t, portalRequest(f.router, "GET", "/api/family/registrations/"+sibling, nil, cookie, ""), 404)
-	expectCode(t, portalRequest(f.router, "POST", "/api/family/registrations/"+sibling+"/order", map[string]string{}, cookie, ""), 404)
+	expectCode(t, portalRequest(f.router, "POST", "/api/family/registrations/"+sibling+"/order/itemized-v1", map[string]string{}, cookie, ""), 404)
 	expectCode(t, portalRequest(f.router, "POST", "/api/family/registrations", map[string]string{}, cookie, ""), 403)
 	expectCode(t, portalRequest(f.router, "GET", "/api/registrations", nil, cookie, ""), 401)
 	other := access("Sibling Child", "2022-05-01", siblingSecret)

@@ -14,7 +14,15 @@ export function MeetingEditor({
   appointment: Appointment;
   onSaved: () => void;
 }) {
-  const [value, setValue] = useState(appointment.meeting_url ?? "");
+  const current = { id: appointment.id, doctor_id: appointment.doctor_id, meeting_url: appointment.meeting_url ?? "" };
+  const [draft, setDraft] = useState({ ...current, value: current.meeting_url });
+  const sameSource = draft.id === current.id && draft.doctor_id === current.doctor_id && draft.meeting_url === current.meeting_url;
+  const dirty = draft.value !== draft.meeting_url;
+  if (!sameSource && (!dirty || (draft.id === current.id && draft.doctor_id === current.doctor_id && draft.value === current.meeting_url))) {
+    setDraft({ ...current, value: current.meeting_url });
+  }
+  const conflict = !sameSource && dirty;
+  const value = draft.value;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -29,18 +37,19 @@ export function MeetingEditor({
     return null;
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (busy) return;
+    if (busy || conflict) return;
     setBusy(true);
     setError("");
     setMessage("");
     try {
-      await saveMeeting(appointment.id, value);
+      await saveMeeting(appointment.id, value, {doctor_id: draft.doctor_id, meeting_url: draft.meeting_url});
       setMessage(
         value.trim() ? "Meeting link saved." : "Meeting link removed.",
       );
       onSaved();
     } catch (e) {
       setError(errorMessage(e));
+      onSaved();
     } finally {
       setBusy(false);
     }
@@ -55,10 +64,10 @@ export function MeetingEditor({
           placeholder="https://meet.google.com/..."
           maxLength={2048}
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => setDraft({ ...draft, value: e.target.value })}
           className="min-w-0 flex-1"
         />
-        <Button type="submit" variant="outline" disabled={busy}>
+        <Button type="submit" variant="outline" disabled={busy || conflict}>
           {busy ? "Saving..." : "Save link"}
         </Button>
         {appointment.meeting_url && (
@@ -77,7 +86,11 @@ export function MeetingEditor({
         Add the HTTPS link for this appointment. The signed-in family can see
         it. Clear the field and save to remove it.
       </p>
-      {error && (
+      {conflict && <div role="alert" className="space-y-2 text-sm text-destructive">
+        <p>The appointment or meeting link changed. Your draft is kept. Review the current link before editing again.</p>
+        <Button type="button" variant="outline" onClick={() => { setDraft({ ...current, value: current.meeting_url }); setError(""); setMessage(""); }}>Use current link</Button>
+      </div>}
+      {error && !conflict && (
         <p role="alert" className="text-sm text-destructive">
           {error}
         </p>

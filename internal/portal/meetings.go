@@ -26,7 +26,9 @@ func (s *Server) SaveMeeting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var b struct {
-		URL string `json:"meeting_url"`
+		URL            string  `json:"meeting_url"`
+		ExpectedDoctor string  `json:"expected_doctor_id"`
+		ExpectedURL    *string `json:"expected_meeting_url"`
 	}
 	if !decode(w, r, &b) {
 		return
@@ -43,13 +45,17 @@ func (s *Server) SaveMeeting(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(r.Context())
 	a := Current(r.Context())
-	var status string
-	err = tx.QueryRow(r.Context(), `SELECT status FROM app_private.appointment WHERE id=$1 AND ($2='admin' OR doctor_id=$3) FOR UPDATE`, id, a.Role, a.ID).Scan(&status)
+	var status, doctor, currentURL string
+	err = tx.QueryRow(r.Context(), `SELECT status,doctor_id,meeting_url FROM app_private.appointment WHERE id=$1 AND ($2='admin' OR doctor_id=$3) FOR UPDATE`, id, a.Role, a.ID).Scan(&status, &doctor, &currentURL)
 	if notFound(w, err) {
 		return
 	}
 	if status != "awaiting_payment" && status != "confirmed" && status != "paid_pending_admin" && status != "pending_admin" {
 		fail(w, 409, "Meeting links can be changed for pending or confirmed appointments.")
+		return
+	}
+	if b.ExpectedURL == nil || b.ExpectedDoctor != doctor || *b.ExpectedURL != currentURL {
+		fail(w, 409, "The appointment or meeting link changed. Refresh and review it before saving.")
 		return
 	}
 	_, err = tx.Exec(r.Context(), `UPDATE app_private.appointment SET meeting_url=$2,meeting_updated_by=$3,meeting_updated_at=now(),updated_at=now() WHERE id=$1`, id, b.URL, a.ID)

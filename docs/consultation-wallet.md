@@ -14,7 +14,9 @@ Admin and the appointment's assigned doctor can save or clear a full HTTPS meeti
 
 Admin sets a fixed integer-paise earning amount at `PUT /api/admin/earnings`, separately from the patient consultation fee. Blank disables earnings for future appointments; zero produces no ledger credit. A new appointment snapshots the assigned doctor and configured amount. Existing appointments receive no snapshot or historical backfill.
 
-Only a currently verified captured payment that matches the stored order, amount and INR currency can earn credit. Authorization and the checkout callback alone cannot. The appointment must still be eligible, not expired or cancelled, and must retain its snapshotted doctor. Attaching an old captured payment does not create new earnings.
+Only a currently verified captured payment that matches the stored order, amount and INR currency can earn credit. Authorization and the checkout callback alone cannot. The appointment must still be eligible, not expired or cancelled, and must retain its snapshotted doctor. Attaching an old captured payment does not create new earnings. If the first verified capture is already partially refunded, an otherwise eligible appointment records its original snapshotted earning before entering the refund hold. Admin then decides each actual refund; expired/cancelled holds and historical appointments still earn nothing.
+
+A signed dispute remains actionable even if a newer refund overtakes its fetched payment snapshot. The transaction preserves the newer payment/refund totals while applying the dispute reversal and hold and recording the event once.
 
 The ledger has independent unique identities for appointment earnings, payment credit and withdrawal debit, in addition to webhook event deduplication. Credit, refund, booking and withdrawal writes share the existing transaction advisory lock. This deliberately serializes writes for the current clinic workload; it is not intended for unrestricted payment throughput.
 
@@ -24,6 +26,10 @@ The ledger has independent unique identities for appointment earnings, payment c
 - A successful manual paid record debits gross once and removes its reservation in the same transaction.
 - Cancellation or rejection releases the reservation without a debit.
 - A credited appointment cannot be reassigned to another doctor. Reconcile/refund it and create a new appointment instead.
+
+Pending withdrawals are never truncated by history: requested and processing entries are returned completely, oldest first, followed by at most 500 recent closed entries. This complete queue is bounded by pending workload, not a fixed response size; use cursor pagination if that workload becomes large.
+
+Meeting saves compare the expected doctor and prior URL under the booking lock. Stale edits return 409. A pristine editor follows refreshed data; a conflicting draft is retained but cannot be saved until the user reviews the current link. Reassignment still clears the URL.
 
 ## Partial refund decisions
 
@@ -53,7 +59,7 @@ Request amounts range from ₹1 to ₹10,00,000 and cannot exceed available fund
 
 Admin may mark processing, reject, or record paid. A paid record requires the actual transferred amount, transfer reference, actual time (IST in the form), and explicit confirmation that the transfer is already complete. The check mark records a manual transfer and never initiates one. Matching retries are idempotent; conflicting transfer facts are rejected. A doctor can cancel only while requested, before processing.
 
-New financial tables use the private schema with RLS and no PUBLIC, anon or authenticated privileges. Route middleware enforces staff roles; family sessions cannot read wallets and doctors cannot access another doctor's withdrawals. Default history lists show the latest 200 ledger entries and 500 withdrawals; balance calculations include all rows.
+New financial tables use the private schema with RLS and no PUBLIC, anon or authenticated privileges. Route middleware enforces staff roles; family sessions cannot read wallets and doctors cannot access another doctor's withdrawals. History shows the latest 200 ledger entries, every pending withdrawal and up to 500 recent closed withdrawals; balance calculations include all rows.
 
 ## Owner-selected active 18% calculation
 
@@ -76,11 +82,15 @@ Legal classification remains unverified. GST registration alone does not establi
 
 This feature has not been deployed by this work. Migrations run on API startup. Migration 0047 adds wallet fields; 0048 adds refund identities/decisions and extends ledger constraints. Their down migrations refuse financial/refund history loss. Roll forward once financial data exists.
 
-Release API and frontend from the same reviewed commit in this order; coordinate the two service rollouts so frontend auto-deployment cannot race ahead of the API:
+Checkout uses versioned routes: public-token and signed-in-family clients POST to `/api/public/registrations/{id}/order/itemized-v1` and `/api/family/registrations/{id}/order/itemized-v1`. The previous `/order` routes return 409 with a refresh instruction before any order lookup/write or provider call. New clients never fall back to those routes. An old API has no versioned route and returns 404, so a new client cannot create an untaxed order there. Returned currency, integer amounts, tax arithmetic and total must agree before the family confirms the actual stored price and checkout opens. Missing price metadata fails closed.
 
-1. Before API deployment, explicitly set BOTH `PORTAL_PATIENT_TAX_POLICY=inactive` and `PORTAL_WITHDRAWAL_DEDUCTION_POLICY=inactive`. This prevents the new API adding tax while an old frontend displays the base price. Blank enables tax and is not a rollout override. Also set `PORTAL_LEGACY_GUARDIAN_UNTIL` to an absolute RFC3339 timestamp no more than 24 hours ahead. Choose only the short window needed for the frontend rollout. Apply the API migration and verify that revision is serving before deploying the new frontend. During this window only an omitted `guardian_name` is accepted by the legacy access and recovery paths. Every path still requires the correct private registration credential or unused recovery grant, child name and DOB and retains its registration scope. A supplied wrong name, blank, null or non-string is rejected.
-2. Deploy the frontend, which always requires guardian name, then verify its exact serving revision, both access/recovery forms, itemized actual checkout confirmation and withdrawal amounts. Keep tax inactive until the new screen is confirmed. Open old checkout tabs must refresh before activation; an independently cached old tab cannot be guaranteed to display a new calculation. Verify legacy omission, new correct name, wrong name and missing credentials using authorized synthetic data in a safe acceptance environment. The old API rejects the new fields, so frontend-first deployment is unsafe.
-3. After frontend verification, set both policy variables to `owner-18-v1` for the requested active calculation, unset the guardian compatibility variable and restart/redeploy the API to enforce guardian name immediately. The fixed deadline also expires automatically if this step is missed; restarting does not renew it. Empty is the secure strict default. Invalid or more-than-24-hour future deadlines fail startup. Existing authenticated sessions and staff login remain valid. Old tabs must refresh once strict mode takes effect.
+Keep the requested `owner-18-v1` defaults active. Explicit `inactive` overrides remain supported for a deliberate separate operational choice, but they are no longer a prerequisite or substitute for the versioned contract.
+
+1. Deploy the API and migrations 0047/0048 first. Verify its exact serving revision, migration success and health. Drain every old API replica before opening new checkout traffic: an old client talking to an old API can still use the old route and price. Routing across mixed replicas cannot be proven safe by one successful health request. Verification/webhooks remain unchanged for payments already in flight.
+2. Deploy the matching frontend. Verify actual itemized confirmation, guardian access/recovery and withdrawal/refund screens. New frontend/old API checkout is unavailable without side effects; old frontend/new API checkout asks for refresh. A legacy unpaid order returned by the new route keeps its stored price, including 0% tax. Do not replace or reprice it. Already-open provider checkout cannot retroactively receive the new application prompt.
+3. Guardian mode stays strict by default. New forms require guardian name and the existing private credential or one-use grant; an old API rejects the added field without consuming a grant. Old forms against the strict new API receive a refresh instruction. A brief service interruption is preferable to removing either access check. If uninterrupted legacy access is operationally required, explicitly configure `PORTAL_LEGACY_GUARDIAN_UNTIL` to a short absolute RFC3339 deadline, no more than 24 hours ahead, before API-first deployment. Only omission is allowed during that window; supplied wrong/blank/null names still fail. Clear it after frontend verification. Existing authenticated sessions and staff login remain valid.
+
+The contract guards make either mixed client/server direction fail closed for new checkout, but they cannot change an old server, verify hosting controls, drain replicas or refresh user tabs. An uncoordinated main auto-deploy does not prove full availability or the requested active policy everywhere. Verify both revisions and the routing boundary before declaring rollout complete.
 
 No production compatibility setting was changed by this work. Do not configure earnings until both services are verified; appointments created by an older API have no earning snapshot.
 

@@ -130,7 +130,7 @@ func TestFamilyRecoveryPreservesOwnedPaymentAndRevokesOldAccess(t *testing.T) {
 		t.Fatalf("wrong visible registration/payment: %+v", items)
 	}
 	expectCode(t, portalRequest(f.router, "GET", "/api/family/registrations/"+sibling, nil, current, ""), 404)
-	expectCode(t, portalRequest(f.router, "POST", "/api/family/registrations/"+sibling+"/order", map[string]string{}, current, ""), 404)
+	expectCode(t, portalRequest(f.router, "POST", "/api/family/registrations/"+sibling+"/order/itemized-v1", map[string]string{}, current, ""), 404)
 	items = decodeResponse[[]FamilyRegistration](t, portalRequest(f.router, "GET", "/api/family/registrations", nil, legacy, ""))
 	if len(items) != 2 {
 		t.Fatal("existing full family session changed")

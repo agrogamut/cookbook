@@ -70,6 +70,10 @@ func (s *Server) RedeemFamilyAccess(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	guardianNameInput, legacy, validGuardian := s.guardianNameForAccess(body.GuardianName)
+	if len(body.GuardianName) == 0 && !legacy {
+		fail(w, http.StatusUnauthorized, "Family sign-in was updated. Refresh this page to enter the guardian name. Your saved private access is unchanged.")
+		return
+	}
 	body.ChildName = strings.Join(strings.Fields(body.ChildName), " ")
 	body.DateOfBirth = strings.TrimSpace(body.DateOfBirth)
 	body.Token = strings.TrimSpace(body.Token)

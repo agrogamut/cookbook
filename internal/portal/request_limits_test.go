@@ -112,7 +112,7 @@ func TestRepeatedFamilyAccessAndCheckoutKeepCredentials(t *testing.T) {
 		expectCode(t, portalRequest(f.router, "GET", path, nil, nil, ""), 404)
 		expectCode(t, portalRequest(f.router, "GET", path, nil, nil, token()), 404)
 		expectCode(t, portalRequest(f.router, "GET", path, nil, nil, secret), 200)
-		for _, action := range []string{"order", "verify"} {
+		for _, action := range []string{"order/itemized-v1", "verify"} {
 			expectCode(t, portalRequest(f.router, "POST", path+"/"+action, map[string]string{}, nil, ""), 404)
 		}
 	}
