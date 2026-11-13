@@ -16,7 +16,8 @@ test("register, hold, pay, confirm, access and download", async ({
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/family/login");
-  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Child’s full name")).toBeVisible();
+  await expect(page.getByText(/This tab has no saved registration/)).toBeVisible();
   await expect(page.getByLabel("Private registration token")).toHaveCount(0);
   await page.evaluate((fixture) => sessionStorage.setItem("madamgy.consultation.receipt", JSON.stringify({ id: fixture.registration_id, token: fixture.token })), fixture);
 
@@ -152,25 +153,34 @@ test("register, hold, pay, confirm, access and download", async ({
   await page.getByRole("button", { name: "Open family portal" }).click();
   await expect(page).toHaveURL(/\/family$/);
   await expect(page.getByText("New Browser Child", { exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Create a family account", exact: true }).click();
-  const familyEmail = `browser-family-${Date.now()}@example.invalid`;
-  const familyPassword = "browser-family-password-123";
-  await page.getByLabel("Your name", { exact: true }).fill("Browser Guardian");
-  await page.getByLabel("Email", { exact: true }).fill(familyEmail);
-  await page.getByLabel("Password", { exact: true }).fill(familyPassword);
-  await page.getByRole("button", { name: "Create account", exact: true }).click();
-  await expect(page).toHaveURL(/\/family$/);
-  await expect(page.getByText("New Browser Child", { exact: true })).toBeVisible();
+  await expect(page.getByText("paid", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page).toHaveURL(/\/family\/login$/);
-  await page.evaluate(() => sessionStorage.removeItem("madamgy.consultation.receipt"));
+  await page.goto("/admin");
+  await page.getByLabel("Registration for access recovery").selectOption({ label: "New Browser Child, Browser Guardian" });
+  await expect(page.getByRole("button", { name: "Create private access link" })).toBeDisabled();
+  await page.getByLabel("I verified this guardian’s identity").check();
+  await page.getByRole("button", { name: "Create private access link" }).click();
+  const accessLink = await page.getByLabel("Private access link", { exact: true }).inputValue();
+  expect(accessLink).toMatch(/^http:\/\/127\.0\.0\.1:3307\/family\/login#access=[a-f0-9]{64}$/);
+  await page.getByRole("heading", { name: "Child access recovery" }).scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(evidence, "admin-child-recovery.png"), fullPage: true });
+  await page.evaluate(() => sessionStorage.clear());
+  await page.context().clearCookies();
   await page.goto("/family/login");
-  await page.getByLabel("Email", { exact: true }).fill(familyEmail);
-  await page.getByLabel("Password", { exact: true }).fill(familyPassword);
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.getByLabel("Child’s full name")).toBeVisible();
+  await expect(page.getByLabel("Email", { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: path.join(evidence, "family-missing-access.png"), fullPage: true });
+  await page.goto(accessLink);
+  await expect(page.getByText(/Your private access link is ready/)).toBeVisible();
+  await expect(page).toHaveURL(/\/family\/login$/);
+  await page.getByLabel("Child’s full name").fill("New Browser Child");
+  await page.getByLabel("Child’s date of birth").fill("01/05/2022");
+  await page.getByRole("button", { name: "Open family portal" }).click();
   await expect(page).toHaveURL(/\/family$/);
   await expect(page.getByText("New Browser Child", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Private registration token")).toHaveCount(0);
+  await expect(page.getByText("paid", { exact: true })).toBeVisible();
+  await expect(page.getByText("Private Sibling", { exact: true })).toHaveCount(0);
+  await page.screenshot({ path: path.join(evidence, "family-recovered-payment.png"), fullPage: true });
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/family\/login$/);
 
@@ -181,7 +191,7 @@ test("register, hold, pay, confirm, access and download", async ({
   await page.getByLabel("Child’s date of birth").fill("02/05/2022");
   await page.getByRole("button", { name: "Open family portal" }).click();
   await expect(page.locator("main").getByRole("alert")).toHaveText(
-    "These details could not be verified. Check the child name and date of birth, or sign in with your family account.",
+    "These details could not be verified. Check the child name and date of birth, or ask the clinic for a private access link.",
   );
   await page.getByLabel("Child’s date of birth").fill("01/05/2022");
   await page.getByRole("button", { name: "Open family portal" }).click();

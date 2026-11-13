@@ -149,6 +149,7 @@ func TestFamilyRouteRateLimitsRemain(t *testing.T) {
 		{"/api/family/auth/login", 10, 400},
 		{"/api/family/auth/register", 5, 400},
 		{"/api/family/auth/access", 10, 401},
+		{"/api/family/auth/recover", 10, 401},
 	} {
 		t.Run(test.path, func(t *testing.T) {
 			service := New(nil, Options{Identity: newTestIdentity()})
@@ -178,7 +179,7 @@ func TestFamilyLoginEmailRateLimitRemains(t *testing.T) {
 		})
 		w := portalRequest(handler, "POST", "/api/family/auth/login", input, nil, "")
 		if attempt <= 10 {
-			expectCode(t, w, 401)
+			expectCode(t, w, 410)
 		} else {
 			expectCode(t, w, 429)
 			if got := decodeResponse[map[string]string](t, w)["error"]; got != "Too many sign-in attempts. Try again in a minute." {

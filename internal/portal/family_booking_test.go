@@ -66,8 +66,8 @@ func TestFamilyBookingReleaseAndRoleBoundaries(t *testing.T) {
 	}
 	adminCookie := login("/api/auth/login", admin.Email, "test-password-only-123")
 	doctorCookie := login("/api/auth/login", doctorTwo.Email, "test-password-only-123")
-	familyOneCookie := login("/api/family/auth/login", familyOne.Email, "family-password-only-123")
-	familyTwoCookie := login("/api/family/auth/login", familyTwo.Email, "family-password-only-123")
+	familyOneCookie := legacyGuardianCookie(t, service, familyOne)
+	familyTwoCookie := legacyGuardianCookie(t, service, familyTwo)
 
 	createRegistration := func(cookie *http.Cookie, child string) string {
 		t.Helper()

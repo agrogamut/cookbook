@@ -1,60 +1,111 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FamilyAuth } from "./family-portal";
-import { attachFamilyRegistration, familyChildAccess, familySignIn, familySignUp } from "@/lib/api";
-import { registrationReceiptKey } from "@/lib/portal-utils";
+import { familyChildAccess, redeemFamilyAccess } from "@/lib/api";
+import { clearFamilyAccessGrant, registrationReceiptKey } from "@/lib/portal-utils";
 
 const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
-vi.mock("@/lib/api", () => ({
-  attachFamilyRegistration: vi.fn(), familyChildAccess: vi.fn(), familySignIn: vi.fn(), familySignUp: vi.fn(),
-}));
+vi.mock("@/lib/api", () => ({ familyChildAccess: vi.fn(), redeemFamilyAccess: vi.fn() }));
 const credential = "a".repeat(64);
-const guardian = { id: "family", name: "Guardian", email: "family@example.invalid", active: true };
+const grant = "b".repeat(64);
+const guardian = { id: "family", name: "Guardian", email: "", active: true, registration_id: "registration" };
 
 beforeEach(() => {
   sessionStorage.clear();
+  clearFamilyAccessGrant();
+  window.history.replaceState(null, "", "/family/login");
   vi.resetAllMocks();
   vi.mocked(familyChildAccess).mockResolvedValue(guardian);
-  vi.mocked(familySignIn).mockResolvedValue(guardian);
-  vi.mocked(familySignUp).mockResolvedValue(guardian);
-  vi.mocked(attachFamilyRegistration).mockResolvedValue({ id: "registration" });
+  vi.mocked(redeemFamilyAccess).mockResolvedValue({ id: "registration", token: credential });
 });
 
-describe("family sign-in without manual credentials from the receipt", () => {
-  it("offers account login when this browser has no saved registration", () => {
-    render(<FamilyAuth mode="login" />);
-    expect(screen.getByLabelText("Email")).toBeInTheDocument();
-    expect(screen.getByLabelText("Password")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Private registration token")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Child’s full name")).not.toBeInTheDocument();
+async function enterChild() {
+  await userEvent.type(screen.getByLabelText("Child’s full name"), "Test Child");
+  await userEvent.type(screen.getByLabelText("Child’s date of birth"), "08102021");
+}
+
+describe("private child sign-in", () => {
+  it("accepts a private link opened while already on the sign-in page", async () => {
+    render(<FamilyAuth />);
+    act(() => {
+      window.history.replaceState(null, "", "/family/login#access=" + grant);
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    });
+    expect(await screen.findByText(/private access link is ready/)).toBeVisible();
+    expect(window.location.hash).toBe("");
+    expect(redeemFamilyAccess).not.toHaveBeenCalled();
   });
 
-  it("checks the saved registration with the entered child details", async () => {
+  it("always shows child fields and blocks submission without saved private access", async () => {
+    render(<FamilyAuth />);
+    expect(screen.getByLabelText("Child’s full name")).toBeVisible();
+    expect(screen.getByLabelText("Child’s date of birth")).toBeVisible();
+    expect(screen.queryByLabelText("Email")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+    expect(screen.queryByText("Create one")).not.toBeInTheDocument();
+    await enterChild();
+    await userEvent.click(screen.getByRole("button", { name: "Open family portal" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("no saved registration");
+    expect(familyChildAccess).not.toHaveBeenCalled();
+    expect(redeemFamilyAccess).not.toHaveBeenCalled();
+  });
+
+  it("uses the original saved credential and opens the existing child registration", async () => {
     sessionStorage.setItem(registrationReceiptKey, JSON.stringify({ id: "registration", token: credential }));
-    render(<FamilyAuth mode="login" />);
-    await userEvent.type(screen.getByLabelText("Child’s full name"), "Test Child");
-    await userEvent.type(screen.getByLabelText("Child’s date of birth"), "08102021");
-    expect(screen.queryByLabelText("Private registration token")).not.toBeInTheDocument();
+    render(<FamilyAuth />);
+    await enterChild();
     await userEvent.click(screen.getByRole("button", { name: "Open family portal" }));
     await waitFor(() => expect(familyChildAccess).toHaveBeenCalledWith("Test Child", "2021-10-08", credential));
     expect(replace).toHaveBeenCalledWith("/family");
+    expect(redeemFamilyAccess).not.toHaveBeenCalled();
   });
 
-  it("retries linking without creating the account twice", async () => {
-    sessionStorage.setItem(registrationReceiptKey, JSON.stringify({ id: "registration", token: credential }));
-    vi.mocked(attachFamilyRegistration).mockRejectedValueOnce(new Error("Temporary link error"));
-    render(<FamilyAuth mode="register" />);
-    await userEvent.type(screen.getByLabelText("Your name"), "Guardian");
-    await userEvent.type(screen.getByLabelText("Email"), "family@example.invalid");
-    await userEvent.type(screen.getByLabelText("Password"), "family-password-123");
-    await userEvent.click(screen.getByRole("button", { name: "Create account" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Temporary link error");
-    expect(screen.getByLabelText("Email")).toBeDisabled();
-    await userEvent.click(screen.getByRole("button", { name: "Retry linking registration" }));
+  it("does not trust a malformed saved credential", async () => {
+    sessionStorage.setItem(registrationReceiptKey, JSON.stringify({ token: "not-a-private-credential" }));
+    render(<FamilyAuth />);
+    await enterChild();
+    await userEvent.click(screen.getByRole("button", { name: "Open family portal" }));
+    expect(familyChildAccess).not.toHaveBeenCalled();
+  });
+
+  it("removes the recovery secret from the URL without consuming it until submission", async () => {
+    window.history.replaceState(null, "", "/family/login#access=" + grant);
+    render(<FamilyAuth />);
+    expect(await screen.findByText(/private access link is ready/)).toBeVisible();
+    expect(window.location.hash).toBe("");
+    expect(redeemFamilyAccess).not.toHaveBeenCalled();
+    await enterChild();
+    await userEvent.click(screen.getByRole("button", { name: "Open family portal" }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/family"));
-    expect(familySignUp).toHaveBeenCalledTimes(1);
-    expect(attachFamilyRegistration).toHaveBeenCalledTimes(2);
+    expect(redeemFamilyAccess).toHaveBeenCalledWith("Test Child", "2021-10-08", grant);
+    expect(familyChildAccess).toHaveBeenCalledWith("Test Child", "2021-10-08", credential);
+    expect(JSON.parse(sessionStorage.getItem(registrationReceiptKey)!)).toEqual({ id: "registration", token: credential });
+  });
+
+  it("shows rejected recovery without opening records or replacing saved access", async () => {
+    window.history.replaceState(null, "", "/family/login#access=" + grant);
+    vi.mocked(redeemFamilyAccess).mockRejectedValue(new Error("Access link expired."));
+    render(<FamilyAuth />);
+    await enterChild();
+    await userEvent.click(screen.getByRole("button", { name: "Open family portal" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Access link expired.");
+    expect(familyChildAccess).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(registrationReceiptKey)).toBeNull();
+  });
+
+  it("retries sign-in with recovered access without consuming the link twice", async () => {
+    window.history.replaceState(null, "", "/family/login#access=" + grant);
+    vi.mocked(familyChildAccess).mockRejectedValueOnce(new Error("Temporary server error"));
+    render(<FamilyAuth />);
+    await enterChild();
+    await userEvent.click(screen.getByRole("button", { name: "Open family portal" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Temporary server error");
+    await userEvent.click(screen.getByRole("button", { name: "Open family portal" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/family"));
+    expect(redeemFamilyAccess).toHaveBeenCalledTimes(1);
+    expect(familyChildAccess).toHaveBeenCalledTimes(2);
   });
 });

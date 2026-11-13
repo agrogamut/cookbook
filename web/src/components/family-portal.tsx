@@ -28,8 +28,7 @@ import {
   downloadFamilyBook,
   familyMe,
   familyChildAccess,
-  familySignIn,
-  familySignUp,
+  redeemFamilyAccess,
   familySignOut,
   listFamilyAvailability,
   listFamilyRegistrations,
@@ -43,6 +42,10 @@ import {
   formatDayFirstDate,
   money,
   rememberedRegistrationToken,
+  registrationReceiptKey,
+  rememberedFamilyAccessGrant,
+  importFamilyAccessGrant,
+  clearFamilyAccessGrant,
   subscribeToRegistrationReceipt,
 } from "@/lib/portal-utils";
 import type { FamilyRegistration } from "@/lib/portal-types";
@@ -435,8 +438,7 @@ export function FamilyPortal() {
         )}
         {scoped && (
           <p className="mb-4 text-sm">
-            <Link href="/family/register" className="underline">Create a family account</Link>{" "}
-            to return from another browser or device.
+            To open this child’s records on another device, ask the clinic for a private access link after verifying your identity.
           </p>
         )}
         {!scoped && (
@@ -536,202 +538,90 @@ export function FamilyPortal() {
   );
 }
 
-export function FamilyAuth({ mode }: { mode: "login" | "register" }) {
+export function FamilyAuth() {
   const router = useRouter();
   const savedToken = useSavedRegistrationToken();
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const grant = useSyncExternalStore(subscribeToRegistrationReceipt, rememberedFamilyAccessGrant, () => "");
+  const [recoveredToken, setRecoveredToken] = useState("");
   const [childName, setChildName] = useState("");
   const [dob, setDob] = useState("");
-  const [accountLogin, setAccountLogin] = useState(false);
-  const [accountCreated, setAccountCreated] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const childAccess = mode === "login" && Boolean(savedToken) && !accountLogin;
+  useEffect(() => {
+    importFamilyAccessGrant();
+    window.addEventListener("hashchange", importFamilyAccessGrant);
+    return () => window.removeEventListener("hashchange", importFamilyAccessGrant);
+  }, []);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
+    if (busy) return;
     setError("");
+    if (!savedToken && !recoveredToken && !grant) {
+      setError("This tab has no saved registration. Return to the tab where you registered, or ask the clinic for a private access link.");
+      return;
+    }
+    setBusy(true);
     try {
-      if (childAccess)
-        await familyChildAccess(childName, dob, savedToken);
-      else if (mode === "login") await familySignIn(email, password);
-      else {
-        if (!accountCreated) {
-          await familySignUp(name, email, password);
-          setAccountCreated(true);
+      let credential = recoveredToken || savedToken;
+      if (grant) {
+        const receipt = await redeemFamilyAccess(childName, dob, grant);
+        credential = receipt.token;
+        setRecoveredToken(credential);
+        try {
+          sessionStorage.setItem(registrationReceiptKey, JSON.stringify(receipt));
+        } catch {
+          // The current sign-in can still create its secure session.
         }
-        if (savedToken) await attachFamilyRegistration(savedToken);
+        clearFamilyAccessGrant();
       }
+      await familyChildAccess(childName, dob, credential);
       router.replace("/family");
     } catch (e) {
       setError(errorMessage(e));
+    } finally {
       setBusy(false);
     }
   }
+
   return (
     <main className="family-surface min-h-screen bg-[#fff7f9] px-4 py-10 text-[#58293b]">
       <div className="mx-auto w-full max-w-md">
         <div className="mb-5 text-center">
           <Link href="/" className="mb-4 inline-block">
-            <Image
-              src="/madamgy-logo.png"
-              width={185}
-              height={37}
-              alt="MadamGY"
-            />
+            <Image src="/madamgy-logo.png" width={185} height={37} alt="MadamGY" />
           </Link>
-          <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#a33b5f]">
-            MadamGY family care
-          </p>
+          <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#a33b5f]">MadamGY family care</p>
         </div>
         <Card className="border-[#ead0d9] bg-white shadow-[0_20px_60px_rgba(88,41,59,0.12)]">
           <CardHeader>
-            <CardTitle className="text-[#58293b]">
-              {childAccess
-                ? "Open your child’s portal"
-                : mode === "login"
-                  ? "Family account sign in"
-                  : "Create a family account"}
-            </CardTitle>
-            <CardDescription>
-              {childAccess
-                ? "Use the child’s full name and date of birth. This browser remembers your registration."
-                : mode === "login"
-                  ? "Sign in with your family account to manage consultations and approved files."
-                  : "Save your registration to an account and return from any browser or device."}
-            </CardDescription>
+            <CardTitle className="text-[#58293b]">Open your child’s portal</CardTitle>
+            <CardDescription>Enter the child’s full name and date of birth to view their registration, appointment, payment status and approved books.</CardDescription>
           </CardHeader>
           <CardContent>
+            <p className="mb-5 text-sm text-[#815b69]" role="status">
+              {grant ? "Your private access link is ready. Enter the child’s details to use it. Links expire after 15 minutes and can be used once."
+                : (savedToken || recoveredToken) ? "This tab remembers your registration."
+                : "This tab has no saved registration. Return to the tab where you registered, or ask the clinic for a private access link after verifying your identity. A name and date of birth alone cannot open private records."}
+            </p>
             <form className="space-y-4" onSubmit={submit}>
-              {childAccess ? (
-                <>
-                  <div>
-                    <Label htmlFor="family-child-name">Child’s full name</Label>
-                    <Input
-                      id="family-child-name"
-                      autoComplete="name"
-                      required
-                      value={childName}
-                      onChange={(e) => setChildName(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="family-child-dob">
-                      Child’s date of birth
-                    </Label>
-                    <DateInput
-                      id="family-child-dob"
-                      required
-                      min="1900-01-01"
-                      max={calendarDate()}
-                      value={dob}
-                      onValueChange={setDob}
-                    />
-                  </div>
-                </>
-              ) : (
-                <>
-                  {mode === "register" && (
-                    <div>
-                      <Label htmlFor="family-name">Your name</Label>
-                      <Input
-                        id="family-name"
-                        required
-                        disabled={accountCreated}
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                      />
-                    </div>
-                  )}
-                  <div>
-                    <Label htmlFor="family-email">Email</Label>
-                    <Input
-                      id="family-email"
-                      type="email"
-                      required
-                      disabled={accountCreated}
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="family-password">Password</Label>
-                    <Input
-                      id="family-password"
-                      type="password"
-                      minLength={12}
-                      maxLength={256}
-                      required
-                      disabled={accountCreated}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                    />
-                  </div>
-                </>
-              )}
-              {error && (
-                <p role="alert" className="text-sm text-destructive">
-                  {error}
-                </p>
-              )}
-              <Button
-                disabled={busy}
-                className="w-full bg-[#c31352] hover:bg-[#a90f46]"
-              >
-                {busy
-                  ? "Checking details..."
-                  : childAccess
-                    ? "Open family portal"
-                    : mode === "login"
-                      ? "Sign in"
-                      : accountCreated
-                        ? "Retry linking registration"
-                        : "Create account"}
+              <div>
+                <Label htmlFor="family-child-name">Child’s full name</Label>
+                <Input id="family-child-name" autoComplete="name" required value={childName} onChange={(e) => setChildName(e.target.value)} />
+              </div>
+              <div>
+                <Label htmlFor="family-child-dob">Child’s date of birth</Label>
+                <DateInput id="family-child-dob" required min="1900-01-01" max={calendarDate()} value={dob} onValueChange={setDob} />
+              </div>
+              {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+              <Button disabled={busy} className="w-full bg-[#c31352] hover:bg-[#a90f46]">
+                {busy ? "Checking details..." : "Open family portal"}
               </Button>
             </form>
-            {accountCreated && error && (
-              <p className="mt-4 text-sm">
-                Your account was created. Retry linking your saved registration, or{" "}
-                <Link href="/family" className="underline">continue to your account</Link>.
-              </p>
-            )}
-            {mode === "login" && savedToken && (
-              <button
-                type="button"
-                className="mt-4 w-full text-sm text-[#a33b5f] underline"
-                onClick={() => setAccountLogin((value) => !value)}
-              >
-                {accountLogin
-                  ? "Use child details"
-                  : "Use email and password instead"}
-              </button>
-            )}
-            <p className="mt-5 text-center text-sm text-[#815b69]">
-              {mode === "login" ? (
-                <>
-                  Need an account?{" "}
-                  <a className="underline" href="/family/register">
-                    Create one
-                  </a>
-                </>
-              ) : (
-                <>
-                  Already registered?{" "}
-                  <a className="underline" href="/family/login">
-                    Sign in
-                  </a>
-                </>
-              )}
-            </p>
+            <p className="mt-5 text-center text-sm text-[#815b69]">New consultation? <Link href="/#consultation" className="underline">Register your child</Link></p>
           </CardContent>
         </Card>
-        <p className="mt-5 text-center text-xs text-[#815b69]">
-          <Link className="underline" href="/">
-            Return to MadamGY
-          </Link>
-        </p>
+        <p className="mt-5 text-center text-xs text-[#815b69]"><Link href="/" className="underline">Return to MadamGY</Link></p>
       </div>
     </main>
   );

@@ -14,6 +14,7 @@ import type { ConsultationSettings, StaffAccount } from "@/lib/portal-types";
 import { RegistrationWorkspace } from "./registration-workspace";
 import { AvailabilityEditor } from "./availability-editor";
 import { AdminOperations } from "./admin-operations";
+import { FamilyAccessRecovery } from "./family-access-recovery";
 import { FamilyAccountLinker } from "./family-account-linker";
 import { AdminDirectBooking } from "./admin-direct-booking";
 import { PageHeader } from "./page-header";
@@ -56,6 +57,7 @@ export function AdminWorkspace() {
         <TabsContent value="registrations">
           <div className="space-y-5">
             <RegistrationWorkspace />
+            <FamilyAccessRecovery />
             <FamilyAccountLinker />
           </div>
         </TabsContent>

@@ -141,3 +141,33 @@ export function errorMessage(error: unknown): string {
     ? error.message
     : "The request failed. Please try again.";
 }
+
+
+const familyAccessGrantKey = "madamgy.family.access";
+let temporaryAccessGrant = "";
+
+export function rememberedFamilyAccessGrant(): string {
+  try {
+    const value = sessionStorage.getItem(familyAccessGrantKey) ?? temporaryAccessGrant;
+    return /^[a-f0-9]{64}$/.test(value) ? value : "";
+  } catch {
+    return temporaryAccessGrant;
+  }
+}
+
+export function importFamilyAccessGrant() {
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  if (!params.has("access")) return;
+  const value = params.get("access") ?? "";
+  window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  if (!/^[a-f0-9]{64}$/.test(value)) return;
+  temporaryAccessGrant = value;
+  try { sessionStorage.setItem(familyAccessGrantKey, value); } catch { /* Keep access in memory for this page. */ }
+  window.dispatchEvent(new Event("storage"));
+}
+
+export function clearFamilyAccessGrant() {
+  temporaryAccessGrant = "";
+  try { sessionStorage.removeItem(familyAccessGrantKey); } catch { /* Storage may be unavailable. */ }
+  window.dispatchEvent(new Event("storage"));
+}

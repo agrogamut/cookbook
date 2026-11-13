@@ -338,6 +338,7 @@ func (s *Server) Routes(r chi.Router) {
 		r.With(s.Limit("family-signup", 5)).Post("/api/family/auth/register", s.GuardianSignup)
 		r.With(s.Limit("family-login", 10)).Post("/api/family/auth/login", s.GuardianLogin)
 		r.With(s.Limit("family-access", 10)).Post("/api/family/auth/access", s.GuardianChildAccess)
+		r.With(s.Limit("family-access", 10)).Post("/api/family/auth/recover", s.RedeemFamilyAccess)
 		r.With(s.Limit("intake", 2000)).Post("/api/public/registrations", s.Register)
 		r.Get("/api/public/settings", s.PublicSettings)
 		r.Get("/api/public/availability", s.ListFamilyAvailability)
@@ -367,6 +368,7 @@ func (s *Server) Routes(r chi.Router) {
 			r.Route("/api/admin", func(r chi.Router) {
 				r.Use(AdminOnly)
 				r.Get("/guardians", s.ListGuardians)
+				r.With(s.Limit("family-access-issue", 10)).Post("/registrations/{id}/family-access", s.IssueFamilyAccess)
 				r.Patch("/registrations/{id}/guardian", s.AttachRegistrationAdmin)
 				r.Get("/staff", s.ListStaff)
 				r.Post("/staff", s.CreateStaff)

@@ -12,7 +12,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 )
 
 const guardianSessionCookie = "madamgy_guardian"
@@ -134,10 +133,6 @@ func (s *Server) createGuardianSession(ctx context.Context, g Guardian) (string,
 }
 
 func (s *Server) GuardianSignup(w http.ResponseWriter, r *http.Request) {
-	if !s.options.Identity.Enabled() {
-		fail(w, http.StatusServiceUnavailable, "Family sign-in is not configured yet.")
-		return
-	}
 	var body struct {
 		Name     string `json:"name"`
 		Email    string `json:"email"`
@@ -156,30 +151,10 @@ func (s *Server) GuardianSignup(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusTooManyRequests, "Too many account attempts. Try again in a minute.")
 		return
 	}
-	g, err := s.ProvisionGuardian(r.Context(), body.Name, body.Email, body.Password)
-	if err != nil {
-		var pe *pgconn.PgError
-		if errors.As(err, &pe) && pe.Code == "23505" {
-			fail(w, http.StatusConflict, "A family account already uses that email.")
-			return
-		}
-		fail(w, http.StatusBadGateway, "Family account could not be created. Try again shortly.")
-		return
-	}
-	v, err := s.createGuardianSession(r.Context(), g)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	s.setGuardianCookie(w, v, int(sessionLifetime.Seconds()))
-	respond(w, http.StatusCreated, g)
+	fail(w, http.StatusGone, "Family sign-in now uses child details. Open your registration tab or ask the clinic for a private access link.")
 }
 
 func (s *Server) GuardianLogin(w http.ResponseWriter, r *http.Request) {
-	if !s.options.Identity.Enabled() {
-		fail(w, http.StatusServiceUnavailable, "Family sign-in is not configured yet.")
-		return
-	}
 	var body struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -196,39 +171,14 @@ func (s *Server) GuardianLogin(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusTooManyRequests, "Too many sign-in attempts. Try again in a minute.")
 		return
 	}
-	var g Guardian
-	err := s.pool.QueryRow(r.Context(), `SELECT id,name,email,active FROM app_private.guardian_account WHERE email=$1 AND active`, body.Email).Scan(&g.ID, &g.Name, &g.Email, &g.Active)
-	if errors.Is(err, pgx.ErrNoRows) {
-		fail(w, http.StatusUnauthorized, "Email or password is incorrect.")
-		return
-	}
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	identity, err := s.options.Identity.SignIn(r.Context(), body.Email, body.Password)
-	if errors.Is(err, ErrCredentials) || (err == nil && identity.ID != g.ID) {
-		fail(w, http.StatusUnauthorized, "Email or password is incorrect.")
-		return
-	}
-	if err != nil {
-		fail(w, http.StatusBadGateway, "Sign-in is temporarily unavailable.")
-		return
-	}
-	v, err := s.createGuardianSession(r.Context(), g)
-	if err != nil {
-		serverError(w, err)
-		return
-	}
-	s.setGuardianCookie(w, v, int(sessionLifetime.Seconds()))
-	respond(w, http.StatusOK, g)
+	fail(w, http.StatusGone, "Family sign-in now uses child details. Open your registration tab or ask the clinic for a private access link.")
 }
 
 // GuardianChildAccess is the account-free family entry point. The registration
 // token is the private second factor, so a name and birth date alone can never
 // open a child's records.
 func (s *Server) GuardianChildAccess(w http.ResponseWriter, r *http.Request) {
-	const accessError = "These details could not be verified. Check the child name and date of birth, or sign in with your family account."
+	const accessError = "These details could not be verified. Check the child name and date of birth, or ask the clinic for a private access link."
 	var body struct {
 		ChildName   string `json:"child_name"`
 		DateOfBirth string `json:"date_of_birth"`

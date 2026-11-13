@@ -1,5 +1,5 @@
-import { FamilyAuth } from "@/components/family-portal";
+import { redirect } from "next/navigation";
 
 export default function FamilyRegisterPage() {
-  return <FamilyAuth mode="register" />;
+  redirect("/family/login");
 }

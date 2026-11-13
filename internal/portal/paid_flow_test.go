@@ -273,9 +273,7 @@ func TestSavedRegistrationUpgradeKeepsFamilyOwnership(t *testing.T) {
 			t.Fatal(err)
 		}
 		accounts = append(accounts, g)
-		w := portalRequest(f.router, "POST", "/api/family/auth/login", map[string]string{"email": g.Email, "password": "test-password-only-123"}, nil, "")
-		expectCode(t, w, 200)
-		cookies = append(cookies, w.Result().Cookies()[0])
+		cookies = append(cookies, legacyGuardianCookie(t, f.server, g))
 	}
 	t.Cleanup(func() {
 		for _, account := range accounts {

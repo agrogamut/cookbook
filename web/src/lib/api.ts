@@ -89,8 +89,6 @@ export const saveConsultationSettings = (amount_paise: number | null, payments_e
 export const listGuardians = () => request<GuardianAccount[]>("/api/admin/guardians");
 export const attachRegistrationToGuardian = (registrationID: string, guardianID: string) => request<{ guardian_id: string }>(`/api/admin/registrations/${encodeURIComponent(registrationID)}/guardian`, { method: "PATCH", body: JSON.stringify({ guardian_id: guardianID }) });
 
-export const familySignUp = (name: string, email: string, password: string) => request<GuardianAccount>("/api/family/auth/register", { method: "POST", body: JSON.stringify({ name, email, password }) });
-export const familySignIn = (email: string, password: string) => request<GuardianAccount>("/api/family/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
 export const familyChildAccess = (child_name: string, date_of_birth: string, token: string) => request<GuardianAccount>("/api/family/auth/access", { method: "POST", body: JSON.stringify({ child_name, date_of_birth, token }) });
 export const familySignOut = () => request<{ ok: boolean }>("/api/family/auth/logout", { method: "POST", body: "{}" });
 export const familyMe = () => request<GuardianAccount>("/api/family/auth/me");
@@ -431,3 +429,6 @@ async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<R
   headers.set("X-Madamgy-Request", "1");
   return fetch(input, { ...init, headers, credentials: "include", cache: "no-store" });
 }
+
+export const issueFamilyAccess = (id: string) => request<{ token: string; expires_at: string }>(`/api/admin/registrations/${encodeURIComponent(id)}/family-access`, { method: "POST", body: JSON.stringify({ guardian_verified: true }) });
+export const redeemFamilyAccess = (child_name: string, date_of_birth: string, token: string) => request<{ id: string; token: string }>("/api/family/auth/recover", { method: "POST", body: JSON.stringify({ child_name, date_of_birth, token }) });
