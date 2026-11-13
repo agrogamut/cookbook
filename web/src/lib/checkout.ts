@@ -51,3 +51,10 @@ export function loadCheckout(): Promise<CheckoutConstructor> {
   });
   return loading;
 }
+
+
+export function confirmCheckoutAmount(order:import("./portal-types").CheckoutOrder):boolean {
+  if(!order.price)return true;
+  const money=(value:number)=>new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR"}).format(value/100);
+  return window.confirm(`Consultation fee: ${money(order.price.base_paise)}\nTax (${order.price.tax_bps/100}%): ${money(order.price.tax_paise)}\nTotal: ${money(order.amount_paise)}\nContinue to secure payment?`);
+}

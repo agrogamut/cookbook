@@ -22,6 +22,7 @@ beforeEach(() => {
 });
 
 async function enterChild() {
+  await userEvent.type(screen.getByLabelText("Guardian’s full name"),"Test Guardian");
   await userEvent.type(screen.getByLabelText("Child’s full name"), "Test Child");
   await userEvent.type(screen.getByLabelText("Child’s date of birth"), "08102021");
 }
@@ -57,7 +58,7 @@ describe("private child sign-in", () => {
     render(<FamilyAuth />);
     await enterChild();
     await userEvent.click(screen.getByRole("button", { name: "Open family portal" }));
-    await waitFor(() => expect(familyChildAccess).toHaveBeenCalledWith("Test Child", "2021-10-08", credential));
+    await waitFor(() => expect(familyChildAccess).toHaveBeenCalledWith("Test Child", "2021-10-08", credential, "Test Guardian"));
     expect(replace).toHaveBeenCalledWith("/family");
     expect(redeemFamilyAccess).not.toHaveBeenCalled();
   });
@@ -79,8 +80,8 @@ describe("private child sign-in", () => {
     await enterChild();
     await userEvent.click(screen.getByRole("button", { name: "Open family portal" }));
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/family"));
-    expect(redeemFamilyAccess).toHaveBeenCalledWith("Test Child", "2021-10-08", grant);
-    expect(familyChildAccess).toHaveBeenCalledWith("Test Child", "2021-10-08", credential);
+    expect(redeemFamilyAccess).toHaveBeenCalledWith("Test Child", "2021-10-08", grant, "Test Guardian");
+    expect(familyChildAccess).toHaveBeenCalledWith("Test Child", "2021-10-08", credential, "Test Guardian");
     expect(JSON.parse(sessionStorage.getItem(registrationReceiptKey)!)).toEqual({ id: "registration", token: credential });
   });
 

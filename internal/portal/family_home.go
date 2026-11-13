@@ -11,6 +11,9 @@ import (
 )
 
 type FamilyRegistration struct {
+	Price                    Price      `json:"price"`
+	HasOrder                 bool       `json:"-"`
+	MeetingURL               string     `json:"meeting_url"`
 	ID                       string     `json:"id"`
 	ChildName                string     `json:"child_name"`
 	DateOfBirth              string     `json:"date_of_birth"`
@@ -36,10 +39,10 @@ const familyRegistrationQuery = `
 		coalesce(o.status,'unpaid'),coalesce(o.amount_paise,(SELECT amount_paise FROM app_private.consultation_settings WHERE singleton)),coalesce(o.currency,'INR'),
 		coalesce(d.name,''),
 		a.id,a.status,a.starts_at,a.ends_at,a.hold_expires_at,
-		b1.id,b1.status,b2.id,b2.status,r.created_at
+		b1.id,b1.status,b2.id,b2.status,r.created_at,CASE WHEN a.status IN ('awaiting_payment','pending_admin','paid_pending_admin','confirmed') THEN a.meeting_url ELSE '' END,coalesce(o.base_paise,o.amount_paise,0),coalesce(o.tax_paise,0),coalesce(o.tax_bps,0),o.id IS NOT NULL
 	FROM app_private.consultation_registration r
 	LEFT JOIN LATERAL (
-		SELECT a.id,a.status,a.starts_at,a.ends_at,a.hold_expires_at,a.doctor_id
+		SELECT a.id,a.status,a.starts_at,a.ends_at,a.hold_expires_at,a.doctor_id,a.meeting_url
 		FROM app_private.appointment a
 		WHERE a.registration_id=r.id
 		ORDER BY a.created_at DESC,a.id DESC
@@ -72,7 +75,7 @@ func scanFamilyRegistration(row interface{ Scan(...any) error }) (FamilyRegistra
 		&value.ID, &value.ChildName, &value.DateOfBirth, &value.RegistrationStatus,
 		&value.PaymentStatus, &value.AmountPaise, &value.Currency, &value.DoctorName,
 		&appointmentID, &appointmentStatus, &value.AppointmentStartsAt, &value.AppointmentEndsAt, &appointmentHoldExpiresAt,
-		&book1ID, &book1Status, &book2ID, &book2Status, &value.CreatedAt,
+		&book1ID, &book1Status, &book2ID, &book2Status, &value.CreatedAt, &value.MeetingURL, &value.Price.BasePaise, &value.Price.TaxPaise, &value.Price.TaxBPS, &value.HasOrder,
 	); err != nil {
 		return value, err
 	}
@@ -118,6 +121,7 @@ func (s *Server) ListFamilyRegistrations(w http.ResponseWriter, r *http.Request)
 			serverError(w, err)
 			return
 		}
+		s.familyPrice(&value)
 		items = append(items, value)
 	}
 	if err := rows.Err(); err != nil {
@@ -149,5 +153,20 @@ func (s *Server) FamilyRegistrationStatus(w http.ResponseWriter, r *http.Request
 		serverError(w, err)
 		return
 	}
+	s.familyPrice(&value)
 	respond(w, http.StatusOK, value)
+}
+
+func (s *Server) familyPrice(v *FamilyRegistration) {
+	if !v.HasOrder && v.AmountPaise != nil {
+		v.Price = s.options.TaxPolicy.price(*v.AmountPaise)
+	}
+	v.Price.TotalPaise = v.Price.BasePaise + v.Price.TaxPaise
+	v.Price.Policy = "inactive"
+	if v.Price.TaxBPS > 0 {
+		v.Price.Policy = "patient-18-v1"
+	}
+	if v.AmountPaise != nil {
+		v.AmountPaise = &v.Price.TotalPaise
+	}
 }

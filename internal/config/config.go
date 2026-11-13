@@ -3,6 +3,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"fmt"
 	"net/url"
 	"os"
@@ -19,14 +20,17 @@ type Config struct {
 	// startup -- it means the AI-drafting feature (internal/aidraft) stays off: no
 	// clinical modification notes, no invented-recipe fallback, chapters that fall
 	// short just report the gap the way they always have.
-	GeminiAPIKey          string
-	SupabaseURL           string
-	SupabaseSecretKey     string
-	RazorpayKeyID         string
-	RazorpayKeySecret     string
-	RazorpayWebhookSecret string
-	AppOrigin             string
-	SecureCookies         bool
+	GeminiAPIKey                string
+	SupabaseURL                 string
+	SupabaseSecretKey           string
+	RazorpayKeyID               string
+	RazorpayKeySecret           string
+	RazorpayWebhookSecret       string
+	AppOrigin                   string
+	SecureCookies               bool
+	WalletEncryptionKey         []byte
+	PatientTaxApproval          string
+	WithdrawalDeductionApproval string
 }
 
 // Load reads the environment. It returns an error naming every missing variable at
@@ -54,6 +58,20 @@ func Load() (Config, error) {
 		c.Port = p
 	}
 
+	if v := os.Getenv("WALLET_ENCRYPTION_KEY"); v != "" {
+		key, err := hex.DecodeString(v)
+		if err != nil || len(key) != 32 {
+			return c, fmt.Errorf("config: WALLET_ENCRYPTION_KEY must contain 64 hexadecimal characters")
+		}
+		c.WalletEncryptionKey = key
+	}
+	c.PatientTaxApproval = strings.TrimSpace(os.Getenv("PORTAL_PATIENT_TAX_APPROVAL"))
+	c.WithdrawalDeductionApproval = strings.TrimSpace(os.Getenv("PORTAL_WITHDRAWAL_DEDUCTION_APPROVAL"))
+	for _, reference := range []string{c.PatientTaxApproval, c.WithdrawalDeductionApproval} {
+		if len(reference) > 200 || strings.ContainsAny(reference, "\r\n") {
+			return c, fmt.Errorf("config: tax approval references must be single-line and at most 200 characters")
+		}
+	}
 	c.GeminiAPIKey = os.Getenv("GEMINI_API_KEY")
 	c.SupabaseURL = strings.TrimRight(os.Getenv("SUPABASE_URL"), "/")
 	c.SupabaseSecretKey = os.Getenv("SUPABASE_SECRET_KEY")

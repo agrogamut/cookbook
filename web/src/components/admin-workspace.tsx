@@ -1,5 +1,6 @@
 "use client";
 
+import { AdminWallet,EarningSettings } from "./admin-wallet";
 import { useEffect, useState } from "react";
 import {
   createDoctor,
@@ -47,10 +48,11 @@ export function AdminWorkspace() {
         description="Manage consultation requests, doctor access and payment settings."
       />
       <Tabs defaultValue="registrations">
-        <TabsList className="mb-5">
+        <TabsList className="mb-5 h-auto flex-wrap">
           <TabsTrigger value="registrations">Registrations</TabsTrigger>
           <TabsTrigger value="doctors">Doctors</TabsTrigger>
-          <TabsTrigger value="fee">Consultation fee</TabsTrigger>
+          <TabsTrigger value="fee">Fees and earnings</TabsTrigger>
+          <TabsTrigger value="wallet">Doctor withdrawals</TabsTrigger>
           <TabsTrigger value="schedule">Availability and bookings</TabsTrigger>
           <TabsTrigger value="books">Book releases</TabsTrigger>
         </TabsList>
@@ -65,8 +67,9 @@ export function AdminWorkspace() {
           <DoctorManagement />
         </TabsContent>
         <TabsContent value="fee">
-          <FeeSettings />
+          <FeeSettings /><EarningSettings />
         </TabsContent>
+        <TabsContent value="wallet"><AdminWallet /></TabsContent>
         <TabsContent value="schedule" className="space-y-5">
           <AvailabilityEditor admin />
           <AdminDirectBooking />

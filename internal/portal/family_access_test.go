@@ -60,7 +60,7 @@ func TestFamilyRecoveryAuthorizationAndSingleUse(t *testing.T) {
 		t.Fatal("grant must be stored only as a hash")
 	}
 	expectCode(t, portalRequest(f.router, "GET", "/api/family/auth/recover", nil, nil, ""), 405)
-	input := map[string]string{"child_name": "Recovery Child", "date_of_birth": "2022-05-01", "token": grant}
+	input := map[string]string{"guardian_name": "Test Guardian", "child_name": "Recovery Child", "date_of_birth": "2022-05-01", "token": grant}
 	expectCode(t, portalRequest(wrongOrigin, "POST", "/api/family/auth/recover", input, nil, ""), 403)
 	for _, wrong := range []map[string]string{
 		{"child_name": "Other Child", "date_of_birth": "2022-05-01", "token": grant},
@@ -85,7 +85,7 @@ func TestFamilyRecoveryAuthorizationAndSingleUse(t *testing.T) {
 		t.Fatalf("concurrent redemption: %v", counts)
 	}
 	expectCode(t, portalRequest(f.router, "POST", "/api/family/auth/recover", input, nil, ""), 401)
-	expectCode(t, portalRequest(f.router, "POST", "/api/family/auth/access", map[string]string{"child_name": "Recovery Child", "date_of_birth": "2022-05-01", "token": old}, nil, ""), 401)
+	expectCode(t, portalRequest(f.router, "POST", "/api/family/auth/access", map[string]string{"guardian_name": "Test Guardian", "child_name": "Recovery Child", "date_of_birth": "2022-05-01", "token": old}, nil, ""), 401)
 }
 
 func TestFamilyRecoveryPreservesOwnedPaymentAndRevokesOldAccess(t *testing.T) {
@@ -98,7 +98,7 @@ func TestFamilyRecoveryPreservesOwnedPaymentAndRevokesOldAccess(t *testing.T) {
 	if err := f.server.applyPayment(ctx, Payment{ID: "pay_" + token()[:16], OrderID: order.ID, Amount: order.Amount, Currency: "INR", Status: "captured", Captured: true}, "recovery-"+id); err != nil {
 		t.Fatal(err)
 	}
-	child := map[string]string{"child_name": "Recovery Paid Child", "date_of_birth": "2022-05-01", "token": old}
+	child := map[string]string{"guardian_name": "Test Guardian", "child_name": "Recovery Paid Child", "date_of_birth": "2022-05-01", "token": old}
 	w := portalRequest(f.router, "POST", "/api/family/auth/access", child, nil, "")
 	expectCode(t, w, 200)
 	previous := w.Result().Cookies()[0]
@@ -143,7 +143,7 @@ func TestFamilyRecoveryExpiredReplacedAndInactive(t *testing.T) {
 	id, secret := f.register(t, "Expiry Child")
 	first := issueAccess(t, f, id)
 	second := issueAccess(t, f, id)
-	input := map[string]string{"child_name": "Expiry Child", "date_of_birth": "2022-05-01", "token": first}
+	input := map[string]string{"guardian_name": "Test Guardian", "child_name": "Expiry Child", "date_of_birth": "2022-05-01", "token": first}
 	expectCode(t, portalRequest(f.router, "POST", "/api/family/auth/recover", input, nil, ""), 401)
 	if _, err := f.pool.Exec(context.Background(), `UPDATE app_private.family_access_grant SET expires_at=now()-interval '1 second' WHERE registration_id=$1`, id); err != nil {
 		t.Fatal(err)

@@ -55,3 +55,8 @@ describe("FamilyRegistrationCard", () => {
     expect(screen.getByRole("button", { name: /book a consultation/i })).toBeInTheDocument();
   });
 });
+
+it("shows a current pending meeting link to the signed-in family",()=>{
+  render(<FamilyRegistrationCard registration={{...registration,appointment_status:"paid_pending_admin",meeting_url:"https://meet.example.invalid/private"}} onPay={vi.fn()} onBook={vi.fn()} onDownload={vi.fn()} onCancel={vi.fn()}/>);
+  expect(screen.getByRole("link",{name:"Join call"})).toHaveAttribute("href","https://meet.example.invalid/private");
+});

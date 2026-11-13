@@ -170,19 +170,21 @@ func (s *Server) GuardianLogin(w http.ResponseWriter, r *http.Request) {
 // token is the private second factor, so a name and birth date alone can never
 // open a child's records.
 func (s *Server) GuardianChildAccess(w http.ResponseWriter, r *http.Request) {
-	const accessError = "These details could not be verified. Check the child name and date of birth, or ask the clinic for a private access link."
+	const accessError = "These details could not be verified. Check the guardian name, child name and date of birth, or ask the clinic for a private access link."
 	var body struct {
-		ChildName   string `json:"child_name"`
-		DateOfBirth string `json:"date_of_birth"`
-		Token       string `json:"token"`
+		GuardianName string `json:"guardian_name"`
+		ChildName    string `json:"child_name"`
+		DateOfBirth  string `json:"date_of_birth"`
+		Token        string `json:"token"`
 	}
 	if !decode(w, r, &body) {
 		return
 	}
+	body.GuardianName = strings.Join(strings.Fields(body.GuardianName), " ")
 	body.ChildName = strings.Join(strings.Fields(body.ChildName), " ")
 	body.DateOfBirth = strings.TrimSpace(body.DateOfBirth)
 	body.Token = strings.TrimSpace(body.Token)
-	if !validName(body.ChildName) || !validToken(body.Token) {
+	if !validName(body.GuardianName) || !validName(body.ChildName) || !validToken(body.Token) {
 		fail(w, http.StatusUnauthorized, accessError)
 		return
 	}
@@ -201,8 +203,8 @@ func (s *Server) GuardianChildAccess(w http.ResponseWriter, r *http.Request) {
 	var guardianName, guardianEmail sql.NullString
 	err = tx.QueryRow(r.Context(), `SELECT id,guardian_id::text,guardian_name,coalesce(email,'')
 		FROM app_private.consultation_registration
-		WHERE lower(regexp_replace(btrim(child_name),'\s+',' ','g'))=lower($1) AND date_of_birth=$2 AND token_hash=$3
-		FOR UPDATE`, body.ChildName, body.DateOfBirth, tokenHash(body.Token)).Scan(&registrationID, &guardianID, &guardianName, &guardianEmail)
+		WHERE lower(regexp_replace(btrim(child_name),'\s+',' ','g'))=lower($1) AND date_of_birth=$2 AND token_hash=$3 AND lower(regexp_replace(btrim(guardian_name),'\s+',' ','g'))=lower($4)
+		FOR UPDATE`, body.ChildName, body.DateOfBirth, tokenHash(body.Token), body.GuardianName).Scan(&registrationID, &guardianID, &guardianName, &guardianEmail)
 	if errors.Is(err, pgx.ErrNoRows) {
 		fail(w, http.StatusUnauthorized, accessError)
 		return

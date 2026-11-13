@@ -26,6 +26,8 @@ type Options struct {
 	Gateway       PaymentGateway
 	Origin        string
 	SecureCookies bool
+	WalletKey     []byte
+	TaxPolicy     TaxPolicy
 }
 type Server struct {
 	pool    *pgxpool.Pool
@@ -311,6 +313,14 @@ func (s *Server) Routes(r chi.Router) {
 			r.Put("/api/availability/{id}", s.SaveAvailability)
 			r.Delete("/api/availability/{id}", s.RevokeAvailability)
 			r.Get("/api/appointments", s.ListAppointments)
+			r.Put("/api/appointments/{id}/meeting", s.SaveMeeting)
+			r.Route("/api/doctor/wallet", func(r chi.Router) {
+				r.Use(DoctorOnly)
+				r.Get("/", s.DoctorWallet)
+				r.Put("/destination", s.SaveDestination)
+				r.Post("/withdrawals", s.RequestWithdrawal)
+				r.Post("/withdrawals/{id}/cancel", s.CancelWithdrawal)
+			})
 			r.Get("/api/book-releases", s.ListBookReleases)
 			r.Get("/api/book-releases/{id}/pdf", s.StaffBookReleaseDownload)
 			r.Route("/api/admin", func(r chi.Router) {
@@ -323,6 +333,11 @@ func (s *Server) Routes(r chi.Router) {
 				r.Patch("/staff/{id}", s.UpdateStaff)
 				r.Post("/staff/{id}/password", s.ResetPassword)
 				r.Get("/settings", s.AdminSettings)
+				r.Put("/earnings", s.SaveEarningSettings)
+				r.Get("/wallets", s.AdminWallets)
+				r.Get("/withdrawals", s.ListWithdrawals)
+				r.Post("/withdrawals/{id}/destination", s.RevealWithdrawalDestination)
+				r.Post("/withdrawals/{id}/decision", s.DecideWithdrawal)
 				r.Put("/settings", s.SaveSettings)
 				r.Post("/appointments", s.CreateAdminAppointment)
 				r.Post("/appointments/{id}/decision", s.DecideAppointment)

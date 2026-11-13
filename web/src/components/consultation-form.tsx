@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {PriceBreakdown} from "./price-breakdown";
+import {confirmCheckoutAmount} from "@/lib/checkout";
 import Link from "next/link";
 import { Check, LockKeyhole } from "lucide-react";
 import { AppointmentWizard, type BookingChoice } from "./appointment-wizard";
@@ -37,6 +39,7 @@ import type {
 type Receipt = { id: string; token: string } & PublicRegistrationStatus;
 const receiptKey = registrationReceiptKey;
 const emptyForm = {
+  guardian_description: "",
   guardian_name: "",
   child_name: "",
   date_of_birth: "",
@@ -200,8 +203,9 @@ export function ConsultationForm() {
     setBusy(true);
     setMessage("");
     try {
-      const Checkout = await loadCheckout();
       const order = await createCheckoutOrder(receipt.id, receipt.token);
+      if(!confirmCheckoutAmount(order)){setBusy(false);return;}
+      const Checkout = await loadCheckout();
       const checkout = new Checkout({
         key: order.key_id,
         order_id: order.order_id,
@@ -317,9 +321,10 @@ export function ConsultationForm() {
               `, ${displayInstant(receipt.appointment_starts_at)} IST`}
           </p>
         )}
+        <PriceBreakdown price={settings?.price} />
         {settings?.amount_paise != null && (
           <p className="text-sm font-medium">
-            Consultation fee: {money(settings.amount_paise, settings.currency)}
+            Consultation fee: {money(settings.price?.total_paise ?? settings.amount_paise, settings.currency)}
           </p>
         )}
         {canSchedule && (
@@ -344,7 +349,7 @@ export function ConsultationForm() {
             <Button className="landing-button" disabled={busy} onClick={pay}>
               {busy
                 ? "Opening checkout..."
-                : `Pay ${money(settings.amount_paise, settings.currency)} for consultation`}
+                : `Pay ${money(settings.price?.total_paise ?? settings.amount_paise, settings.currency)} for consultation`}
             </Button>
             <p className="field-hint">
               Secure checkout with Razorpay. Your booking is not confirmed until
@@ -501,6 +506,7 @@ export function ConsultationForm() {
               {...field("email")}
             />
           </div>
+        <div className="sm:col-span-2"><Label htmlFor="guardian-description">Additional details for the doctor (optional)</Label><textarea id="guardian-description" maxLength={4000} rows={4} className="mt-1 w-full rounded-md border border-input bg-background p-3 text-sm" value={form.guardian_description} onChange={(e)=>setForm(v=>({...v,guardian_description:e.target.value}))} aria-describedby="guardian-description-hint" /><p id="guardian-description-hint" className="field-hint">Share anything you want the doctor to know. Up to 4,000 characters. This is kept separate from the doctor’s notes.</p></div>
         </fieldset>
         {message && (
           <p role="alert" className="form-message">

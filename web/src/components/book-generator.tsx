@@ -207,7 +207,7 @@ export function BookGenerator({ initialChild, registrationID }: { initialChild?:
     // Form on the left, the document it produced on the right -- the same split the engine
     // console uses, for the same reason: an operator adjusting one input wants to see what it
     // changed without scrolling a page's worth of controls out of the way first.
-    <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
+    <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1 rounded-lg border-2 border-[#c31352] p-3 dark:border-pink-400">
       <ResizablePanel defaultSize="38%" minSize="26%" maxSize="60%">
         <div className="h-full pr-4">
           <ChildInputForm busy={busy} onGenerate={generate} initialChild={initialChild} />

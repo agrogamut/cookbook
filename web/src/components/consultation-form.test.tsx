@@ -24,7 +24,7 @@ vi.mock("@/lib/api", () => ({
   listPublicDoctors: vi.fn(),
   verifyCheckout: vi.fn(),
 }));
-vi.mock("@/lib/checkout", () => ({ loadCheckout: vi.fn() }));
+vi.mock("@/lib/checkout", () => ({ loadCheckout: vi.fn(), confirmCheckoutAmount:()=>true }));
 
 async function completeForm() {
   await userEvent.type(

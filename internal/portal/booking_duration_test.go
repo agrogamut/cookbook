@@ -44,7 +44,8 @@ func TestBookingRoutesLimitConsultationsToThirtyMinutes(t *testing.T) {
 			var cookie *http.Cookie
 			if route == "family" {
 				login := portalRequest(f.router, "POST", "/api/family/auth/access", map[string]string{
-					"child_name": name, "date_of_birth": "2022-05-01", "token": secret,
+					"guardian_name": "Test Guardian",
+					"child_name":    name, "date_of_birth": "2022-05-01", "token": secret,
 				}, nil, "")
 				expectCode(t, login, 200)
 				cookie = login.Result().Cookies()[0]

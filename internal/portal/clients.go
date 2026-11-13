@@ -120,6 +120,7 @@ type Payment struct {
 	AmountRefunded int    `json:"amount_refunded"`
 }
 type GatewayOrder struct {
+	Price    Price  `json:"price"`
 	ID       string `json:"id"`
 	Amount   int    `json:"amount"`
 	Currency string `json:"currency"`

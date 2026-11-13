@@ -1,5 +1,6 @@
 "use client";
 
+import { MeetingEditor } from "./meeting-editor";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -250,6 +251,7 @@ export function AdminOperations() {
               const paid = item.payment_status === "paid";
               return (
                 <div className="space-y-3 rounded-md border p-3" key={item.id}>
+                  <MeetingEditor appointment={item} onSaved={()=>setRevision(v=>v+1)} />
                   <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                     <span className="font-medium">
                       {item.child_name}

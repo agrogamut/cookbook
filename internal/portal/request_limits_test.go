@@ -17,8 +17,8 @@ func TestPortalRequestsBeyondFormerLimits(t *testing.T) {
 		attempts, want     int
 	}{
 		{"intake", "POST", "/api/public/registrations", map[string]string{}, 2001, 400},
-		{"child access without credential", "POST", "/api/family/auth/access", map[string]string{"child_name": "Private Child", "date_of_birth": "2022-05-01"}, 11, 401},
-		{"recovery without credential", "POST", "/api/family/auth/recover", map[string]string{"child_name": "Private Child", "date_of_birth": "2022-05-01"}, 11, 401},
+		{"child access without credential", "POST", "/api/family/auth/access", map[string]string{"guardian_name": "Test Guardian", "child_name": "Private Child", "date_of_birth": "2022-05-01"}, 11, 401},
+		{"recovery without credential", "POST", "/api/family/auth/recover", map[string]string{"guardian_name": "Test Guardian", "child_name": "Private Child", "date_of_birth": "2022-05-01"}, 11, 401},
 		{"retired signup", "POST", "/api/family/auth/register", map[string]string{"name": "Test Guardian", "email": "test@example.invalid", "password": "test-password-only-123"}, 6, 410},
 		{"retired password login", "POST", "/api/family/auth/login", map[string]string{"email": "test@example.invalid", "password": "test-password-only-123"}, 11, 410},
 		{"checkout without credential", "POST", "/api/public/registrations/00000000-0000-0000-0000-000000000001/appointment", map[string]string{}, 121, 404},
@@ -94,7 +94,7 @@ func TestRepeatedPortalRequestsKeepOriginAndBodyProtection(t *testing.T) {
 func TestRepeatedFamilyAccessAndCheckoutKeepCredentials(t *testing.T) {
 	f := newPaidFixture(t)
 	id, secret := f.register(t, "Repeated Access Child")
-	input := map[string]string{"child_name": "Repeated Access Child", "date_of_birth": "2022-05-01", "token": token()}
+	input := map[string]string{"guardian_name": "Test Guardian", "child_name": "Repeated Access Child", "date_of_birth": "2022-05-01", "token": token()}
 	for attempt := 0; attempt < 12; attempt++ {
 		expectCode(t, portalRequest(f.router, "POST", "/api/family/auth/access", input, nil, ""), 401)
 		expectCode(t, portalRequest(f.router, "POST", "/api/family/auth/recover", input, nil, ""), 401)
@@ -128,7 +128,7 @@ func TestRepeatedAdminRecoveryIssuanceKeepsSingleUse(t *testing.T) {
 	for attempt := 0; attempt < 12; attempt++ {
 		grant = issueAccess(t, f, id)
 	}
-	input := map[string]string{"child_name": "Repeated Recovery Child", "date_of_birth": "2022-05-01", "token": grant}
+	input := map[string]string{"guardian_name": "Test Guardian", "child_name": "Repeated Recovery Child", "date_of_birth": "2022-05-01", "token": grant}
 	expectCode(t, portalRequest(f.router, "POST", "/api/family/auth/recover", input, nil, ""), 200)
 	for attempt := 0; attempt < 12; attempt++ {
 		expectCode(t, portalRequest(f.router, "POST", "/api/family/auth/recover", input, nil, ""), 401)

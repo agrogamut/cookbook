@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -18,6 +19,11 @@ func TestPortalBrowserServer(t *testing.T) {
 		t.Skip("browser fixture disabled")
 	}
 	f := newPaidFixture(t)
+	f.server.options.WalletKey = bytes.Repeat([]byte{42}, 32)
+	if os.Getenv("PORTAL_BROWSER_REVIEWED_POLICY") == "1" {
+		f.server.options.TaxPolicy.WithdrawalApproval = "synthetic-browser-reviewed-v1"
+	}
+	expectCode(t, portalRequest(f.router, "PUT", "/api/admin/earnings", map[string]int{"doctor_earning_paise": 500000}, f.adminCookie, ""), 200)
 
 	id, secret := f.register(t, "Browser Child")
 	_, _ = f.register(t, "Private Sibling")
@@ -45,6 +51,11 @@ func TestPortalBrowserServer(t *testing.T) {
 		}
 		defer tx.Rollback(r.Context())
 		for _, query := range []string{
+			`DELETE FROM app_private.wallet_audit`,
+			`DELETE FROM app_private.doctor_ledger`,
+			`DELETE FROM app_private.wallet_reconciliation`,
+			`DELETE FROM app_private.doctor_withdrawal`,
+			`DELETE FROM app_private.doctor_destination`,
 			`DELETE FROM app_private.payment_event`,
 			`DELETE FROM app_private.consultation_order`,
 			`DELETE FROM app_private.appointment`,
@@ -63,7 +74,7 @@ func TestPortalBrowserServer(t *testing.T) {
 		respond(w, 200, map[string]bool{"ok": true})
 	})
 	router.Get("/__test/fixture", func(w http.ResponseWriter, r *http.Request) {
-		respond(w, 200, map[string]any{"registration_id": id, "token": secret, "admin_email": f.admin.Email, "password": "test-password-only-123", "doctor_id": f.doctors[0].ID, "date": f.start.Format("2006-01-02"), "approved_id": approvedID, "pending_id": pendingID})
+		respond(w, 200, map[string]any{"registration_id": id, "token": secret, "admin_email": f.admin.Email, "password": "test-password-only-123", "doctor_id": f.doctors[0].ID, "doctor_email": f.doctors[0].Email, "date": f.start.Format("2006-01-02"), "approved_id": approvedID, "pending_id": pendingID})
 	})
 	router.Post("/__test/payment", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {

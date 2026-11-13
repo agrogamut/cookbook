@@ -21,6 +21,7 @@ export type ConsultationStatus =
   | "completed"
   | "cancelled";
 export interface Registration {
+  guardian_description?: string;
   id: string;
   guardian_name: string;
   child_name: string;
@@ -48,15 +49,21 @@ export interface RegistrationList {
   summary: { total: number; new: number; unassigned: number; paid: number };
 }
 export interface PublicSettings {
+  price?: Price;
   amount_paise: number | null;
   currency: string;
   checkout_available: boolean;
 }
 export interface ConsultationSettings extends PublicSettings {
+  doctor_earning_paise?: number | null;
+  wallet_configured?: boolean;
+  patient_tax_active?: boolean;
+  withdrawal_deduction_active?: boolean;
   payments_enabled: boolean;
   gateway_configured: boolean;
 }
 export interface CheckoutOrder {
+  price?: Price;
   order_id: string;
   amount_paise: number;
   currency: string;
@@ -78,6 +85,7 @@ export interface PublicRegistrationStatus {
   hold_expires_at?: string | null;
 }
 export interface IntakeInput {
+  guardian_description?: string;
   guardian_name: string;
   child_name: string;
   date_of_birth: string;
@@ -120,6 +128,8 @@ export interface FreeInterval {
   ends_at: string;
 }
 export interface Appointment {
+  meeting_url?: string;
+  guardian_description?: string;
   guardian_name?: string;
   phone?: string;
   order_id?: string;
@@ -155,6 +165,8 @@ export interface BookRelease {
   size_bytes: number;
 }
 export interface FamilyRegistration {
+  meeting_url?: string;
+  price?: Price;
   id: string;
   child_name: string;
   date_of_birth: string;
@@ -174,3 +186,11 @@ export interface FamilyRegistration {
   book2_status: BookReleaseStatus | null;
   created_at: string;
 }
+
+
+export interface Price { base_paise: number; tax_paise: number; total_paise: number; tax_bps: number; policy: string }
+export interface PayoutDestination { kind: "bank" | "upi"; holder: string; bank: string; account: string; confirm_account?: string; ifsc: string; upi: string }
+export interface WalletBalance { doctor_id: string; doctor_name: string; balance_paise: number; reserved_paise: number; available_paise: number; reconciliation_required: boolean; masked_destination: string }
+export interface Withdrawal { policy_pending: boolean; id: string; doctor_id: string; doctor_name: string; requested_paise: number; deduction_paise: number; net_paise: number; deduction_bps: number; masked_destination: string; status: "requested" | "processing" | "paid" | "rejected" | "cancelled"; created_at: string; transferred_paise: number | null; transfer_reference: string | null; transferred_at: string | null; decision_note: string }
+export interface LedgerEntry { id: number; kind: string; amount_paise: number; appointment_id: string | null; withdrawal_id: string | null; reason: string; created_at: string }
+export interface DoctorWalletData { balance: WalletBalance; withdrawals: Withdrawal[]; ledger: LedgerEntry[]; configured: boolean; deduction_bps: number; deduction_active: boolean }

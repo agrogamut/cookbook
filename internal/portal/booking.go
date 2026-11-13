@@ -41,27 +41,29 @@ type FreeInterval struct {
 }
 
 type Appointment struct {
-	ID             string     `json:"id"`
-	RegistrationID string     `json:"registration_id"`
-	ChildName      string     `json:"child_name"`
-	DoctorID       string     `json:"doctor_id"`
-	DoctorName     string     `json:"doctor_name"`
-	StartsAt       time.Time  `json:"starts_at"`
-	EndsAt         time.Time  `json:"ends_at"`
-	Mode           string     `json:"mode"`
-	Status         string     `json:"status"`
-	PaymentStatus  string     `json:"payment_status"`
-	RequestedBy    string     `json:"requested_by"`
-	DecidedBy      string     `json:"decided_by"`
-	HoldExpiresAt  *time.Time `json:"hold_expires_at"`
-	CreatedAt      time.Time  `json:"created_at"`
-	GuardianName   string     `json:"guardian_name"`
-	Phone          string     `json:"phone"`
-	OrderID        string     `json:"order_id"`
-	PaymentID      string     `json:"payment_id"`
-	RefundID       string     `json:"refund_id"`
-	AmountPaise    *int       `json:"amount_paise"`
-	RefundedPaise  int        `json:"refunded_paise"`
+	MeetingURL          string     `json:"meeting_url"`
+	GuardianDescription string     `json:"guardian_description"`
+	ID                  string     `json:"id"`
+	RegistrationID      string     `json:"registration_id"`
+	ChildName           string     `json:"child_name"`
+	DoctorID            string     `json:"doctor_id"`
+	DoctorName          string     `json:"doctor_name"`
+	StartsAt            time.Time  `json:"starts_at"`
+	EndsAt              time.Time  `json:"ends_at"`
+	Mode                string     `json:"mode"`
+	Status              string     `json:"status"`
+	PaymentStatus       string     `json:"payment_status"`
+	RequestedBy         string     `json:"requested_by"`
+	DecidedBy           string     `json:"decided_by"`
+	HoldExpiresAt       *time.Time `json:"hold_expires_at"`
+	CreatedAt           time.Time  `json:"created_at"`
+	GuardianName        string     `json:"guardian_name"`
+	Phone               string     `json:"phone"`
+	OrderID             string     `json:"order_id"`
+	PaymentID           string     `json:"payment_id"`
+	RefundID            string     `json:"refund_id"`
+	AmountPaise         *int       `json:"amount_paise"`
+	RefundedPaise       int        `json:"refunded_paise"`
 }
 
 type appointmentInput struct {
@@ -464,8 +466,11 @@ func (s *Server) insertAppointment(ctx context.Context, tx pgx.Tx, registrationI
 		return "", err
 	}
 	var id string
-	err = tx.QueryRow(ctx, `INSERT INTO app_private.appointment(registration_id,doctor_id,starts_at,ends_at,mode,status,requested_by,hold_expires_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`, registrationID, doctorID, startsAt, endsAt, mode, status, requestedBy, holdExpiresAt).Scan(&id)
+	err = tx.QueryRow(ctx, `INSERT INTO app_private.appointment(registration_id,doctor_id,starts_at,ends_at,mode,status,requested_by,hold_expires_at,earning_doctor_id,earning_paise,earning_policy)
+        SELECT $1,$2,$3,$4,$5,$6,$7,$8,
+            CASE WHEN doctor_earning_paise IS NOT NULL THEN $2::uuid END,doctor_earning_paise,
+            CASE WHEN doctor_earning_paise IS NOT NULL THEN 'fixed-v1' END
+        FROM app_private.consultation_settings WHERE singleton RETURNING id`, registrationID, doctorID, startsAt, endsAt, mode, status, requestedBy, holdExpiresAt).Scan(&id)
 	if isPgError(err, "23P01") || isPgError(err, "23505") {
 		return "", ErrNoAvailableSlot
 	}
@@ -597,7 +602,7 @@ func (s *Server) createAppointment(w http.ResponseWriter, r *http.Request, famil
 			serverError(w, err)
 			return
 		}
-		if _, err = tx.Exec(r.Context(), `UPDATE app_private.appointment SET status='paid_pending_admin',hold_expires_at=NULL,updated_at=now() WHERE id=$1`, id); err != nil {
+		if _, err = tx.Exec(r.Context(), `UPDATE app_private.appointment SET status='paid_pending_admin',hold_expires_at=NULL,earning_doctor_id=NULL,earning_paise=NULL,earning_policy=NULL,updated_at=now() WHERE id=$1`, id); err != nil {
 			serverError(w, err)
 			return
 		}
@@ -711,7 +716,7 @@ func (s *Server) CreatePublicAppointment(w http.ResponseWriter, r *http.Request)
 			serverError(w, err)
 			return
 		}
-		if _, err = tx.Exec(r.Context(), `UPDATE app_private.appointment SET status='paid_pending_admin',hold_expires_at=NULL,updated_at=now() WHERE id=$1`, id); err != nil {
+		if _, err = tx.Exec(r.Context(), `UPDATE app_private.appointment SET status='paid_pending_admin',hold_expires_at=NULL,earning_doctor_id=NULL,earning_paise=NULL,earning_policy=NULL,updated_at=now() WHERE id=$1`, id); err != nil {
 			serverError(w, err)
 			return
 		}
@@ -780,7 +785,7 @@ func (s *Server) ListAppointments(w http.ResponseWriter, r *http.Request) {
 	}
 	rows, err := s.pool.Query(r.Context(), `SELECT a.id,a.registration_id,r.child_name,a.doctor_id,d.name,a.starts_at,a.ends_at,a.mode,a.status,
 			coalesce(o.status,'unpaid'),a.requested_by::text,coalesce(a.decided_by::text,''),a.hold_expires_at,a.created_at,r.guardian_name,r.phone,coalesce(o.id,''),coalesce(o.payment_id,''),
-        coalesce((SELECT f.provider_id FROM app_private.consultation_refund f WHERE f.order_id=o.id),''),o.amount_paise,coalesce(o.refunded_paise,0)
+        coalesce((SELECT f.provider_id FROM app_private.consultation_refund f WHERE f.order_id=o.id),''),o.amount_paise,coalesce(o.refunded_paise,0),CASE WHEN a.status IN ('awaiting_payment','confirmed','paid_pending_admin','pending_admin') THEN a.meeting_url ELSE '' END,r.guardian_description
         FROM app_private.appointment a JOIN app_private.consultation_registration r ON r.id=a.registration_id
 		JOIN app_private.staff_account d ON d.id=a.doctor_id LEFT JOIN app_private.consultation_order o ON o.appointment_id=a.id`+where+` ORDER BY a.starts_at DESC,a.id DESC`, args...)
 	if err != nil {
@@ -791,7 +796,7 @@ func (s *Server) ListAppointments(w http.ResponseWriter, r *http.Request) {
 	items := make([]Appointment, 0)
 	for rows.Next() {
 		var value Appointment
-		if err := rows.Scan(&value.ID, &value.RegistrationID, &value.ChildName, &value.DoctorID, &value.DoctorName, &value.StartsAt, &value.EndsAt, &value.Mode, &value.Status, &value.PaymentStatus, &value.RequestedBy, &value.DecidedBy, &value.HoldExpiresAt, &value.CreatedAt, &value.GuardianName, &value.Phone, &value.OrderID, &value.PaymentID, &value.RefundID, &value.AmountPaise, &value.RefundedPaise); err != nil {
+		if err := rows.Scan(&value.ID, &value.RegistrationID, &value.ChildName, &value.DoctorID, &value.DoctorName, &value.StartsAt, &value.EndsAt, &value.Mode, &value.Status, &value.PaymentStatus, &value.RequestedBy, &value.DecidedBy, &value.HoldExpiresAt, &value.CreatedAt, &value.GuardianName, &value.Phone, &value.OrderID, &value.PaymentID, &value.RefundID, &value.AmountPaise, &value.RefundedPaise, &value.MeetingURL, &value.GuardianDescription); err != nil {
 			serverError(w, err)
 			return
 		}
@@ -832,11 +837,11 @@ func (s *Server) DecideAppointment(w http.ResponseWriter, r *http.Request) {
 	var appointment Appointment
 	err = tx.QueryRow(r.Context(), `SELECT a.id,a.registration_id,r.child_name,a.doctor_id,d.name,a.starts_at,a.ends_at,a.mode,a.status,
 		coalesce(o.status,'unpaid'),a.requested_by::text,coalesce(a.decided_by::text,''),a.hold_expires_at,a.created_at,r.guardian_name,r.phone,coalesce(o.id,''),coalesce(o.payment_id,''),
-        coalesce((SELECT f.provider_id FROM app_private.consultation_refund f WHERE f.order_id=o.id),''),o.amount_paise,coalesce(o.refunded_paise,0)
+        coalesce((SELECT f.provider_id FROM app_private.consultation_refund f WHERE f.order_id=o.id),''),o.amount_paise,coalesce(o.refunded_paise,0),CASE WHEN a.status IN ('awaiting_payment','confirmed','paid_pending_admin','pending_admin') THEN a.meeting_url ELSE '' END,r.guardian_description
         FROM app_private.appointment a JOIN app_private.consultation_registration r ON r.id=a.registration_id
 		JOIN app_private.staff_account d ON d.id=a.doctor_id LEFT JOIN app_private.consultation_order o ON o.appointment_id=a.id WHERE a.id=$1 FOR UPDATE OF a,r`, id).Scan(
 		&appointment.ID, &appointment.RegistrationID, &appointment.ChildName, &appointment.DoctorID, &appointment.DoctorName,
-		&appointment.StartsAt, &appointment.EndsAt, &appointment.Mode, &appointment.Status, &appointment.PaymentStatus, &appointment.RequestedBy, &appointment.DecidedBy, &appointment.HoldExpiresAt, &appointment.CreatedAt, &appointment.GuardianName, &appointment.Phone, &appointment.OrderID, &appointment.PaymentID, &appointment.RefundID, &appointment.AmountPaise, &appointment.RefundedPaise)
+		&appointment.StartsAt, &appointment.EndsAt, &appointment.Mode, &appointment.Status, &appointment.PaymentStatus, &appointment.RequestedBy, &appointment.DecidedBy, &appointment.HoldExpiresAt, &appointment.CreatedAt, &appointment.GuardianName, &appointment.Phone, &appointment.OrderID, &appointment.PaymentID, &appointment.RefundID, &appointment.AmountPaise, &appointment.RefundedPaise, &appointment.MeetingURL, &appointment.GuardianDescription)
 	if errors.Is(err, pgx.ErrNoRows) {
 		fail(w, http.StatusNotFound, "Appointment not found.")
 		return
@@ -922,6 +927,17 @@ func (s *Server) DecideAppointment(w http.ResponseWriter, r *http.Request) {
 			}
 			doctorID = body.DoctorID
 		}
+		if doctorID != appointment.DoctorID {
+			var credited bool
+			if err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM app_private.doctor_ledger WHERE appointment_id=$1 AND kind='earning')`, id).Scan(&credited); err != nil {
+				serverError(w, err)
+				return
+			}
+			if credited {
+				fail(w, 409, "This appointment has recorded earnings. Refund and reconcile it before creating a new appointment with another doctor.")
+				return
+			}
+		}
 		chosen, chooseErr := s.chooseDoctor(r.Context(), tx, startsAt, endsAt, doctorID, id)
 		if chooseErr != nil {
 			if errors.Is(chooseErr, ErrNoAvailableSlot) {
@@ -931,7 +947,7 @@ func (s *Server) DecideAppointment(w http.ResponseWriter, r *http.Request) {
 			serverError(w, chooseErr)
 			return
 		}
-		_, err = tx.Exec(r.Context(), `UPDATE app_private.appointment SET doctor_id=$2,starts_at=$3,ends_at=$4,status='confirmed',hold_expires_at=NULL,decided_by=$5,updated_at=now() WHERE id=$1`, id, chosen, startsAt, endsAt, Current(r.Context()).ID)
+		_, err = tx.Exec(r.Context(), `UPDATE app_private.appointment SET meeting_url=CASE WHEN doctor_id=$2 THEN meeting_url ELSE '' END,doctor_id=$2,starts_at=$3,ends_at=$4,status='confirmed',hold_expires_at=NULL,decided_by=$5,updated_at=now() WHERE id=$1`, id, chosen, startsAt, endsAt, Current(r.Context()).ID)
 		if err == nil {
 			_, err = tx.Exec(r.Context(), `UPDATE app_private.consultation_registration SET assigned_doctor_id=$2,status='scheduled',updated_at=now() WHERE id=$1`, appointment.RegistrationID, chosen)
 		}

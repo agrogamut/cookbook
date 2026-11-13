@@ -17,12 +17,13 @@ import (
 )
 
 type Intake struct {
-	GuardianName string `json:"guardian_name"`
-	ChildName    string `json:"child_name"`
-	DateOfBirth  string `json:"date_of_birth"`
-	Phone        string `json:"phone"`
-	Email        string `json:"email"`
-	Token        string `json:"token"`
+	GuardianDescription string `json:"guardian_description"`
+	GuardianName        string `json:"guardian_name"`
+	ChildName           string `json:"child_name"`
+	DateOfBirth         string `json:"date_of_birth"`
+	Phone               string `json:"phone"`
+	Email               string `json:"email"`
+	Token               string `json:"token"`
 }
 
 func validName(v string) bool {
@@ -52,6 +53,9 @@ func (i *Intake) validate(now time.Time) string {
 	i.ChildName = strings.TrimSpace(i.ChildName)
 	i.Email = strings.TrimSpace(i.Email)
 	i.Phone = normalizePhone(i.Phone)
+	if !utf8.ValidString(i.GuardianDescription) || utf8.RuneCountInString(i.GuardianDescription) > 4000 || strings.ContainsRune(i.GuardianDescription, 0) {
+		return "Keep additional details within 4,000 characters."
+	}
 	if !validName(i.GuardianName) || !validName(i.ChildName) {
 		return "Enter both names, using at most 100 characters each."
 	}
@@ -94,15 +98,15 @@ func (s *Server) Register(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback(r.Context())
 	var id string
 	err = tx.QueryRow(r.Context(), `INSERT INTO app_private.consultation_registration
-		(token_hash,guardian_name,child_name,date_of_birth,phone,email)
-		VALUES ($1,$2,$3,$4,$5,nullif($6,'')) ON CONFLICT(token_hash) DO NOTHING RETURNING id`,
-		tokenHash(input.Token), input.GuardianName, input.ChildName, input.DateOfBirth, input.Phone, input.Email).Scan(&id)
+		(token_hash,guardian_name,child_name,date_of_birth,phone,email,guardian_description)
+		VALUES ($1,$2,$3,$4,$5,nullif($6,''),$7) ON CONFLICT(token_hash) DO NOTHING RETURNING id`,
+		tokenHash(input.Token), input.GuardianName, input.ChildName, input.DateOfBirth, input.Phone, input.Email, input.GuardianDescription).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Repeated submission of the same form is safe; the private token never lets
 		// a later request silently replace the first request's information.
 		err = tx.QueryRow(r.Context(), `SELECT id FROM app_private.consultation_registration WHERE token_hash=$1
-			AND guardian_name=$2 AND child_name=$3 AND date_of_birth=$4 AND phone=$5 AND coalesce(email,'')=$6`,
-			tokenHash(input.Token), input.GuardianName, input.ChildName, input.DateOfBirth, input.Phone, input.Email).Scan(&id)
+			AND guardian_name=$2 AND child_name=$3 AND date_of_birth=$4 AND phone=$5 AND coalesce(email,'')=$6 AND guardian_description=$7`,
+			tokenHash(input.Token), input.GuardianName, input.ChildName, input.DateOfBirth, input.Phone, input.Email, input.GuardianDescription).Scan(&id)
 		if errors.Is(err, pgx.ErrNoRows) {
 			fail(w, 409, "This form was already submitted with different details. Start a new registration.")
 			return
@@ -125,29 +129,30 @@ func (s *Server) Register(w http.ResponseWriter, r *http.Request) {
 }
 
 type Registration struct {
-	ID               string    `json:"id"`
-	GuardianName     string    `json:"guardian_name"`
-	ChildName        string    `json:"child_name"`
-	DateOfBirth      string    `json:"date_of_birth"`
-	Phone            string    `json:"phone"`
-	Email            string    `json:"email"`
-	ChildID          string    `json:"child_id"`
-	AssignedDoctorID string    `json:"assigned_doctor_id"`
-	DoctorName       string    `json:"doctor_name"`
-	Status           string    `json:"status"`
-	Notes            string    `json:"notes"`
-	CreatedAt        time.Time `json:"created_at"`
-	PaymentStatus    string    `json:"payment_status"`
-	AmountPaise      *int      `json:"amount_paise"`
-	Currency         string    `json:"currency"`
-	PaymentID        string    `json:"payment_id"`
-	OrderID          string    `json:"order_id"`
-	RefundedPaise    int       `json:"refunded_paise"`
+	GuardianDescription string    `json:"guardian_description"`
+	ID                  string    `json:"id"`
+	GuardianName        string    `json:"guardian_name"`
+	ChildName           string    `json:"child_name"`
+	DateOfBirth         string    `json:"date_of_birth"`
+	Phone               string    `json:"phone"`
+	Email               string    `json:"email"`
+	ChildID             string    `json:"child_id"`
+	AssignedDoctorID    string    `json:"assigned_doctor_id"`
+	DoctorName          string    `json:"doctor_name"`
+	Status              string    `json:"status"`
+	Notes               string    `json:"notes"`
+	CreatedAt           time.Time `json:"created_at"`
+	PaymentStatus       string    `json:"payment_status"`
+	AmountPaise         *int      `json:"amount_paise"`
+	Currency            string    `json:"currency"`
+	PaymentID           string    `json:"payment_id"`
+	OrderID             string    `json:"order_id"`
+	RefundedPaise       int       `json:"refunded_paise"`
 }
 
 const registrationSelect = `SELECT r.id, r.guardian_name, r.child_name, to_char(r.date_of_birth,'YYYY-MM-DD'), r.phone,
 	coalesce(r.email,''), coalesce(r.child_id,''), coalesce(r.assigned_doctor_id::text,''), coalesce(d.name,''), r.status, r.notes,
-	r.created_at, coalesce(o.status,'unpaid'), o.amount_paise, coalesce(o.currency,'INR'), coalesce(o.payment_id,''), coalesce(o.id,''), coalesce(o.refunded_paise,0)`
+	r.created_at, coalesce(o.status,'unpaid'), o.amount_paise, coalesce(o.currency,'INR'), coalesce(o.payment_id,''), coalesce(o.id,''), coalesce(o.refunded_paise,0),r.guardian_description`
 const registrationFrom = ` FROM app_private.consultation_registration r
 	LEFT JOIN app_private.staff_account d ON d.id=r.assigned_doctor_id
 	LEFT JOIN LATERAL (SELECT o.* FROM app_private.consultation_order o WHERE o.registration_id=r.id ORDER BY o.created_at DESC,o.id DESC LIMIT 1) o ON true `
@@ -155,7 +160,7 @@ const registrationFrom = ` FROM app_private.consultation_registration r
 func scanRegistration(row interface{ Scan(...any) error }) (Registration, error) {
 	var v Registration
 	err := row.Scan(&v.ID, &v.GuardianName, &v.ChildName, &v.DateOfBirth, &v.Phone, &v.Email, &v.ChildID,
-		&v.AssignedDoctorID, &v.DoctorName, &v.Status, &v.Notes, &v.CreatedAt, &v.PaymentStatus, &v.AmountPaise, &v.Currency, &v.PaymentID, &v.OrderID, &v.RefundedPaise)
+		&v.AssignedDoctorID, &v.DoctorName, &v.Status, &v.Notes, &v.CreatedAt, &v.PaymentStatus, &v.AmountPaise, &v.Currency, &v.PaymentID, &v.OrderID, &v.RefundedPaise, &v.GuardianDescription)
 	return v, err
 }
 func (s *Server) GetRegistration(w http.ResponseWriter, r *http.Request) {

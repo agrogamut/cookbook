@@ -56,7 +56,14 @@ func newPaidFixture(t *testing.T) *paidFixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		pool.Exec(ctx, `UPDATE app_private.consultation_settings SET amount_paise=$1,payments_enabled=$2,updated_by=NULL WHERE singleton`, old.AmountPaise, old.PaymentsEnabled)
+		pool.Exec(ctx, `UPDATE app_private.consultation_settings SET amount_paise=$1,payments_enabled=$2,doctor_earning_paise=$3,updated_by=NULL WHERE singleton`, old.AmountPaise, old.PaymentsEnabled, old.DoctorEarningPaise)
+		for _, a := range append(f.doctors, f.admin) {
+			pool.Exec(ctx, `DELETE FROM app_private.wallet_audit WHERE actor_id=$1 OR withdrawal_id IN (SELECT id FROM app_private.doctor_withdrawal WHERE doctor_id=$1)`, a.ID)
+			pool.Exec(ctx, `DELETE FROM app_private.doctor_ledger WHERE doctor_id=$1`, a.ID)
+			pool.Exec(ctx, `DELETE FROM app_private.wallet_reconciliation WHERE doctor_id=$1`, a.ID)
+			pool.Exec(ctx, `DELETE FROM app_private.doctor_withdrawal WHERE doctor_id=$1`, a.ID)
+			pool.Exec(ctx, `DELETE FROM app_private.doctor_destination WHERE doctor_id=$1`, a.ID)
+		}
 		for _, id := range f.registrations {
 			pool.Exec(ctx, `DELETE FROM app_private.payment_event WHERE order_id IN(SELECT id FROM app_private.consultation_order WHERE registration_id=$1)`, id)
 			pool.Exec(ctx, `DELETE FROM app_private.consultation_order WHERE registration_id=$1`, id)
@@ -188,7 +195,7 @@ func TestChildAccessIsLimitedToVerifiedRegistration(t *testing.T) {
 	sibling, siblingSecret := f.register(t, "Sibling Child")
 	access := func(name, dob, credential string) *http.Cookie {
 		t.Helper()
-		w := portalRequest(f.router, "POST", "/api/family/auth/access", map[string]string{"child_name": name, "date_of_birth": dob, "token": credential}, nil, "")
+		w := portalRequest(f.router, "POST", "/api/family/auth/access", map[string]string{"guardian_name": "Test Guardian", "child_name": name, "date_of_birth": dob, "token": credential}, nil, "")
 		expectCode(t, w, 200)
 		return w.Result().Cookies()[0]
 	}
@@ -261,7 +268,8 @@ func TestSavedRegistrationUpgradeKeepsFamilyOwnership(t *testing.T) {
 	ctx := context.Background()
 	id, secret := f.register(t, "Upgrade Child")
 	w := portalRequest(f.router, "POST", "/api/family/auth/access", map[string]string{
-		"child_name": "Upgrade Child", "date_of_birth": "2022-05-01", "token": secret,
+		"guardian_name": "Test Guardian",
+		"child_name":    "Upgrade Child", "date_of_birth": "2022-05-01", "token": secret,
 	}, nil, "")
 	expectCode(t, w, 200)
 	childCookie := w.Result().Cookies()[0]
@@ -296,7 +304,8 @@ func TestSavedRegistrationUpgradeKeepsFamilyOwnership(t *testing.T) {
 	}
 	blockedID, blockedSecret := f.register(t, "Blocked Upgrade Child")
 	w = portalRequest(f.router, "POST", "/api/family/auth/access", map[string]string{
-		"child_name": "Blocked Upgrade Child", "date_of_birth": "2022-05-01", "token": blockedSecret,
+		"guardian_name": "Test Guardian",
+		"child_name":    "Blocked Upgrade Child", "date_of_birth": "2022-05-01", "token": blockedSecret,
 	}, nil, "")
 	expectCode(t, w, 200)
 	if _, err := f.pool.Exec(ctx, `UPDATE app_private.guardian_account SET active=false WHERE id=(SELECT guardian_id FROM app_private.consultation_registration WHERE id=$1)`, blockedID); err != nil {

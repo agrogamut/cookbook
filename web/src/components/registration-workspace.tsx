@@ -618,6 +618,7 @@ function RegistrationEditor({
         </div>
       </div>
       <div className="space-y-2">
+        {value.guardian_description && <div className="mb-4 rounded-md border p-3"><p className="mb-2 text-sm font-semibold">Additional details for the doctor</p><p className="mb-2 text-xs text-muted-foreground">Guardian-reported</p><p className="whitespace-pre-wrap break-words text-sm">{value.guardian_description}</p></div>}
         <Label htmlFor="record-notes">Internal consultation notes</Label>
         <textarea
           id="record-notes"
@@ -667,7 +668,7 @@ function RegistrationEditor({
       )}
       <div className="flex justify-between gap-3">
         <Button asChild variant="outline">
-          <Link href={`/books?registration=${value.id}`}>
+          <Link className="rounded-md border-2 border-[#c31352] dark:border-pink-400" href={`/books?registration=${value.id}`}>
             Open book generator
           </Link>
         </Button>

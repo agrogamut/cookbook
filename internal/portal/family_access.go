@@ -60,18 +60,20 @@ func (s *Server) IssueFamilyAccess(w http.ResponseWriter, r *http.Request) {
 func (s *Server) RedeemFamilyAccess(w http.ResponseWriter, r *http.Request) {
 	const accessError = "This access link or the child details could not be verified. Check the details or ask the clinic for a new link."
 	var body struct {
-		ChildName   string `json:"child_name"`
-		DateOfBirth string `json:"date_of_birth"`
-		Token       string `json:"token"`
+		GuardianName string `json:"guardian_name"`
+		ChildName    string `json:"child_name"`
+		DateOfBirth  string `json:"date_of_birth"`
+		Token        string `json:"token"`
 	}
 	if !decode(w, r, &body) {
 		return
 	}
+	body.GuardianName = strings.Join(strings.Fields(body.GuardianName), " ")
 	body.ChildName = strings.Join(strings.Fields(body.ChildName), " ")
 	body.DateOfBirth = strings.TrimSpace(body.DateOfBirth)
 	body.Token = strings.TrimSpace(body.Token)
 	_, dateErr := time.Parse("2006-01-02", body.DateOfBirth)
-	if !validName(body.ChildName) || !validToken(body.Token) || dateErr != nil {
+	if !validName(body.GuardianName) || !validName(body.ChildName) || !validToken(body.Token) || dateErr != nil {
 		fail(w, http.StatusUnauthorized, accessError)
 		return
 	}
@@ -86,9 +88,9 @@ func (s *Server) RedeemFamilyAccess(w http.ResponseWriter, r *http.Request) {
 	err = tx.QueryRow(r.Context(), `SELECT r.id FROM app_private.consultation_registration r
 		JOIN app_private.family_access_grant a ON a.registration_id=r.id
 		WHERE a.token_hash=$1 AND a.expires_at>clock_timestamp()
-		AND lower(regexp_replace(btrim(r.child_name),'\s+',' ','g'))=lower($2) AND r.date_of_birth=$3
+		AND lower(regexp_replace(btrim(r.child_name),'\s+',' ','g'))=lower($2) AND r.date_of_birth=$3 AND lower(regexp_replace(btrim(r.guardian_name),'\s+',' ','g'))=lower($4)
 		AND (r.guardian_id IS NULL OR EXISTS (SELECT 1 FROM app_private.guardian_account g WHERE g.id=r.guardian_id AND g.active))
-		FOR UPDATE OF r`, tokenHash(body.Token), body.ChildName, body.DateOfBirth).Scan(&id)
+		FOR UPDATE OF r`, tokenHash(body.Token), body.ChildName, body.DateOfBirth, body.GuardianName).Scan(&id)
 	if errors.Is(err, pgx.ErrNoRows) {
 		fail(w, http.StatusUnauthorized, accessError)
 		return

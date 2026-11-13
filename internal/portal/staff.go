@@ -225,16 +225,32 @@ func (s *Server) ChangePassword(w http.ResponseWriter, r *http.Request) {
 }
 
 type Settings struct {
-	AmountPaise       *int   `json:"amount_paise"`
-	Currency          string `json:"currency"`
-	PaymentsEnabled   bool   `json:"payments_enabled"`
-	CheckoutAvailable bool   `json:"checkout_available"`
-	GatewayConfigured bool   `json:"gateway_configured,omitempty"`
+	DoctorEarningPaise        *int   `json:"doctor_earning_paise"`
+	WalletConfigured          bool   `json:"wallet_configured"`
+	PatientTaxActive          bool   `json:"patient_tax_active"`
+	WithdrawalDeductionActive bool   `json:"withdrawal_deduction_active"`
+	Price                     *Price `json:"price"`
+	AmountPaise               *int   `json:"amount_paise"`
+	Currency                  string `json:"currency"`
+	PaymentsEnabled           bool   `json:"payments_enabled"`
+	CheckoutAvailable         bool   `json:"checkout_available"`
+	GatewayConfigured         bool   `json:"gateway_configured,omitempty"`
 }
 
 func (s *Server) settings(ctx context.Context) (Settings, error) {
 	var v Settings
-	err := s.pool.QueryRow(ctx, `SELECT amount_paise,currency,payments_enabled FROM app_private.consultation_settings WHERE singleton`).Scan(&v.AmountPaise, &v.Currency, &v.PaymentsEnabled)
+	err := s.pool.QueryRow(ctx, `SELECT amount_paise,currency,payments_enabled,doctor_earning_paise FROM app_private.consultation_settings WHERE singleton`).Scan(&v.AmountPaise, &v.Currency, &v.PaymentsEnabled, &v.DoctorEarningPaise)
+	v.WalletConfigured = len(s.options.WalletKey) == 32
+	v.PatientTaxActive = s.options.TaxPolicy.PatientApproval != ""
+	v.WithdrawalDeductionActive = s.options.TaxPolicy.WithdrawalApproval != ""
+	if v.AmountPaise != nil {
+		price := s.options.TaxPolicy.price(*v.AmountPaise)
+		price.Policy = "inactive"
+		if v.PatientTaxActive {
+			price.Policy = "patient-18-v1"
+		}
+		v.Price = &price
+	}
 	v.GatewayConfigured = s.options.Gateway.Enabled()
 	v.CheckoutAvailable = v.PaymentsEnabled && v.AmountPaise != nil && v.GatewayConfigured
 	return v, err
@@ -245,7 +261,7 @@ func (s *Server) PublicSettings(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	respond(w, 200, map[string]any{"amount_paise": v.AmountPaise, "currency": v.Currency, "checkout_available": v.CheckoutAvailable})
+	respond(w, 200, map[string]any{"amount_paise": v.AmountPaise, "currency": v.Currency, "checkout_available": v.CheckoutAvailable, "price": v.Price})
 }
 func (s *Server) AdminSettings(w http.ResponseWriter, r *http.Request) {
 	v, err := s.settings(r.Context())

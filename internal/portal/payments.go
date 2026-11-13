@@ -63,13 +63,15 @@ func (s *Server) createOrderFor(ctx context.Context, id, guardianID, secret stri
 	}
 	var order GatewayOrder
 	var status string
-	err = tx.QueryRow(ctx, `SELECT id,amount_paise,currency,status FROM app_private.consultation_order WHERE appointment_id=$1`, appointmentID.String).Scan(&order.ID, &order.Amount, &order.Currency, &status)
+	err = tx.QueryRow(ctx, `SELECT id,amount_paise,currency,status,coalesce(base_paise,amount_paise),tax_paise,tax_bps FROM app_private.consultation_order WHERE appointment_id=$1`, appointmentID.String).Scan(&order.ID, &order.Amount, &order.Currency, &status, &order.Price.BasePaise, &order.Price.TaxPaise, &order.Price.TaxBPS)
 	if errors.Is(err, pgx.ErrNoRows) {
-		order, err = s.options.Gateway.CreateOrder(ctx, appointmentID.String, *settings.AmountPaise, settings.Currency)
+		price := s.options.TaxPolicy.price(*settings.AmountPaise)
+		order, err = s.options.Gateway.CreateOrder(ctx, appointmentID.String, price.TotalPaise, settings.Currency)
+		order.Price = price
 		if err != nil {
 			return GatewayOrder{}, fmt.Errorf("create checkout order: %w", err)
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO app_private.consultation_order(id,registration_id,amount_paise,currency,appointment_id) VALUES ($1,$2,$3,$4,$5)`, order.ID, id, order.Amount, order.Currency, appointmentID.String)
+		_, err = tx.Exec(ctx, `INSERT INTO app_private.consultation_order(id,registration_id,amount_paise,currency,appointment_id,base_paise,tax_paise,tax_bps,tax_policy) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, order.ID, id, order.Amount, order.Currency, appointmentID.String, price.BasePaise, price.TaxPaise, price.TaxBPS, price.Policy)
 	} else if err == nil && (settled(status) || status == "authorized") {
 		return GatewayOrder{}, errPaymentAlreadyExists
 	}
@@ -78,6 +80,11 @@ func (s *Server) createOrderFor(ctx context.Context, id, guardianID, secret stri
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return GatewayOrder{}, err
+	}
+	order.Price.TotalPaise = order.Amount
+	order.Price.Policy = "inactive"
+	if order.Price.TaxBPS > 0 {
+		order.Price.Policy = "patient-18-v1"
 	}
 	return order, nil
 }
@@ -109,7 +116,7 @@ func (s *Server) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	respond(w, 200, map[string]any{"order_id": order.ID, "amount_paise": order.Amount, "currency": order.Currency, "key_id": s.options.Gateway.PublicKey()})
+	respond(w, 200, map[string]any{"order_id": order.ID, "amount_paise": order.Amount, "currency": order.Currency, "key_id": s.options.Gateway.PublicKey(), "price": order.Price})
 }
 
 func (s *Server) VerifyPayment(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +187,7 @@ func (s *Server) CreateFamilyOrder(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	respond(w, http.StatusOK, map[string]any{"order_id": order.ID, "amount_paise": order.Amount, "currency": order.Currency, "key_id": s.options.Gateway.PublicKey()})
+	respond(w, http.StatusOK, map[string]any{"order_id": order.ID, "amount_paise": order.Amount, "currency": order.Currency, "key_id": s.options.Gateway.PublicKey(), "price": order.Price})
 }
 
 func (s *Server) VerifyFamilyPayment(w http.ResponseWriter, r *http.Request) {
@@ -270,6 +277,9 @@ func settled(status string) bool {
 // A signed callback alone cannot make a registration paid. Amount, currency and
 // capture state come from a fresh server-to-server payment fetch.
 func (s *Server) applyPayment(ctx context.Context, p Payment, eventID string) error {
+	return s.applyPaymentEvent(ctx, p, eventID, false)
+}
+func (s *Server) applyPaymentEvent(ctx context.Context, p Payment, eventID string, dispute bool) error {
 	state, err := paymentState(p)
 	if err != nil {
 		return err
@@ -340,6 +350,22 @@ func (s *Server) applyPayment(ctx context.Context, p Payment, eventID string) er
 			return fmt.Errorf("clear refunded appointment assignment: %w", err)
 		}
 	}
+	if appointmentID.Valid {
+		if err = s.applyEarning(ctx, tx, p, state, appointmentID.String); err != nil {
+			return err
+		}
+		if dispute {
+			if err = reverseEarning(ctx, tx, appointmentID.String, "payment_dispute"); err != nil {
+				return err
+			}
+			_, err = tx.Exec(ctx, `INSERT INTO app_private.wallet_reconciliation(appointment_id,doctor_id,reason)
+                SELECT id,earning_doctor_id,'dispute' FROM app_private.appointment WHERE id=$1 AND earning_doctor_id IS NOT NULL
+                ON CONFLICT(appointment_id) DO UPDATE SET reason='dispute'`, appointmentID.String)
+			if err != nil {
+				return fmt.Errorf("record dispute reconciliation: %w", err)
+			}
+		}
+	}
 	return tx.Commit(ctx)
 }
 
@@ -365,6 +391,11 @@ func (s *Server) Webhook(w http.ResponseWriter, r *http.Request) {
 	var event struct {
 		Event   string `json:"event"`
 		Payload struct {
+			Dispute struct {
+				Entity struct {
+					PaymentID string `json:"payment_id"`
+				} `json:"entity"`
+			} `json:"dispute"`
 			Payment struct {
 				Entity struct {
 					ID string `json:"id"`
@@ -382,9 +413,13 @@ func (s *Server) Webhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var paymentID string
+	dispute := false
 	switch event.Event {
 	case "payment.captured", "payment.authorized", "payment.failed", "order.paid":
 		paymentID = event.Payload.Payment.Entity.ID
+	case "payment.dispute.created", "payment.dispute.won", "payment.dispute.lost", "payment.dispute.closed", "payment.dispute.under_review", "payment.dispute.action_required":
+		paymentID = event.Payload.Dispute.Entity.PaymentID
+		dispute = true
 	case "refund.processed":
 		paymentID = event.Payload.Refund.Entity.PaymentID
 	default:
@@ -410,7 +445,7 @@ func (s *Server) Webhook(w http.ResponseWriter, r *http.Request) {
 		fail(w, 502, "Payment service unavailable; retry this event.")
 		return
 	}
-	if err = s.applyPayment(r.Context(), p, eventID); err != nil {
+	if err = s.applyPaymentEvent(r.Context(), p, eventID, dispute); err != nil {
 		serverError(w, err)
 		return
 	}

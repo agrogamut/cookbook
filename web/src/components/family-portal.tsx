@@ -35,6 +35,8 @@ import {
   verifyFamilyCheckout,
 } from "@/lib/api";
 import { useHoldClock } from "@/lib/use-hold-clock";
+import {PriceBreakdown} from "./price-breakdown";
+import {confirmCheckoutAmount} from "@/lib/checkout";
 import { loadCheckout } from "@/lib/checkout";
 import {
   calendarDate,
@@ -149,6 +151,8 @@ export function FamilyRegistrationCard({
               )}
           </div>
         )}
+        <PriceBreakdown price={registration.price} />
+        {registration.meeting_url && <div className="space-y-2 rounded-md border border-[#c31352] p-3"><p className="text-sm">Your consultation meeting link. Check the appointment status and attend at the time shown above (IST).</p><Button asChild className="bg-[#c31352] hover:bg-[#a90f46]"><a href={registration.meeting_url} target="_blank" rel="noopener noreferrer">Join call</a></Button></div>}
         <div className="flex flex-wrap gap-2">
           {["unpaid", "pending", "failed"].includes(
             registration.payment_status,
@@ -305,6 +309,7 @@ export function FamilyPortal() {
     setError("");
     try {
       const order = await createFamilyOrder(registration.id);
+      if(!confirmCheckoutAmount(order)){setBusy(false);return;}
       const Razorpay = await loadCheckout();
       const checkout = new Razorpay({
         key: order.key_id,
@@ -543,6 +548,7 @@ export function FamilyAuth() {
   const savedToken = useSavedRegistrationToken();
   const grant = useSyncExternalStore(subscribeToRegistrationReceipt, rememberedFamilyAccessGrant, () => "");
   const [recoveredToken, setRecoveredToken] = useState("");
+  const [guardianName, setGuardianName] = useState("");
   const [childName, setChildName] = useState("");
   const [dob, setDob] = useState("");
   const [error, setError] = useState("");
@@ -565,7 +571,7 @@ export function FamilyAuth() {
     try {
       let credential = recoveredToken || savedToken;
       if (grant) {
-        const receipt = await redeemFamilyAccess(childName, dob, grant);
+        const receipt = await redeemFamilyAccess(childName, dob, grant, guardianName);
         credential = receipt.token;
         setRecoveredToken(credential);
         try {
@@ -575,7 +581,7 @@ export function FamilyAuth() {
         }
         clearFamilyAccessGrant();
       }
-      await familyChildAccess(childName, dob, credential);
+      await familyChildAccess(childName, dob, credential, guardianName);
       router.replace("/family");
     } catch (e) {
       setError(errorMessage(e));
@@ -596,7 +602,7 @@ export function FamilyAuth() {
         <Card className="border-[#ead0d9] bg-white shadow-[0_20px_60px_rgba(88,41,59,0.12)]">
           <CardHeader>
             <CardTitle className="text-[#58293b]">Open your child’s portal</CardTitle>
-            <CardDescription>Enter the child’s full name and date of birth to view their registration, appointment, payment status and approved books.</CardDescription>
+            <CardDescription>Enter the guardian’s name, child’s full name and date of birth to view their registration, appointment, payment status and approved books.</CardDescription>
           </CardHeader>
           <CardContent>
             <p className="mb-5 text-sm text-[#815b69]" role="status">
@@ -605,6 +611,7 @@ export function FamilyAuth() {
                 : "This tab has no saved registration. Return to the tab where you registered, or ask the clinic for a private access link after verifying your identity. A name and date of birth alone cannot open private records."}
             </p>
             <form className="space-y-4" onSubmit={submit}>
+              <div><Label htmlFor="family-guardian-name">Guardian’s full name</Label><Input id="family-guardian-name" autoComplete="name" required maxLength={100} value={guardianName} onChange={(e)=>setGuardianName(e.target.value)} /><p className="mt-1 text-xs text-[#815b69]">Use the guardian name recorded when this child registered. Contact the clinic if it needs correcting.</p></div>
               <div>
                 <Label htmlFor="family-child-name">Child’s full name</Label>
                 <Input id="family-child-name" autoComplete="name" required value={childName} onChange={(e) => setChildName(e.target.value)} />

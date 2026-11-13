@@ -1967,3 +1967,9 @@ Copy `.env.example` to `.env` to start.
 | `XLSX_DIR` | no, defaults to `data/provider` | Directory holding the 14 provider workbooks |
 | `PORT` | no, defaults to 8080 | HTTP listen port. Unused until Phase 2 |
 | `TEST_DATABASE_URL` | no | Throwaway database for the integrity suite. Unset, the suite skips |
+
+| `WALLET_ENCRYPTION_KEY` | no | Server-only payout encryption key: exactly 64 hexadecimal characters. Missing key disables destination saving and withdrawal requests, not captured earnings. Retain securely; do not replace without migrating encrypted history. |
+| `PORTAL_PATIENT_TAX_APPROVAL` | no, inactive by default | Reviewed policy reference for the gated 18% patient-price calculation. Leave unset until the actual supply, invoicing and tax treatment are professionally confirmed. |
+| `PORTAL_WITHDRAWAL_DEDUCTION_APPROVAL` | no, inactive by default | Reviewed policy reference for the gated 18% withdrawal calculation. Unset means provisional estimate only and paid actions are blocked. Old pending requests require cancellation/rejection and recreation. |
+
+Wallet setup, financial invariants and deployment compatibility: [consultation wallet](docs/consultation-wallet.md).

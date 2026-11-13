@@ -1,8 +1,8 @@
 # Consultation portal
 
-The public homepage collects a guardian's name, a child's name and date of birth, a phone number, and optional email. It saves the request, offers available doctor intervals, places a short hold on the selected interval, and opens payment. An appointment is not sent to the administrator for confirmation until the server verifies captured payment.
+The public homepage collects a guardian's name, a child's name and date of birth, a phone number, optional email, and optional additional details for the doctor (up to 4,000 characters). It saves the request, offers available doctor intervals, places a short hold on the selected interval, and opens payment. An appointment is not sent to the administrator for confirmation until the server verifies captured payment.
 
-Families open `/family/login` with the child’s full name and date of birth. These fields are always visible. The original registration tab supplies its saved private credential automatically; name and birth date alone never open records. Missing saved access is explained on the page. New-device access requires a single-use private link issued by an administrator after verifying the guardian. The link is consumed only when the family submits child details, never by opening or previewing it. The resulting session shows only that registration, its payment and appointment states, and its administrator-approved books.
+Families open `/family/login` with the guardian’s full name, child’s full name and date of birth. These fields are always visible. The original registration tab supplies its saved private credential automatically; name and birth date alone never open records. Missing saved access is explained on the page. New-device access requires a single-use private link issued by an administrator after verifying the guardian. The link is consumed only when the family submits guardian and child details, never by opening or previewing it. The resulting session shows only that registration, its payment and appointment states, and its administrator-approved books.
 
 The administrator workspace at `/admin` shows contact details, birth date, calculated age, assignment, consultation progress, internal notes and payment status. Administrators create, rename, deactivate and reset passwords for doctor accounts, manage every availability block, decide booking requests and approve or reject stored book PDFs. Deactivating a doctor revokes their sessions and returns their children to the unassigned queue. Doctors use `/doctor` to see assigned children, publish and revoke their own availability, and open their book forms. Any signed-in doctor can also generate a book from new inline details at `/books`; only a generation tied to a stored registration creates a family-visible release, and that release remains hidden until an administrator approves the exact PDF bytes.
 
@@ -45,14 +45,14 @@ Supabase validates staff passwords through its [Auth API](https://github.com/sup
 ## Payment setup
 
 1. Set the three Razorpay variables and restart the Go server.
-2. In the Razorpay dashboard, configure automatic capture and a webhook for `payment.captured`, `payment.authorized`, `payment.failed`, `order.paid` and `refund.processed` at `https://YOUR_API_HOST/api/payments/webhook`.
+2. In the Razorpay dashboard, configure automatic capture and a webhook for `payment.captured`, `payment.authorized`, `payment.failed`, `order.paid` and `refund.processed` at `https://YOUR_API_HOST/api/payments/webhook`. For wallet protection, also subscribe to `payment.dispute.created`, `payment.dispute.under_review`, `payment.dispute.action_required`, `payment.dispute.won`, `payment.dispute.lost` and `payment.dispute.closed`.
 3. Use the same webhook secret as the server environment.
 4. In Administration, open Consultation fee. Enter the fee in INR and enable online payment.
 5. Verify a test-mode payment, cancellation, duplicate notification and refund before using live keys.
 
 Fees are stored as integer paise. The server creates the order and keeps its amount and currency, even if the fee setting later changes. Concurrent checkout requests for the same appointment reuse a single order. Rebooking creates a new appointment and order; a previously captured or refunded order cannot fund it. A browser callback alone cannot mark a request paid: the server checks its signature and fetches the payment from Razorpay, checking the stored order, amount, currency and captured state. Authorized payments remain distinct from captured payments. Follow Razorpay's [Standard Checkout integration](https://razorpay.com/docs/payments/payment-gateway/web-integration/standard/integration-steps/?preferred-country=IN).
 
-Webhooks are checked against their raw body before parsing, as required by [Razorpay's webhook validation guide](https://razorpay.com/docs/webhooks/validate-test/?locale=en-US). Event IDs are recorded transactionally to handle duplicates. Delayed failures and older refund amounts cannot overwrite a newer settled state. Refunds initiated in Razorpay appear in the app when their verified notifications arrive. The portal does not initiate refunds or manually override payment status.
+Webhooks are checked against their raw body before parsing, as required by [Razorpay's webhook validation guide](https://razorpay.com/docs/webhooks/validate-test/?locale=en-US). Event IDs are recorded transactionally to handle duplicates. Delayed failures and older refund amounts cannot overwrite a newer settled state. Refunds initiated in Razorpay appear in the app when their verified notifications arrive. Administrators can initiate a persisted, idempotent refund request from the booking queue. Only verified provider state completes it; the portal does not manually override payment status.
 
 Families pay immediately after choosing a time from either the public intake receipt or the family portal. The browser never supplies the amount. A missing fee, disabled checkout or unpaid hold remains visible as its real state, and an unpaid hold expires after 15 minutes.
 
@@ -128,3 +128,8 @@ The loopback fixture's `/__test/*` routes exist only in a Go test binary. They r
 The browser suite verifies registration, specific-doctor scheduling, captured payment, administrator confirmation, child access, approved-only download, any-doctor scheduling and cancellation. PostgreSQL integration tests additionally cover slot races, expiry, late capture, invalid signatures, webhook replay, refunds, rebooking, sibling isolation, expired sessions and migration rollback/upgrade. Run those with `PORTAL_TEST_DATABASE_URL` set; without it they skip.
 
 Screenshots and a recording from the running application are in [consultation-flow evidence](evidence/consultation-flow/). All shown names, payments and files are disposable fixtures. Hosted payment settlement still requires a controlled Razorpay test-account transaction.
+
+
+## Meeting links and doctor wallet
+
+[Consultation wallet operations](consultation-wallet.md) documents migration 0047, per-appointment meeting access, new-only earnings, encrypted manual withdrawals, policy gates and release sequencing. No public meeting page or automatic payout is introduced. Guardian names are an additional match requirement, never a replacement for the private registration credential.

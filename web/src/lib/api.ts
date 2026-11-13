@@ -8,7 +8,7 @@ import type {
   StaffAccount, Registration, RegistrationList, ConsultationSettings, PublicSettings,
   CheckoutOrder, CheckoutConfirmation, IntakeInput, GuardianAccount,
   AvailabilityBlock, FreeInterval, Appointment, BookRelease, FamilyRegistration,
-  PublicRegistrationStatus,
+  PublicRegistrationStatus, DoctorWalletData, WalletBalance, Withdrawal, PayoutDestination,
 } from "./portal-types";
 
 /** Resolve the API base URL, tolerating an address given without a scheme.
@@ -89,7 +89,7 @@ export const saveConsultationSettings = (amount_paise: number | null, payments_e
 export const listGuardians = () => request<GuardianAccount[]>("/api/admin/guardians");
 export const attachRegistrationToGuardian = (registrationID: string, guardianID: string) => request<{ guardian_id: string }>(`/api/admin/registrations/${encodeURIComponent(registrationID)}/guardian`, { method: "PATCH", body: JSON.stringify({ guardian_id: guardianID }) });
 
-export const familyChildAccess = (child_name: string, date_of_birth: string, token: string) => request<GuardianAccount>("/api/family/auth/access", { method: "POST", body: JSON.stringify({ child_name, date_of_birth, token }) });
+export const familyChildAccess = (child_name: string, date_of_birth: string, token: string, guardian_name: string) => request<GuardianAccount>("/api/family/auth/access", { method: "POST", body: JSON.stringify({ child_name, date_of_birth, token, guardian_name }) });
 export const familySignOut = () => request<{ ok: boolean }>("/api/family/auth/logout", { method: "POST", body: "{}" });
 export const familyMe = () => request<GuardianAccount>("/api/family/auth/me");
 export const listFamilyRegistrations = () => request<FamilyRegistration[]>("/api/family/registrations");
@@ -431,4 +431,15 @@ async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<R
 }
 
 export const issueFamilyAccess = (id: string) => request<{ token: string; expires_at: string }>(`/api/admin/registrations/${encodeURIComponent(id)}/family-access`, { method: "POST", body: JSON.stringify({ guardian_verified: true }) });
-export const redeemFamilyAccess = (child_name: string, date_of_birth: string, token: string) => request<{ id: string; token: string }>("/api/family/auth/recover", { method: "POST", body: JSON.stringify({ child_name, date_of_birth, token }) });
+export const redeemFamilyAccess = (child_name: string, date_of_birth: string, token: string, guardian_name: string) => request<{ id: string; token: string }>("/api/family/auth/recover", { method: "POST", body: JSON.stringify({ child_name, date_of_birth, token, guardian_name }) });
+
+export const saveMeeting = (id: string, meeting_url: string) => request<{ok: boolean}>(`/api/appointments/${encodeURIComponent(id)}/meeting`, {method:"PUT", body:JSON.stringify({meeting_url})});
+export const getDoctorWallet = () => request<DoctorWalletData>("/api/doctor/wallet");
+export const savePayoutDestination = (input: PayoutDestination) => request<{masked_destination:string}>("/api/doctor/wallet/destination", {method:"PUT",body:JSON.stringify(input)});
+export const requestWithdrawal = (amount_paise:number,request_key:string) => request<Withdrawal>("/api/doctor/wallet/withdrawals",{method:"POST",body:JSON.stringify({amount_paise,request_key})});
+export const cancelWithdrawal = (id:string) => request<{ok:boolean}>(`/api/doctor/wallet/withdrawals/${encodeURIComponent(id)}/cancel`,{method:"POST",body:"{}"});
+export const getWallets = () => request<WalletBalance[]>("/api/admin/wallets");
+export const getWithdrawals = () => request<Withdrawal[]>("/api/admin/withdrawals");
+export const revealWithdrawalDestination = (id:string) => request<PayoutDestination>(`/api/admin/withdrawals/${encodeURIComponent(id)}/destination`,{method:"POST",body:JSON.stringify({manual_transfer_review:true})});
+export const decideWithdrawal = (id:string,input:{action:"processing"|"paid"|"rejected";transferred_paise?:number;transfer_reference?:string;transferred_at?:string;transfer_completed?:boolean;note?:string}) => request<{ok:boolean}>(`/api/admin/withdrawals/${encodeURIComponent(id)}/decision`,{method:"POST",body:JSON.stringify(input)});
+export const saveDoctorEarning = (doctor_earning_paise:number|null) => request<ConsultationSettings>("/api/admin/earnings",{method:"PUT",body:JSON.stringify({doctor_earning_paise})});

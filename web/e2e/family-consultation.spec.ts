@@ -14,6 +14,7 @@ test("register, hold, pay, confirm, access and download", async ({
   ).json();
   await fs.mkdir(evidence, { recursive: true });
   const errors: string[] = [];
+  page.on("dialog",dialog=>dialog.accept());
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/family/login");
   await expect(page.getByLabel("Child’s full name")).toBeVisible();
@@ -145,6 +146,7 @@ test("register, hold, pay, confirm, access and download", async ({
 
   await page.goto("/family/login");
   await expect(page.getByLabel("Private registration token")).toHaveCount(0);
+  await page.getByLabel("Guardian’s full name").fill("Browser Guardian");
   await page.getByLabel("Child’s full name").fill("New Browser Child");
   await page.getByLabel("Child’s date of birth").fill("02/05/2022");
   await page.getByRole("button", { name: "Open family portal" }).click();
@@ -173,6 +175,7 @@ test("register, hold, pay, confirm, access and download", async ({
   await page.goto(accessLink);
   await expect(page.getByText(/Your private access link is ready/)).toBeVisible();
   await expect(page).toHaveURL(/\/family\/login$/);
+  await page.getByLabel("Guardian’s full name").fill("Browser Guardian");
   await page.getByLabel("Child’s full name").fill("New Browser Child");
   await page.getByLabel("Child’s date of birth").fill("01/05/2022");
   await page.getByRole("button", { name: "Open family portal" }).click();
@@ -187,11 +190,12 @@ test("register, hold, pay, confirm, access and download", async ({
   // The next sign-in belongs to a different test family with a separate registration.
   await page.evaluate((fixture) => sessionStorage.setItem("madamgy.consultation.receipt", JSON.stringify({ id: fixture.registration_id, token: fixture.token })), fixture);
   await page.goto("/family/login");
+  await page.getByLabel("Guardian’s full name").fill("Test Guardian");
   await page.getByLabel("Child’s full name").fill("Browser Child");
   await page.getByLabel("Child’s date of birth").fill("02/05/2022");
   await page.getByRole("button", { name: "Open family portal" }).click();
   await expect(page.locator("main").getByRole("alert")).toHaveText(
-    "These details could not be verified. Check the child name and date of birth, or ask the clinic for a private access link.",
+    "These details could not be verified. Check the guardian name, child name and date of birth, or ask the clinic for a private access link.",
   );
   await page.getByLabel("Child’s date of birth").fill("01/05/2022");
   await page.getByRole("button", { name: "Open family portal" }).click();
