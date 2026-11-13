@@ -3,10 +3,11 @@ package config
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestWalletPolicyConfiguration(t *testing.T) {
-	for _, name := range []string{"PORT", "SUPABASE_URL", "SUPABASE_SECRET_KEY", "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "APP_ORIGIN", "WALLET_ENCRYPTION_KEY", "PORTAL_PATIENT_TAX_APPROVAL", "PORTAL_WITHDRAWAL_DEDUCTION_APPROVAL"} {
+	for _, name := range []string{"PORT", "SUPABASE_URL", "SUPABASE_SECRET_KEY", "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "APP_ORIGIN", "WALLET_ENCRYPTION_KEY", "PORTAL_PATIENT_TAX_APPROVAL", "PORTAL_WITHDRAWAL_DEDUCTION_APPROVAL", "PORTAL_LEGACY_GUARDIAN_UNTIL"} {
 		t.Setenv(name, "")
 	}
 	t.Setenv("DATABASE_URL", "postgres://local.invalid/test")
@@ -37,5 +38,29 @@ func TestWalletPolicyConfiguration(t *testing.T) {
 	c, err = Load()
 	if err != nil || c.PatientTaxApproval != "synthetic-reviewed-policy" || c.WithdrawalDeductionApproval != "synthetic-reviewed-policy" {
 		t.Fatalf("explicit policy not loaded: %v", err)
+	}
+}
+
+func TestGuardianTransitionDeadlineConfiguration(t *testing.T) {
+	for _, name := range []string{"PORT", "SUPABASE_URL", "SUPABASE_SECRET_KEY", "RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET", "APP_ORIGIN", "WALLET_ENCRYPTION_KEY", "PORTAL_PATIENT_TAX_APPROVAL", "PORTAL_WITHDRAWAL_DEDUCTION_APPROVAL", "PORTAL_LEGACY_GUARDIAN_UNTIL"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("DATABASE_URL", "postgres://local.invalid/test")
+	c, err := Load()
+	if err != nil || !c.LegacyGuardianUntil.IsZero() {
+		t.Fatalf("strict default missing: %v", err)
+	}
+	for _, value := range []string{"true", "bad-date", time.Now().Add(25 * time.Hour).UTC().Format(time.RFC3339)} {
+		t.Setenv("PORTAL_LEGACY_GUARDIAN_UNTIL", value)
+		if _, err = Load(); err == nil {
+			t.Fatal("unbounded or invalid transition accepted")
+		}
+	}
+	for _, deadline := range []time.Time{time.Now().Add(time.Hour).UTC().Truncate(time.Second), time.Now().Add(-time.Hour).UTC().Truncate(time.Second)} {
+		t.Setenv("PORTAL_LEGACY_GUARDIAN_UNTIL", deadline.Format(time.RFC3339))
+		c, err = Load()
+		if err != nil || !c.LegacyGuardianUntil.Equal(deadline) {
+			t.Fatalf("absolute deadline not preserved: %v", err)
+		}
 	}
 }

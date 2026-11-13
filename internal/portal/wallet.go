@@ -599,14 +599,16 @@ func (s *Server) applyEarning(ctx context.Context, tx pgx.Tx, p Payment, state, 
 			return fmt.Errorf("record captured earning: %w", err)
 		}
 	}
-	if state == "refunded" || state == "partially_refunded" {
+	if state == "partially_refunded" {
+		// Allocation of a partial refund requires a business decision, not a ledger guess.
+		_, err := tx.Exec(ctx, `INSERT INTO app_private.wallet_reconciliation(appointment_id,doctor_id,reason)
+            SELECT id,earning_doctor_id,'partial_refund' FROM app_private.appointment
+            WHERE id=$1 AND earning_doctor_id IS NOT NULL AND earning_paise>0
+            ON CONFLICT DO NOTHING`, appointment)
+		return err
+	}
+	if state == "refunded" {
 		if err := reverseEarning(ctx, tx, appointment, "patient_refund"); err != nil {
-			return err
-		}
-		if state == "partially_refunded" {
-			_, err := tx.Exec(ctx, `INSERT INTO app_private.wallet_reconciliation(appointment_id,doctor_id,reason)
-                SELECT appointment_id,doctor_id,'partial_refund' FROM app_private.doctor_ledger WHERE appointment_id=$1 AND kind='earning'
-                ON CONFLICT DO NOTHING`, appointment)
 			return err
 		}
 		_, err := tx.Exec(ctx, `DELETE FROM app_private.wallet_reconciliation WHERE appointment_id=$1 AND reason='partial_refund'`, appointment)

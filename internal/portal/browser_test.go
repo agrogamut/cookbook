@@ -78,8 +78,10 @@ func TestPortalBrowserServer(t *testing.T) {
 	})
 	router.Post("/__test/payment", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
-			OrderID string `json:"order_id"`
-			Status  string `json:"status"`
+			OrderID       string `json:"order_id"`
+			Status        string `json:"status"`
+			PaymentID     string `json:"payment_id"`
+			RefundedPaise int    `json:"refunded_paise"`
 		}
 		if json.NewDecoder(r.Body).Decode(&body) != nil {
 			fail(w, 400, "Invalid fixture request")
@@ -90,7 +92,14 @@ func TestPortalBrowserServer(t *testing.T) {
 			serverError(w, err)
 			return
 		}
-		p := Payment{ID: "pay_" + token()[:16], OrderID: body.OrderID, Amount: amount, Currency: "INR", Status: body.Status, Captured: body.Status == "captured"}
+		if body.RefundedPaise < 0 || body.RefundedPaise > amount {
+			fail(w, 400, "Invalid fixture refund")
+			return
+		}
+		if body.PaymentID == "" {
+			body.PaymentID = "pay_" + token()[:16]
+		}
+		p := Payment{ID: body.PaymentID, OrderID: body.OrderID, Amount: amount, Currency: "INR", Status: body.Status, Captured: body.Status == "captured", AmountRefunded: body.RefundedPaise}
 		f.gateway.set(p)
 		respond(w, 200, map[string]string{"razorpay_order_id": p.OrderID, "razorpay_payment_id": p.ID, "razorpay_signature": sign(f.gateway.Secret, []byte(p.OrderID+"|"+p.ID))})
 	})

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -89,7 +90,7 @@ func TestWalletCaptureIdentityCutoverAndRefund(t *testing.T) {
 	if err := f.server.applyPayment(ctx, p, "partial-"+id); err != nil {
 		t.Fatal(err)
 	}
-	walletBalance(t, f, 0, 0)
+	walletBalance(t, f, 500000, 0)
 	balance, _ := loadWallet(ctx, f.pool, f.doctors[0].ID)
 	if !balance.ReconciliationRequired {
 		t.Fatal("partial refund not held")
@@ -331,5 +332,57 @@ func TestWithdrawalCannotBePaidBeforePolicyReview(t *testing.T) {
 	}
 	if originalPolicy != "pending_review" || originalStatus != "rejected" || originalDeduction != 36000 || originalNet != 164000 {
 		t.Fatal("approval changed the original request")
+	}
+}
+
+func walletLedgerSnapshot(t *testing.T, f *paidFixture) string {
+	t.Helper()
+	var snapshot string
+	if err := f.pool.QueryRow(context.Background(), `SELECT coalesce(jsonb_agg(to_jsonb(l) ORDER BY l.id),'[]'::jsonb)::text FROM app_private.doctor_ledger l WHERE doctor_id=$1`, f.doctors[0].ID).Scan(&snapshot); err != nil {
+		t.Fatal(err)
+	}
+	return snapshot
+}
+
+func TestPartialRefundHoldsWithoutChoosingEarningAllocation(t *testing.T) {
+	f, doctor := walletFixture(t)
+	_, payment := walletCredit(t, f, 0)
+	saveTestDestination(t, f, doctor)
+	w := portalRequest(f.router, "POST", "/api/doctor/wallet/withdrawals", map[string]any{"amount_paise": 200000, "request_key": testUUID()}, doctor, "")
+	expectCode(t, w, 201)
+	request := decodeResponse[Withdrawal](t, w)
+	before := walletLedgerSnapshot(t, f)
+	for i, refunded := range []int{1, 1, 2} {
+		payment.AmountRefunded = refunded
+		if err := f.server.applyPayment(context.Background(), payment, fmt.Sprintf("partial-%s-%d", payment.ID, i)); err != nil {
+			t.Fatal(err)
+		}
+		walletBalance(t, f, 500000, 200000)
+		if walletLedgerSnapshot(t, f) != before {
+			t.Fatal("partial refund changed ledger history")
+		}
+		balance, err := loadWallet(context.Background(), f.pool, f.doctors[0].ID)
+		if err != nil || !balance.ReconciliationRequired {
+			t.Fatalf("missing reconciliation hold: %v", err)
+		}
+		expectCode(t, portalRequest(f.router, "POST", "/api/doctor/wallet/withdrawals", map[string]any{"amount_paise": 100, "request_key": testUUID()}, doctor, ""), 409)
+		expectCode(t, portalRequest(f.router, "POST", "/api/admin/withdrawals/"+request.ID+"/decision", map[string]any{"action": "paid", "transferred_paise": 164000, "transfer_reference": "NOT-TRANSFERRED", "transferred_at": time.Now().UTC().Format(time.RFC3339Nano), "transfer_completed": true}, f.adminCookie, ""), 409)
+	}
+	payment.AmountRefunded = payment.Amount
+	for _, event := range []string{"full-one-", "full-replay-"} {
+		if err := f.server.applyPayment(context.Background(), payment, event+payment.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	walletBalance(t, f, 0, 200000)
+	var reversals int
+	if err := f.pool.QueryRow(context.Background(), `SELECT count(*) FROM app_private.doctor_ledger WHERE doctor_id=$1 AND kind='reversal'`, f.doctors[0].ID).Scan(&reversals); err != nil || reversals != 1 {
+		t.Fatalf("full refund reversal count=%d: %v", reversals, err)
+	}
+	expectCode(t, portalRequest(f.router, "POST", "/api/admin/withdrawals/"+request.ID+"/decision", map[string]string{"action": "rejected", "note": "Full patient refund"}, f.adminCookie, ""), 200)
+	walletBalance(t, f, 0, 0)
+	balance, err := loadWallet(context.Background(), f.pool, f.doctors[0].ID)
+	if err != nil || balance.ReconciliationRequired {
+		t.Fatalf("full refund left a partial hold: %v", err)
 	}
 }

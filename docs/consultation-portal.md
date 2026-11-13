@@ -133,3 +133,5 @@ Screenshots and a recording from the running application are in [consultation-fl
 ## Meeting links and doctor wallet
 
 [Consultation wallet operations](consultation-wallet.md) documents migration 0047, per-appointment meeting access, new-only earnings, encrypted manual withdrawals, policy gates and release sequencing. No public meeting page or automatic payout is introduced. Guardian names are an additional match requirement, never a replacement for the private registration credential.
+
+The new family form always requires guardian name. For the API-first rollout only, an explicitly configured, expiring omission-only compatibility mode supports old tabs without weakening private-credential or recovery-grant checks. Strict mode is the default; see the staged release sequence in [consultation-wallet.md](consultation-wallet.md#deployment-and-verification).

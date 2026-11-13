@@ -115,6 +115,20 @@ func TestWalletRefundAfterPaidCreatesNegativeBalance(t *testing.T) {
 	expectCode(t, w, 201)
 	value := decodeResponse[Withdrawal](t, w)
 	expectCode(t, portalRequest(f.router, "POST", "/api/admin/withdrawals/"+value.ID+"/decision", map[string]any{"action": "paid", "transferred_paise": 164000, "transfer_reference": "LOCAL-REFUND-TEST", "transferred_at": time.Now().UTC().Format(time.RFC3339Nano), "transfer_completed": true}, f.adminCookie, ""), 200)
+	before := walletLedgerSnapshot(t, f)
+	payment.AmountRefunded = 1
+	if err := f.server.applyPayment(context.Background(), payment, "partial-after-paid-"+payment.ID); err != nil {
+		t.Fatal(err)
+	}
+	walletBalance(t, f, 300000, 0)
+	if walletLedgerSnapshot(t, f) != before {
+		t.Fatal("partial refund changed paid history")
+	}
+	balance, err := loadWallet(context.Background(), f.pool, f.doctors[0].ID)
+	if err != nil || !balance.ReconciliationRequired {
+		t.Fatalf("partial post-payout hold missing: %v", err)
+	}
+	expectCode(t, portalRequest(f.router, "POST", "/api/doctor/wallet/withdrawals", map[string]any{"amount_paise": 100, "request_key": testUUID()}, doctor, ""), 409)
 	payment.AmountRefunded = payment.Amount
 	if err := f.server.applyPayment(context.Background(), payment, "refund-after-paid-"+payment.ID); err != nil {
 		t.Fatal(err)

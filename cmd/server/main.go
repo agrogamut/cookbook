@@ -58,8 +58,9 @@ func main() {
 			Identity: portal.NewSupabase(cfg.SupabaseURL, cfg.SupabaseSecretKey),
 			Gateway:  portal.NewRazorpay(cfg.RazorpayKeyID, cfg.RazorpayKeySecret, cfg.RazorpayWebhookSecret),
 			Origin:   cfg.AppOrigin, SecureCookies: cfg.SecureCookies,
-			WalletKey: cfg.WalletEncryptionKey,
-			TaxPolicy: portal.TaxPolicy{PatientApproval: cfg.PatientTaxApproval, WithdrawalApproval: cfg.WithdrawalDeductionApproval},
+			LegacyGuardianUntil: cfg.LegacyGuardianUntil,
+			WalletKey:           cfg.WalletEncryptionKey,
+			TaxPolicy:           portal.TaxPolicy{PatientApproval: cfg.PatientTaxApproval, WithdrawalApproval: cfg.WithdrawalDeductionApproval},
 		})),
 		ReadHeaderTimeout: 5 * time.Second,
 	}

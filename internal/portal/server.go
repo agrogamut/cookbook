@@ -22,12 +22,13 @@ import (
 )
 
 type Options struct {
-	Identity      IdentityProvider
-	Gateway       PaymentGateway
-	Origin        string
-	SecureCookies bool
-	WalletKey     []byte
-	TaxPolicy     TaxPolicy
+	Identity            IdentityProvider
+	Gateway             PaymentGateway
+	Origin              string
+	SecureCookies       bool
+	LegacyGuardianUntil time.Time
+	WalletKey           []byte
+	TaxPolicy           TaxPolicy
 }
 type Server struct {
 	pool    *pgxpool.Pool

@@ -215,6 +215,7 @@ test("wallet, meeting links and manual payout", async ({ page, request }) => {
   await expect(
     page.getByRole("link", { name: "Join call", exact: true }),
   ).toHaveAttribute("href", "https://meet.example.invalid/doctor-edited");
+  await expect(page.getByText(/^Loading (calls|requests|registrations|wallet)\.\.\.$/)).toHaveCount(0);
   await page.screenshot({
     path: path.join(evidence, "doctor-calls-light.png"),
     fullPage: true,
@@ -227,6 +228,7 @@ test("wallet, meeting links and manual payout", async ({ page, request }) => {
   await expect(
     page.getByRole("heading", { name: "Upcoming calls", exact: true }),
   ).toBeVisible();
+  await expect(page.getByText(/^Loading (calls|requests|registrations|wallet)\.\.\.$/)).toHaveCount(0);
   await page.screenshot({
     path: path.join(evidence, "doctor-calls-dark.png"),
     fullPage: true,
@@ -244,6 +246,7 @@ test("wallet, meeting links and manual payout", async ({ page, request }) => {
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBeTruthy();
+  await expect(page.getByText(/^Loading (calls|requests|registrations|wallet)\.\.\.$/)).toHaveCount(0);
   await page.screenshot({
     path: path.join(evidence, "doctor-mobile.png"),
     fullPage: true,
@@ -362,6 +365,35 @@ test("wallet, meeting links and manual payout", async ({ page, request }) => {
     await wallet.scrollIntoViewIfNeeded();
     await page.screenshot({
       path: path.join(evidence, "doctor-paid-wallet.png"),
+      fullPage: true,
+    });
+    const refund = await request.post("http://127.0.0.1:8807/__test/payment", {
+      data: { order_id: orderID, payment_id: confirmation.razorpay_payment_id, status: "captured", refunded_paise: 1 },
+    });
+    expect(refund.ok()).toBeTruthy();
+    const receipt = await page.evaluate(() =>
+      JSON.parse(sessionStorage.getItem("madamgy.consultation.receipt") ?? "null"),
+    );
+    const verification = await request.post(
+      "http://127.0.0.1:8807/api/public/registrations/" + receipt.id + "/verify",
+      {
+        data: await refund.json(),
+        headers: {
+          Origin: "http://127.0.0.1:3307",
+          "X-Madamgy-Request": "1",
+          "X-Registration-Token": receipt.token,
+        },
+      },
+    );
+    expect(verification.ok()).toBeTruthy();
+    await page.reload();
+    await expect(wallet.getByText("₹3,000.00", { exact: true }).first()).toBeVisible();
+    await expect(wallet.getByText(/Withdrawals are paused for a refund/)).toBeVisible();
+    await expect(wallet.getByRole("button", { name: "Request withdrawal", exact: true })).toBeDisabled();
+    await expect(wallet.getByText(/SYNTHETIC-LOCAL-TRANSFER/)).toBeVisible();
+    await wallet.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: path.join(evidence, "doctor-partial-refund-hold.png"),
       fullPage: true,
     });
   }

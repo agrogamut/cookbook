@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -28,6 +29,7 @@ type Config struct {
 	RazorpayWebhookSecret       string
 	AppOrigin                   string
 	SecureCookies               bool
+	LegacyGuardianUntil         time.Time
 	WalletEncryptionKey         []byte
 	PatientTaxApproval          string
 	WithdrawalDeductionApproval string
@@ -58,6 +60,13 @@ func Load() (Config, error) {
 		c.Port = p
 	}
 
+	if v := strings.TrimSpace(os.Getenv("PORTAL_LEGACY_GUARDIAN_UNTIL")); v != "" {
+		deadline, err := time.Parse(time.RFC3339, v)
+		if err != nil || deadline.After(time.Now().Add(24*time.Hour)) {
+			return c, fmt.Errorf("config: PORTAL_LEGACY_GUARDIAN_UNTIL must be an RFC3339 deadline no more than 24 hours ahead")
+		}
+		c.LegacyGuardianUntil = deadline
+	}
 	if v := os.Getenv("WALLET_ENCRYPTION_KEY"); v != "" {
 		key, err := hex.DecodeString(v)
 		if err != nil || len(key) != 32 {
