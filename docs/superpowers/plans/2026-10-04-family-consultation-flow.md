@@ -26,7 +26,7 @@
 - Do not store raw one-time codes, payment secrets, or production passwords in source control.
 - Keep all family and payment data behind Go server routes. Browser roles never receive direct database access.
 - Preserve the current Asia/Kolkata display rules and UTC storage.
-- Retain the current request-origin protection, rate limits, raw-body webhook signature check, and idempotent payment-event handling.
+- Retain the current request-origin protection, raw-body webhook signature check, and idempotent payment-event handling. Application request quotas were removed on 2026-11-13; provider and hosting limits remain outside the portal.
 - Public and family pages must work at 360 px, 768 px, and 1440 px widths with keyboard navigation.
 - Use the existing logo, palette, and checked-in assets. Do not add unverified clinical imagery.
 - Run `go test ./...`, `go build ./...`, `go vet ./...`, `pnpm test`, `pnpm lint`, and `pnpm build` before calling the implementation complete.

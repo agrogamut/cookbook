@@ -191,9 +191,9 @@ Existing email/password family accounts need a migration path:
 - Keep existing sessions valid only until their current expiry, then require the new flow.
 - Do not silently merge records by email address.
 
-### 6.3 Rate limiting and privacy
+### 6.3 Request protection and privacy
 
-- Rate-limit lookup and verification attempts by IP, normalized child lookup, and device session.
+- As of 2026-11-13, the portal imposes no application request quotas. Require private credentials for access and retain request-origin, input and body-size checks. Hosting and provider limits remain independent.
 - Return the same user-facing error for no match, wrong date, and wrong code.
 - Do not reveal whether a record has a payment, appointment, or book until verification succeeds.
 - Log a redacted access event for successful and failed verification attempts.

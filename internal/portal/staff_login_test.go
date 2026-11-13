@@ -2,8 +2,6 @@ package portal
 
 import (
 	"context"
-	"fmt"
-	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
@@ -137,54 +135,6 @@ func TestStaffLoginInvalidInputNotRateLimited(t *testing.T) {
 		w := portalRequest(router, "POST", "/api/auth/login", map[string]string{}, nil, "")
 		if w.Code != 400 {
 			t.Fatalf("attempt %d: HTTP %d, want 400: %s", attempt, w.Code, w.Body.String())
-		}
-	}
-}
-
-func TestFamilyRouteRateLimitsRemain(t *testing.T) {
-	for _, test := range []struct {
-		path                   string
-		maximum, initialStatus int
-	}{
-		{"/api/family/auth/login", 10, 400},
-		{"/api/family/auth/register", 5, 400},
-		{"/api/family/auth/access", 10, 401},
-		{"/api/family/auth/recover", 10, 401},
-	} {
-		t.Run(test.path, func(t *testing.T) {
-			service := New(nil, Options{Identity: newTestIdentity()})
-			router := chi.NewRouter()
-			service.Routes(router)
-			for attempt := 0; attempt < test.maximum; attempt++ {
-				expectCode(t, portalRequest(router, "POST", test.path, map[string]string{}, nil, ""), test.initialStatus)
-			}
-			w := portalRequest(router, "POST", test.path, map[string]string{}, nil, "")
-			expectCode(t, w, 429)
-			if w.Header().Get("Retry-After") != "60" {
-				t.Fatalf("missing rate-limit retry header: %v", w.Header())
-			}
-		})
-	}
-}
-
-func TestFamilyLoginEmailRateLimitRemains(t *testing.T) {
-	service := New(loginTestPool(t), Options{Identity: newTestIdentity()})
-	router := chi.NewRouter()
-	service.Routes(router)
-	input := map[string]string{"email": "unknown-" + token()[:12] + "@example.invalid", "password": "wrong-password"}
-	for attempt := 1; attempt <= 11; attempt++ {
-		handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			r.RemoteAddr = fmt.Sprintf("192.0.2.%d:12345", attempt)
-			router.ServeHTTP(w, r)
-		})
-		w := portalRequest(handler, "POST", "/api/family/auth/login", input, nil, "")
-		if attempt <= 10 {
-			expectCode(t, w, 410)
-		} else {
-			expectCode(t, w, 429)
-			if got := decodeResponse[map[string]string](t, w)["error"]; got != "Too many sign-in attempts. Try again in a minute." {
-				t.Fatalf("unexpected email rate-limit error: %q", got)
-			}
 		}
 	}
 }

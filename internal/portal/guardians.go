@@ -147,10 +147,6 @@ func (s *Server) GuardianSignup(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "Enter a name, email and password of 12 to 256 characters.")
 		return
 	}
-	if !s.limits.allow("guardian-signup:"+tokenHash(body.Email), 5) {
-		fail(w, http.StatusTooManyRequests, "Too many account attempts. Try again in a minute.")
-		return
-	}
 	fail(w, http.StatusGone, "Family sign-in now uses child details. Open your registration tab or ask the clinic for a private access link.")
 }
 
@@ -165,10 +161,6 @@ func (s *Server) GuardianLogin(w http.ResponseWriter, r *http.Request) {
 	body.Email = strings.ToLower(strings.TrimSpace(body.Email))
 	if !validEmail(body.Email) || len(body.Password) == 0 || len(body.Password) > 256 {
 		fail(w, http.StatusBadRequest, "Enter an email address and password.")
-		return
-	}
-	if !s.limits.allow("guardian-login:"+tokenHash(body.Email), 10) {
-		fail(w, http.StatusTooManyRequests, "Too many sign-in attempts. Try again in a minute.")
 		return
 	}
 	fail(w, http.StatusGone, "Family sign-in now uses child details. Open your registration tab or ask the clinic for a private access link.")

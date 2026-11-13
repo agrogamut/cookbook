@@ -10,11 +10,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -32,7 +30,6 @@ type Options struct {
 type Server struct {
 	pool    *pgxpool.Pool
 	options Options
-	limits  *limiter
 }
 
 func New(pool *pgxpool.Pool, options Options) *Server {
@@ -45,7 +42,7 @@ func New(pool *pgxpool.Pool, options Options) *Server {
 	if options.Origin == "" {
 		options.Origin = "http://localhost:3000"
 	}
-	return &Server{pool: pool, options: options, limits: &limiter{entries: make(map[string]limitEntry)}}
+	return &Server{pool: pool, options: options}
 }
 func (s *Server) Origin() string { return s.options.Origin }
 
@@ -210,55 +207,6 @@ func (s *Server) RequireProfile(next http.Handler) http.Handler {
 	})
 }
 
-type limitEntry struct {
-	count int
-	until time.Time
-}
-type limiter struct {
-	mu      sync.Mutex
-	entries map[string]limitEntry
-}
-
-func (l *limiter) allow(key string, maximum int) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	now := time.Now()
-	if len(l.entries) >= 10000 {
-		for k, e := range l.entries {
-			if !now.Before(e.until) {
-				delete(l.entries, k)
-			}
-		}
-		if len(l.entries) >= 10000 {
-			return false
-		}
-	}
-	e := l.entries[key]
-	if !now.Before(e.until) {
-		e = limitEntry{until: now.Add(time.Minute)}
-	}
-	e.count++
-	l.entries[key] = e
-	return e.count <= maximum
-}
-func (s *Server) Limit(bucket string, maximum int) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			host, _, err := net.SplitHostPort(r.RemoteAddr)
-			if err != nil {
-				host = r.RemoteAddr
-			}
-			// Forwarded addresses are intentionally not trusted. Deployment proxies should
-			// additionally rate-limit at their verified client address boundary.
-			if !s.limits.allow(bucket+":"+host, maximum) {
-				w.Header().Set("Retry-After", "60")
-				fail(w, 429, "Too many requests. Please try again in a minute.")
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
-}
 func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 	if !s.options.Identity.Enabled() {
 		fail(w, 503, "Staff sign-in is not configured yet.")
@@ -335,15 +283,15 @@ func (s *Server) Routes(r chi.Router) {
 	r.Group(func(r chi.Router) {
 		r.Use(s.BrowserWrite)
 		r.Post("/api/auth/login", s.Login)
-		r.With(s.Limit("family-signup", 5)).Post("/api/family/auth/register", s.GuardianSignup)
-		r.With(s.Limit("family-login", 10)).Post("/api/family/auth/login", s.GuardianLogin)
-		r.With(s.Limit("family-access", 10)).Post("/api/family/auth/access", s.GuardianChildAccess)
-		r.With(s.Limit("family-access", 10)).Post("/api/family/auth/recover", s.RedeemFamilyAccess)
-		r.With(s.Limit("intake", 2000)).Post("/api/public/registrations", s.Register)
+		r.Post("/api/family/auth/register", s.GuardianSignup)
+		r.Post("/api/family/auth/login", s.GuardianLogin)
+		r.Post("/api/family/auth/access", s.GuardianChildAccess)
+		r.Post("/api/family/auth/recover", s.RedeemFamilyAccess)
+		r.Post("/api/public/registrations", s.Register)
 		r.Get("/api/public/settings", s.PublicSettings)
 		r.Get("/api/public/availability", s.ListFamilyAvailability)
 		r.Get("/api/public/doctors", s.PublicDoctors)
-		r.With(s.Limit("checkout", 120)).Route("/api/public/registrations/{id}", func(r chi.Router) {
+		r.Route("/api/public/registrations/{id}", func(r chi.Router) {
 			r.Get("/", s.PublicRegistration)
 			r.Post("/appointment", s.CreatePublicAppointment)
 			r.Post("/appointment/{appointmentID}/cancel", s.CancelPublicAppointment)
@@ -368,7 +316,7 @@ func (s *Server) Routes(r chi.Router) {
 			r.Route("/api/admin", func(r chi.Router) {
 				r.Use(AdminOnly)
 				r.Get("/guardians", s.ListGuardians)
-				r.With(s.Limit("family-access-issue", 10)).Post("/registrations/{id}/family-access", s.IssueFamilyAccess)
+				r.Post("/registrations/{id}/family-access", s.IssueFamilyAccess)
 				r.Patch("/registrations/{id}/guardian", s.AttachRegistrationAdmin)
 				r.Get("/staff", s.ListStaff)
 				r.Post("/staff", s.CreateStaff)
